@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCurrentStep } from '@/components/playbackStep';
+import { useSegmentGatedStep } from '@/components/playbackStep';
 import { useSpanResize, type SpanResizeStart } from '@/components/ui/useSpanResize';
 import { cx } from '@/components/ui/cx';
 import { beatIndexAt } from '@/utils/meter';
@@ -40,7 +40,7 @@ import {
  * exported below) never reads the shared `'chords'` step, so a step tick
  * cannot force it to rebuild its up-to-~128 cells or its per-cell context.
  * `CustomPatternPlayhead` is the ONLY thing in this file that calls
- * `useCurrentStep` — mirroring the Lead grid's `LeadMarker`/`LeadMarkerView`
+ * `useSegmentGatedStep` — mirroring the Lead grid's `LeadMarker`/`LeadMarkerView`
  * split — and `CustomPatternTimeline` renders it inline, as a grid item
  * inside the SAME `display:grid` container the cells live in (unlike
  * `LeadMarker`, which is a plain sibling positioned by pixel `translateX`:
@@ -324,13 +324,21 @@ interface CustomPatternPlayheadProps {
 
 /**
  * The playhead alone, subscribed. The ONLY thing in this file that calls
- * `useCurrentStep` — mirroring `LeadMarker` — so a published step (8-16/sec
+ * `useSegmentGatedStep` — mirroring `LeadMarker` — so a published step (8-16/sec
  * while this lane's transport runs) re-renders one grid item instead of the
  * whole lane. Rendered as a CHILD of `CustomPatternTimeline`'s own grid
  * container, not as a component-tree sibling the way `LeadMarker` is: this
  * lane's columns are `1fr` tracks sized by the browser, not a fixed pixel
  * width, so `gridColumn` placement only lines up with the cells when the
  * playhead is a fellow item of that same `display:grid` container.
+ *
+ * The subscription is also gated on Pattern-segment focus
+ * (`useSegmentGatedStep`, `'accompaniment'`): Chord and Bass both live on the
+ * Accompaniment segment, which — like every Pattern segment — stays mounted
+ * even while Lead, FX or Beat is on screen, so an ungated subscription kept
+ * this playhead re-rendering at the clock's rate for a lane nobody was
+ * looking at. Chord/bass playback itself subscribes to the clock separately
+ * and is unaffected by focus.
  */
 function CustomPatternPlayhead({
   loopLength,
@@ -338,7 +346,7 @@ function CustomPatternPlayhead({
   accentGroups,
   isPlaying,
 }: CustomPatternPlayheadProps): React.ReactNode {
-  const currentStep = useCurrentStep('chords');
+  const currentStep = useSegmentGatedStep('chords', 'accompaniment');
   const cycleSteps = loopLength * stepsPerBar;
   const foldedStep = customPatternFoldedStep(currentStep, cycleSteps);
   if (!isPlaying || foldedStep === null) return null;

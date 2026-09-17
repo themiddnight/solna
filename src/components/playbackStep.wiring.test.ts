@@ -4,17 +4,20 @@ import { join } from 'node:path';
 
 /**
  * Pins that each clock hook publishes under the SAME StepPlayerId its leaf
- * reads with useCurrentStep. publishStepAt/useCurrentStep are matched by
- * runtime string only — nothing in playbackStep.ts itself ties a producer to
- * a consumer, so retyping one side's id (or copy-pasting a hook and
- * forgetting to change it) compiles clean and fails silently at runtime
- * instead of in a test. Add a row here whenever a new player is wired.
+ * reads. The three consumers below read through `useSegmentGatedStep`, the
+ * segment-gated variant of `useCurrentStep` (both take the player id as
+ * their first argument), rather than `useCurrentStep` directly —
+ * publishStepAt/useSegmentGatedStep are matched by runtime string only —
+ * nothing in playbackStep.ts itself ties a producer to a consumer, so
+ * retyping one side's id (or copy-pasting a hook and forgetting to change
+ * it) compiles clean and fails silently at runtime instead of in a test. Add
+ * a row here whenever a new player is wired.
  *
- * `consumer.match` differs per row because the id doesn't always reach
- * useCurrentStep as a literal: PlayingStepRow (StepRow.tsx) is generic and
- * receives its player id as a prop from each call site, so what's pinned
- * there is that the prop is actually forwarded — not hardcoded or dropped —
- * rather than one specific id string.
+ * `consumer.match` differs per row because the id doesn't always reach the
+ * hook as a literal: PlayingStepRow (StepRow.tsx) is generic and receives
+ * its player id as a prop from each call site, so what's pinned there is
+ * that the prop is actually forwarded — not hardcoded or dropped — rather
+ * than one specific id string.
  */
 const WIRINGS: Array<{
   player: string;
@@ -56,7 +59,7 @@ const WIRINGS: Array<{
       // timeline nobody renders draws no playhead and no other test in this
       // repo would notice.
       file: 'src/components/loop/chord/CustomPatternTimeline.tsx',
-      regex: /useCurrentStep\(\s*'([^']+)'\s*\)/,
+      regex: /useSegmentGatedStep\(\s*'([^']+)'\s*,/,
       expected: 'chords',
     },
     consumerCallSites: {
@@ -99,9 +102,10 @@ const WIRINGS: Array<{
     },
     consumer: {
       // DEV-377: the marker's column is read by useLeadMarkerColumn, not by
-      // LeadMelodyGrid.tsx directly — the hook owns the useCurrentStep call.
+      // LeadMelodyGrid.tsx directly — the hook owns the useSegmentGatedStep
+      // call.
       file: 'src/components/loop/lead/useLeadMarker.ts',
-      regex: /useCurrentStep\(\s*([^)]+)\)/,
+      regex: /useSegmentGatedStep\(\s*([^,]+),/,
       expected: 'track.stepPlayer',
     },
   },
@@ -113,7 +117,7 @@ const WIRINGS: Array<{
     },
     consumer: {
       file: 'src/components/loop/sequencer/SequencerGrid.tsx',
-      regex: /useCurrentStep\(\s*(?:'([^']+)'|(\w+))\s*\)/,
+      regex: /useSegmentGatedStep\(\s*(?:'([^']+)'|(\w+))\s*,/,
       expected: 'sequencer',
     },
   },

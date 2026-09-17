@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createStepPublisher, type StepPlayerId } from './playbackStep';
+import { createStepPublisher, shouldSubscribeToStep, type StepPlayerId } from './playbackStep';
+import { segmentForFocus } from '@/store/focusTrack';
 
 /** A publisher whose subscriber on `player` counts the notifications it gets. */
 function countingPublisher(player: StepPlayerId = 'lead') {
@@ -305,5 +306,21 @@ describe('createStepPublisher — deferred publishing', () => {
     await sleep(110);
 
     expect(seen).toEqual([1, 2, 3]);
+  });
+});
+
+// `shouldSubscribeToStep` is the pure gating decision behind
+// `useSegmentGatedStep`: it must say yes only when the focused MixLayerId's
+// own Pattern segment (segmentForFocus) is the segment asking. 'synth' is the
+// MixLayerId that resolves to the 'lead' segment (focusTrack.ts's
+// SEGMENT_FOR_FOCUS) — not the literal 'lead', which is a PatternSegment, not
+// a MixLayerId.
+describe('shouldSubscribeToStep', () => {
+  test('true when the segment matches the focused segment', () => {
+    expect(shouldSubscribeToStep('synth', segmentForFocus('synth'))).toBe(true);
+  });
+
+  test('false when the segment does not match the focused segment', () => {
+    expect(shouldSubscribeToStep('synth', segmentForFocus('drum'))).toBe(false);
   });
 });

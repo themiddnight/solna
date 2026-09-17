@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAppStore } from '@/store/store';
 import { useSequencerPlayback } from '@/components/useSequencerPlayback';
-import { useCurrentStep } from '@/components/playbackStep';
+import { useSegmentGatedStep } from '@/components/playbackStep';
 import { StepHeader } from '@/components/ui/StepHeader';
 import { TrackRow } from './TrackRow';
 import { BEAT_VOICE_ROWS } from '@/components/loop/beat/beatVoices';
@@ -30,6 +30,13 @@ export interface SequencerGridProps {
  * is still a real prop, so a transport tick still re-renders every row — the
  * column highlight is per-step data each row needs. What this component
  * removes is everything ABOVE the grid re-rendering with them.
+ *
+ * The step subscription is also gated on Pattern-segment focus
+ * (`useSegmentGatedStep`, `'beat'`): every Pattern segment stays mounted, so
+ * without the gate this grid kept re-rendering at the clock's rate even while
+ * Lead, FX or Accompaniment was the segment on screen. `useSequencerPlayback`
+ * above is unaffected — it schedules the Beat audio unconditionally, whatever
+ * segment is focused.
  */
 export function SequencerGrid({
   pattern,
@@ -41,7 +48,7 @@ export function SequencerGrid({
   onVolumeChange,
 }: SequencerGridProps) {
   useSequencerPlayback();
-  const currentStep = useCurrentStep('sequencer');
+  const currentStep = useSegmentGatedStep('sequencer', 'beat');
   const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
 
   return (

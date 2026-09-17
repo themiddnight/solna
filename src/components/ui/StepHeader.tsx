@@ -39,7 +39,7 @@ export interface StepHeaderProps {
  * self-subscribing variant that mirrored `PlayingStepRow` was deleted with its
  * last caller. The chord and bass lanes never return to this strip: they moved
  * to their own span timeline, which reads the shared step itself through
- * `useCurrentStep('chords')` in `CustomPatternTimeline.tsx`.
+ * `useSegmentGatedStep('chords', 'accompaniment')` in `CustomPatternTimeline.tsx`.
  */
 export const StepHeader = React.memo(
   function StepHeader({ cells, currentStep, isPlaying, className = DRUM_HEADER_CLASS }: StepHeaderProps) {

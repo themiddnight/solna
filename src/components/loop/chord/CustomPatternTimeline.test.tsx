@@ -17,7 +17,9 @@ import { CustomPatternTimeline, type CustomPatternTimelineProps } from './Custom
  * `currentStep` prop at all — mirroring `LeadMelodyCells`, it never reads the
  * shared step, so a published step cannot force it to rebuild its cells or
  * its per-cell context. `CustomPatternPlayhead` is the only thing in the file
- * that subscribes to `useCurrentStep('chords')` (mirroring `LeadMarker`), and
+ * that subscribes to `useSegmentGatedStep('chords', 'accompaniment')`
+ * (mirroring `LeadMarker`), gated so the subscription is inert while
+ * Accompaniment is not the focused Pattern segment, and
  * `CustomPatternTimeline` renders it inline as a grid item alongside the
  * cells — a component-tree child rather than a sibling, unlike `LeadMarker`,
  * because this lane's columns are `1fr` tracks and only a fellow CSS Grid
@@ -206,16 +208,18 @@ describe('the playhead subscription is isolated to its own leaf', () => {
     expect('currentStep' in props).toBe(false);
   });
 
-  test('exactly one useCurrentStep call in the file, inside CustomPatternPlayhead', () => {
-    expect(source.match(/useCurrentStep\(/g) ?? []).toHaveLength(1);
-    expect(source).toContain("useCurrentStep('chords')");
+  test('exactly one useSegmentGatedStep call in the file, inside CustomPatternPlayhead', () => {
+    expect(source.match(/useSegmentGatedStep\(/g) ?? []).toHaveLength(1);
+    expect(source).toContain("useSegmentGatedStep('chords', 'accompaniment')");
     const playheadStart = source.indexOf('function CustomPatternPlayhead');
     const gridStart = source.indexOf('export const CustomPatternTimeline');
     expect(playheadStart).toBeGreaterThan(-1);
     expect(gridStart).toBeGreaterThan(playheadStart);
     // The subscription sits inside CustomPatternPlayhead's own body, not the
     // grid's — a retyped call site would move it out of this slice.
-    expect(source.slice(playheadStart, gridStart)).toContain("useCurrentStep('chords')");
+    expect(source.slice(playheadStart, gridStart)).toContain(
+      "useSegmentGatedStep('chords', 'accompaniment')",
+    );
   });
 
   test('the grid renders the playhead as a child, not a value threaded through props', () => {

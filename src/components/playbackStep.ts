@@ -1,6 +1,9 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { playbackAudibleDelaySec } from '@/audio/playback/playbackEngine';
+import { segmentForFocus, type MixLayerId } from '@/store/focusTrack';
+import { useAppStore } from '@/store/store';
 import type { PlayerModule } from '@/store/types';
+import type { PatternSegment } from '@/types';
 
 /** One id per clock-driven player that publishes a 16th-note step. */
 export type StepPlayerId = 'chords' | 'lead' | 'fx' | 'sequencer';
@@ -185,6 +188,46 @@ export function useCurrentStep(player: StepPlayerId): number {
   const subscribe = useCallback(
     (onStoreChange: () => void) => stepPublisher.subscribe(player, onStoreChange),
     [player],
+  );
+  const getSnapshot = useCallback(() => stepPublisher.getStep(player), [player]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/**
+ * Whether a step-marker subscription for `segment` should be live given the
+ * app's current `focus`. Pure, so `useSegmentGatedStep`'s gating decision is
+ * testable without mounting a hook — it is exactly `segmentForFocus`'s
+ * equality check, named for what it decides rather than what it calls.
+ */
+export function shouldSubscribeToStep(focus: MixLayerId, segment: PatternSegment): boolean {
+  return segmentForFocus(focus) === segment;
+}
+
+/**
+ * `useCurrentStep`, but VISUALLY gated on Pattern-segment focus: every
+ * Pattern segment stays mounted (see CLAUDE.md), so a playhead belonging to a
+ * segment the user is not looking at otherwise re-renders at the clock's
+ * 8-16Hz for nothing. When `segment` is not the one `segmentForFocus`
+ * currently shows, `subscribe` registers no listener at all — the caller
+ * simply stops re-rendering on step ticks until focus returns to it — and
+ * `useSyncExternalStore` still serves the latest published value on the next
+ * subscribe, so the marker resumes at the live position rather than a stale
+ * one.
+ *
+ * This gates ONLY the visual subscription. It has no connection to and no
+ * effect on the players that actually schedule audio
+ * (`useLeadPlayback`/`useSequencerPlayback`/chord-bass playback) — those
+ * subscribe to the clock directly and are unaffected by `focusTrack`, so a
+ * segment the user has navigated away from keeps sounding exactly as before.
+ */
+export function useSegmentGatedStep(player: StepPlayerId, segment: PatternSegment): number {
+  const focusTrack = useAppStore((s) => s.focusTrack);
+  const active = shouldSubscribeToStep(focusTrack, segment);
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) =>
+      active ? stepPublisher.subscribe(player, onStoreChange) : () => {},
+    [player, active],
   );
   const getSnapshot = useCallback(() => stepPublisher.getStep(player), [player]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
