@@ -1,11 +1,16 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import {
   resetNoteInputListeners,
   subscribeNoteInput,
   type NoteInputEvent,
 } from '../audio/playback/noteInputBus';
-import { computeDisconnectedInputIds, createHeldNoteTracker, startMidiInputBridge } from './midiInput';
+import {
+  computeDisconnectedInputIds,
+  createHeldNoteTracker,
+  flushMidiCcFrames,
+  startMidiInputBridge,
+} from './midiInput';
 import { useAppStore } from './store';
 import { sliderPosTodB } from '../utils/gainUnits';
 import type { VoiceId } from '../audio/synth/voiceId';
@@ -102,6 +107,17 @@ beforeAll(async () => {
   // of the loop before any test touches `access`.
   await Promise.resolve();
   await Promise.resolve();
+});
+
+// `ccFrames` (src/store/midiInput.ts) is module scope, so a CC test that
+// pushes to the same `targetKey` as one that ran moments earlier can land
+// inside that earlier test's still-armed real-timer window (the coalescer
+// falls back to a bare `setTimeout` outside a browser) and get silently
+// deferred rather than applied immediately. Settling it after every test in
+// this file — not only the coalescing describe block below — keeps every CC
+// test's first push a leading edge regardless of run order.
+afterEach(() => {
+  flushMidiCcFrames();
 });
 
 function connect(id: string): FakeMidiInput {
@@ -295,17 +311,22 @@ describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp',
 // Unlike masterVolume, the five synth-param branches (filterCutoff,
 // filterResonance, attack, release, oscType) push to audioEngine directly, in
 // addition to writing the store. That is not leftover duplication: engineSync
-// (not started in this file — see its own subscription tests) routes
-// updateSynthPatch through a per-key frame coalescer
-// (src/utils/frameCoalescer.ts) that applies only the FIRST value for a key
-// inside an animation-frame window and defers any repeat to the next frame.
-// updateSynthPatch re-shapes voices that are ALREADY sounding, so a CC sweep
-// on a held note must hear every intermediate value, not one per frame — the
-// direct call here is what delivers that, and removing it would make a sweep
-// step instead of glide. This test pins that every one of the five branches
-// still makes that direct call with the right computed value; it does not
-// (and cannot, since engineSync isn't running here) re-prove the coalescer's
-// own timing, which frameCoalescer.test.ts and engineSync.test.ts already own.
+// (not started in this file — see its own subscription tests) ALSO routes
+// updateSynthPatch through its own per-key frame coalescer
+// (src/utils/frameCoalescer.ts) keyed on the synth bus, which applies only
+// the FIRST value inside an animation-frame window and defers any repeat to
+// the next frame; the direct call here is what an isolated `synthParams`
+// write (with engineSync not running) still needs to reach the engine at
+// all. `applyCcMapping` itself now ALSO routes every branch's whole body
+// (store write plus this direct engine call) through its own module-level
+// `ccFrames` coalescer, keyed on `mapping.targetKey` — a hardware fader
+// sweep transmits CC byte-pairs at a rate comparable to or higher than a
+// mouse drag, and per-message store writes carried the full render-fanout
+// and persist-tick cost of a `set()` for every byte pair. This test pins
+// that a single message per target still reaches the engine with the right
+// computed value, in the same synchronous tick; the coalescing behaviour
+// itself — a same-target repeat inside one frame collapsing to the latest
+// value — is proven separately below.
 describe('MIDI CC pushes the five synth-param branches straight to the engine', () => {
   test('filterCutoff (CC 74) computes Hz from the CC value and pushes it directly', () => {
     const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
@@ -344,6 +365,84 @@ describe('MIDI CC pushes the five synth-param branches straight to the engine', 
     // Slot 2 is untouched: a CC that re-voiced both oscillators would
     // collapse a two-oscillator patch into one sound on the first knob move.
     expect(patch.oscillators[1].waveform).toBe(slot2Before);
+
+    updateSynthPatch.mockRestore();
+  });
+});
+
+// A hardware fader sweep transmits CC byte-pairs synchronously, all in the
+// same tick — before this fix, `applyCcMapping` wrote the store (and, for
+// the synth-param branches, called `audioEngine.updateSynthPatch`) once per
+// message, with no draft/preview stage at all. `applyCcMapping` now routes
+// every branch's whole body through the module-level `ccFrames` coalescer
+// (src/utils/frameCoalescer.ts), keyed on `mapping.targetKey`: the FIRST
+// message for a target inside an animation-frame window still lands
+// synchronously (a MIDI Learn assignment or a single nudge is never
+// delayed), and only a REPEAT on the SAME target inside that window defers
+// to the next frame and applies the LATEST value — mirroring
+// store/beatPreview.ts's "repeated previews inside one frame apply only the
+// latest params" test.
+describe('MIDI CC coalesces repeated messages to the same target', () => {
+  /** One frame of the coalescer's fallback scheduler (16 ms), with slack. */
+  const FRAME_MS = 40;
+  const nextFrame = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, FRAME_MS));
+
+  // The file-wide `afterEach(flushMidiCcFrames)` above settles anything left
+  // armed after each test, so the leading-edge assumption below never
+  // depends on run order.
+
+  test('two messages to the SAME synth target in one tick reach the engine once immediately (leading value), then once more at frame rate (latest value)', async () => {
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
+    const input = connect('dev-cc-coalesce-cutoff');
+    const synthCalls = () => updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
+
+    input.onmidimessage?.({ data: [0xb0, 74, 40], target: input });
+    input.onmidimessage?.({ data: [0xb0, 74, 100], target: input });
+
+    // Before any animation frame runs: exactly ONE push has reached the
+    // engine — the leading edge, computed from the FIRST message — not two.
+    expect(synthCalls().length).toBe(1);
+    const hzAfterFirst = Math.round(20 * Math.pow(1000, 40 / 127));
+    expect(nextPatch(synthCalls().at(-1)).patch.synth.filter.cutoffHz).toBe(hzAfterFirst);
+
+    await nextFrame();
+
+    // The frame drains the deferred message: one more call, using the LAST
+    // value (100/127), never the intermediate one that already landed.
+    expect(synthCalls().length).toBe(2);
+    const hzAfterSecond = Math.round(20 * Math.pow(1000, 100 / 127));
+    expect(nextPatch(synthCalls().at(-1)).patch.synth.filter.cutoffHz).toBe(hzAfterSecond);
+    expect(useAppStore.getState().synthParams.patch.synth.filter.cutoffHz).toBe(hzAfterSecond);
+
+    updateSynthPatch.mockRestore();
+  });
+
+  test('two messages to the SAME masterVolume target in one tick commit the store once immediately (leading value), then once more at frame rate (latest value)', async () => {
+    const input = connect('dev-cc-coalesce-master');
+
+    input.onmidimessage?.({ data: [0xb0, 7, 32], target: input });
+    input.onmidimessage?.({ data: [0xb0, 7, 127], target: input });
+
+    // Before any animation frame runs: the store already reflects the FIRST
+    // message, not the second — a synchronous burst commits once, not twice.
+    expect(useAppStore.getState().masterVolume).toBeCloseTo(sliderPosTodB(32 / 127), 6);
+
+    await nextFrame();
+
+    // The frame commits the deferred message: the store now reflects the
+    // LAST message (CC 127, the top of the taper: +12 dB).
+    expect(useAppStore.getState().masterVolume).toBeCloseTo(12, 6);
+  });
+
+  test('two DIFFERENT synth targets moved in the same tick never block each other — both reach the engine immediately', () => {
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
+    const input = connect('dev-cc-coalesce-distinct-targets');
+
+    input.onmidimessage?.({ data: [0xb0, 74, 64], target: input }); // filterCutoff
+    input.onmidimessage?.({ data: [0xb0, 71, 64], target: input }); // filterResonance
+
+    const synthCalls = updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
+    expect(synthCalls.length).toBe(2);
 
     updateSynthPatch.mockRestore();
   });

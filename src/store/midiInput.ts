@@ -1,4 +1,5 @@
 import { midiToFlatName } from '@/musicCore';
+import { createFrameCoalescer } from '@/utils/frameCoalescer';
 import { audioEngine } from '../audio/engine';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth, SubtractiveParams } from '../types/synth';
@@ -71,18 +72,52 @@ export function createHeldNoteTracker() {
 const heldNotes = createHeldNoteTracker();
 let knownInputIds: string[] = [];
 
+// A hardware fader sweep transmits CC byte-pairs at a rate comparable to or
+// higher than a mouse drag, with no draft/preview stage of its own —
+// `applyCcMapping` used to call a store setter (and, for the synth-patch
+// branches, `audioEngine.updateSynthPatch` directly) on every single message.
+// `midiInput.ts` is a plain store/event-bridge module with no component
+// tree, so Task 4's `useSynthPatchDraft` (a React hook) does not apply here;
+// `store/beatPreview.ts`'s module-level `createFrameCoalescer` is the actual
+// prior art for "preview immediately, coalesce repeats to one per animation
+// frame" outside a component. Keyed per `targetKey` (see `ccFrames` uses
+// below), so two different CC targets moved in the same frame — a hardware
+// controller with two faders bound to `filterCutoff` and `masterVolume` — each
+// still get their own immediate-then-coalesced push; only repeated messages to
+// the SAME target within one frame collapse to the latest value.
+const ccFrames = createFrameCoalescer();
+
+/**
+ * Test-only escape hatch: applies whatever `ccFrames` is still holding and
+ * cancels its armed frame, synchronously. `ccFrames` is module-scope and
+ * therefore shared across every test in the same process — without this, a
+ * CC test that pushes to the same `targetKey` as a test that ran moments
+ * earlier can land inside that earlier test's still-armed real-timer window
+ * (the coalescer falls back to a bare `setTimeout` outside a browser) and get
+ * silently deferred instead of applied immediately, flipping "leading edge"
+ * assertions for reasons that have nothing to do with the test itself. No
+ * production caller needs this: the app never tears down `ccFrames`.
+ */
+export function flushMidiCcFrames(): void {
+  ccFrames.flush();
+}
+
 // Applies one CC message through the enabled CC mapping for that number.
 //
-// `masterVolume` writes the store and STOPS there: engineSync subscribes to
-// that exact field with `fireImmediately`, and this bridge is itself started
-// from inside `startEngineSync`, so the subscription provably exists before
-// any CC can arrive. Pushing `setMasterVolume(faderDbToGain(db))` here as
-// well duplicated the one dB->linear boundary — two call sites that must
-// agree about the taper forever, for a value the subscription was already
-// going to deliver on the same tick. The synth-patch branches below still
-// push directly: `updateSynthPatch` re-shapes voices that are ALREADY
-// sounding, and engineSync routes that call through a frame coalescer, so a
-// CC sweep must not wait a frame to be heard on a held note.
+// Every branch below routes its store write (and, for the synth-patch
+// branches, its direct `audioEngine.updateSynthPatch` call) through
+// `ccFrames.push(mapping.targetKey, ...)` rather than calling it unconditionally:
+// the FIRST message for a target inside an animation-frame window still lands
+// synchronously (a MIDI Learn assignment or a single nudge is never delayed),
+// and only a REPEAT on the same target inside that window defers to the next
+// frame, applying the latest value. `masterVolume` writes the store and STOPS
+// there: engineSync subscribes to that exact field with `fireImmediately`, and
+// this bridge is itself started from inside `startEngineSync`, so the
+// subscription provably exists before any CC can arrive. Pushing
+// `setMasterVolume(faderDbToGain(db))` here as well would duplicate the one
+// dB->linear boundary — two call sites that must agree about the taper
+// forever, for a value the subscription was already going to deliver on the
+// same tick.
 
 /**
  * Writes one CC-mapped control into the Lead patch and pushes the result to
@@ -119,40 +154,45 @@ function applyCcMapping(ccNumber: number, ccValue: number): void {
     // controls for one value disagree about what "half" means. CC 0 is the
     // bottom of the taper, which is silence — the same silence the fader's
     // bottom detent gives, because both go through faderDbToGain.
-    s.setMasterVolume(sliderPosTodB(normalized));
+    ccFrames.push('masterVolume', () => s.setMasterVolume(sliderPosTodB(normalized)));
   } else if (mapping.targetKey === 'filterCutoff') {
     const hz = 20 * Math.pow(1000, normalized);
-    writeLeadSynth((synth) => ({ ...synth, filter: { ...synth.filter, cutoffHz: Math.round(hz) } }));
+    ccFrames.push('filterCutoff', () =>
+      writeLeadSynth((synth) => ({ ...synth, filter: { ...synth.filter, cutoffHz: Math.round(hz) } })));
   } else if (mapping.targetKey === 'filterResonance') {
     // The whole CC range onto the whole knob range. Resonance is a unitless
     // 0..1 synth control now, not the `Q` the biquad adapter maps it onto, so
     // the old `normalized * 20` would have pinned every CC above 1/20 of
     // travel to maximum.
-    writeLeadSynth((synth) => ({
-      ...synth,
-      filter: { ...synth.filter, resonance: Number(normalized.toFixed(3)) },
-    }));
+    ccFrames.push('filterResonance', () =>
+      writeLeadSynth((synth) => ({
+        ...synth,
+        filter: { ...synth.filter, resonance: Number(normalized.toFixed(3)) },
+      })));
   } else if (mapping.targetKey === 'attack') {
     const atk = 0.001 + normalized * 1.999;
-    writeLeadSynth((synth) => ({
-      ...synth,
-      ampEnvelope: { ...synth.ampEnvelope, attack: Number(atk.toFixed(3)) },
-    }));
+    ccFrames.push('attack', () =>
+      writeLeadSynth((synth) => ({
+        ...synth,
+        ampEnvelope: { ...synth.ampEnvelope, attack: Number(atk.toFixed(3)) },
+      })));
   } else if (mapping.targetKey === 'release') {
     const rel = 0.01 + normalized * 4.99;
-    writeLeadSynth((synth) => ({
-      ...synth,
-      ampEnvelope: { ...synth.ampEnvelope, release: Number(rel.toFixed(3)) },
-    }));
+    ccFrames.push('release', () =>
+      writeLeadSynth((synth) => ({
+        ...synth,
+        ampEnvelope: { ...synth.ampEnvelope, release: Number(rel.toFixed(3)) },
+      })));
   } else if (mapping.targetKey === 'oscType') {
     const types = ['sine', 'triangle', 'sawtooth', 'square'] as const;
     const idx = Math.min(types.length - 1, Math.floor(normalized * types.length));
     // Slot 1 only. A CC that re-voiced both oscillators would collapse the
     // two-oscillator patch into one sound on the first knob move.
-    writeLeadSynth((synth) => ({
-      ...synth,
-      oscillators: [{ ...synth.oscillators[0], waveform: types[idx] }, synth.oscillators[1]],
-    }));
+    ccFrames.push('oscType', () =>
+      writeLeadSynth((synth) => ({
+        ...synth,
+        oscillators: [{ ...synth.oscillators[0], waveform: types[idx] }, synth.oscillators[1]],
+      })));
   }
 }
 
