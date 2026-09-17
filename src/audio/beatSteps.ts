@@ -17,6 +17,12 @@ export interface BeatStepEvent {
   voice: BeatVoiceId;
 }
 
+// Reused across calls: beatStepEvents runs on the shared clock's hot path
+// (~8/sec at 120bpm) for the whole play session, and every caller consumes
+// the result synchronously (see fireBeatStepEvents in
+// components/useSequencerPlayback.ts) — nothing retains it past that call.
+const stepEventScratch: BeatStepEvent[] = [];
+
 /**
  * The voices that sound at `stepIndex`, in canonical roster order.
  *
@@ -32,13 +38,18 @@ export interface BeatStepEvent {
  * source-bus table. Both must pass for a voice to be heard, and folding them
  * together here would make the export unable to honour mute without also
  * honouring solo.
+ *
+ * Returns a readonly array to prevent callers from retaining or mutating the
+ * shared scratch buffer past their synchronous use. Both production callers
+ * (live sequencer in useSequencerPlayback and offline mixdown in renderMixdown)
+ * iterate the result synchronously and do not retain it.
  */
 export function beatStepEvents(
   pattern: BeatPattern,
   mix: BeatMix,
   stepIndex: number,
-): BeatStepEvent[] {
-  const events: BeatStepEvent[] = [];
+): readonly BeatStepEvent[] {
+  stepEventScratch.length = 0;
   for (const voice of BEAT_VOICE_IDS) {
     // Optional on BOTH halves, and for the same reason the row half already
     // was: this runs inside the shared 16th-clock callback, so a TypeError
@@ -48,7 +59,7 @@ export function beatStepEvents(
     // made the row's deliberate tolerance look accidental.
     if (mix.voices[voice]?.muted) continue;
     if (!pattern.rows[voice]?.[stepIndex]) continue;
-    events.push({ voice });
+    stepEventScratch.push({ voice });
   }
-  return events;
+  return stepEventScratch;
 }

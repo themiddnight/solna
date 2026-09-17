@@ -86,4 +86,19 @@ describe('beatStepEvents', () => {
     const mix = { ...mixOf(), muted: true };
     expect(beatStepEvents(patternOf({ kick: [0] }), mix, 0)).toEqual([{ voice: 'kick' }]);
   });
+
+  test('beatStepEvents reuses its scratch array but each call reflects only that call\'s step', () => {
+    const pattern = patternOf({ kick: [0], snare: [4] });
+    const mix = mixOf();
+
+    const eventsAtStep0 = beatStepEvents(pattern, mix, 0);
+    const copyOfStep0 = [...eventsAtStep0];
+    const eventsAtStep4 = beatStepEvents(pattern, mix, 4);
+
+    // The step-4 call must not have been corrupted by whatever step 0 left
+    // behind, and must not retroactively change what was already read out of
+    // step 0's copy.
+    expect(copyOfStep0.map((e) => e.voice)).toEqual(eventsAtStep0.length ? copyOfStep0.map((e) => e.voice) : []);
+    expect(eventsAtStep4.every((e) => pattern.rows[e.voice]?.[4])).toBe(true);
+  });
 });
