@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import {
   resetNoteInputListeners,
@@ -63,6 +63,24 @@ describe('createHeldNoteTracker', () => {
     const tracker = createHeldNoteTracker();
     expect(tracker.release('missing')).toEqual([]);
   });
+
+  test('releaseAll releases every held note across every input id and forgets them all', () => {
+    const tracker = createHeldNoteTracker();
+    tracker.noteOn('input-a', 'C4', 'voice-1' as VoiceId);
+    tracker.noteOn('input-a', 'E4', 'voice-2' as VoiceId);
+    tracker.noteOn('input-b', 'G4', 'voice-3' as VoiceId);
+
+    const released = tracker.releaseAll();
+
+    expect(released.map((h) => h.note).sort()).toEqual(['C4', 'E4', 'G4']);
+    // Forgotten: a second call finds nothing left to release.
+    expect(tracker.releaseAll()).toEqual([]);
+  });
+
+  test('releaseAll on an empty tracker returns an empty array', () => {
+    const tracker = createHeldNoteTracker();
+    expect(tracker.releaseAll()).toEqual([]);
+  });
 });
 
 // The Bun test runtime has no Web MIDI API at all (no navigator.requestMIDIAccess,
@@ -94,7 +112,49 @@ class FakeMidiAccess {
 // this SAME fake access object rather than restarting the bridge.
 const access = new FakeMidiAccess();
 
+// Bun's test runtime provides `navigator` (used above for MIDI) but no
+// `window`/`document` at all — this repo ships no jsdom/happy-dom. The
+// blur/visibilitychange backstop is guarded on both being defined, so these
+// hand-built EventTargets stand in for them, installed as real globals below
+// BEFORE startMidiInputBridge() runs so its guard sees them.
+class FakeEventTarget {
+  private listeners = new Map<string, Set<() => void>>();
+  addEventListener(type: string, handler: () => void): void {
+    let set = this.listeners.get(type);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(type, set);
+    }
+    set.add(handler);
+  }
+  removeEventListener(type: string, handler: () => void): void {
+    this.listeners.get(type)?.delete(handler);
+  }
+  dispatch(type: string): void {
+    this.listeners.get(type)?.forEach((handler) => handler());
+  }
+}
+
+class FakeDocument extends FakeEventTarget {
+  hidden = false;
+}
+
+const fakeWindow = new FakeEventTarget();
+const fakeDocument = new FakeDocument();
+
+// Captured so the real values (or lack of them) can be restored in afterAll —
+// other test files sharing this Bun process must not see this file's fakes.
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+
 beforeAll(async () => {
+  // `configurable: true` because other test files in this same Bun process
+  // (store.test.ts, projectBoot.test.ts, ...) may have already defined
+  // `window` as a non-writable alias for `globalThis`; a plain assignment
+  // would throw "Attempted to assign to readonly property" depending on
+  // which file ran first, so this redefines the property outright instead.
+  Object.defineProperty(globalThis, 'window', { value: fakeWindow, configurable: true });
+  Object.defineProperty(globalThis, 'document', { value: fakeDocument, configurable: true });
   (navigator as unknown as { requestMIDIAccess: () => Promise<FakeMidiAccess> }).requestMIDIAccess = () =>
     Promise.resolve(access);
   startMidiInputBridge();
@@ -102,6 +162,13 @@ beforeAll(async () => {
   // of the loop before any test touches `access`.
   await Promise.resolve();
   await Promise.resolve();
+});
+
+afterAll(() => {
+  if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  else delete (globalThis as { window?: unknown }).window;
+  if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
+  else delete (globalThis as { document?: unknown }).document;
 });
 
 function connect(id: string): FakeMidiInput {
@@ -216,6 +283,69 @@ describe('startMidiInputBridge releases held notes on disconnect (map removal fa
     access.onstatechange?.({ port: input });
 
     expect(spies.releasedFrequencies()).toEqual(['C4'].map((n) => noteFrequency(n)));
+    spies.restore();
+  });
+});
+
+describe('startMidiInputBridge releases held notes on tab blur / visibilitychange', () => {
+  test('window blur releases every held note across every input, by the voice it started', () => {
+    const spies = spyNotePair();
+    const inputA = connect('dev-blur-a');
+    const inputB = connect('dev-blur-b');
+    noteOn(inputA, 60); // C4
+    noteOn(inputB, 64); // E4
+
+    fakeWindow.dispatch('blur');
+
+    expect(spies.releasedFrequencies().sort((a, b) => a - b)).toEqual(
+      ['C4', 'E4'].map((n) => noteFrequency(n)).sort((a, b) => a - b),
+    );
+    spies.restore();
+  });
+
+  test('a blur with nothing held fires no release', () => {
+    const spies = spyNotePair();
+
+    fakeWindow.dispatch('blur');
+
+    expect(spies.off).not.toHaveBeenCalled();
+    spies.restore();
+  });
+
+  test('visibilitychange releases held notes only when the document is hidden', () => {
+    const spies = spyNotePair();
+    const input = connect('dev-visibility');
+    noteOn(input, 60); // C4
+
+    fakeDocument.hidden = false;
+    fakeDocument.dispatch('visibilitychange');
+    expect(spies.off).not.toHaveBeenCalled();
+
+    fakeDocument.hidden = true;
+    fakeDocument.dispatch('visibilitychange');
+    expect(spies.releasedFrequencies()).toEqual(['C4'].map((n) => noteFrequency(n)));
+
+    fakeDocument.hidden = false;
+    spies.restore();
+  });
+
+  test('a note held on one input survives a disconnect flush of a different, unrelated input', () => {
+    // Proves the two backstops (per-input disconnect flush vs. cross-input
+    // blur/visibilitychange release) don't interfere with each other: flushing
+    // one input's notes must never reach into another input's held set.
+    const spies = spyNotePair();
+    const stillHeld = connect('dev-coexist-held');
+    const disconnecting = connect('dev-coexist-gone');
+    noteOn(stillHeld, 60); // C4
+    noteOn(disconnecting, 64); // E4
+
+    disconnectByStateFlip(disconnecting);
+    expect(spies.releasedFrequencies()).toEqual(['E4'].map((n) => noteFrequency(n)));
+
+    fakeWindow.dispatch('blur');
+    expect(spies.releasedFrequencies().sort((a, b) => a - b)).toEqual(
+      ['E4', 'C4'].map((n) => noteFrequency(n)).sort((a, b) => a - b),
+    );
     spies.restore();
   });
 });
