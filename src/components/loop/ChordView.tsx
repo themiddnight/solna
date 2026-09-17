@@ -198,7 +198,6 @@ export const ChordView = React.memo(function ChordView() {
           scaleRoot={state.scaleRoot}
           scaleType={state.scaleType}
           autoReharmonize={harmonize.autoReharmonize}
-          synthParams={state.synthParams}
           onApplyChords={editor.handleApplyLibraryChords}
         />
       </Suspense>

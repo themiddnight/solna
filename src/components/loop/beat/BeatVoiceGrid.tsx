@@ -60,11 +60,11 @@ export function BeatVoiceGrid({
           ordinal={index + 1}
           voices={voices}
           depth={depth}
-          onPreview={() => onPreview(row.id)}
-          onDraft={(key, value) => onDraft(row.id, key, value)}
+          onPreview={onPreview}
+          onDraft={onDraft}
           onCommit={onCommit}
           onCancel={onCancel}
-          onReset={() => onResetVoice(row.id)}
+          onReset={onResetVoice}
           resetDisabled={resetDisabled}
           muted={mutedVoices[row.id].muted}
         />

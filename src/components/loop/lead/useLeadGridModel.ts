@@ -46,7 +46,7 @@ export function useLeadGridModel(trackId: MelodyTrackId) {
   const melodyGate = useAppStore((s) => s[track.gate]);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-  const chords = useAppStore((s) => s.chords);
+  const totalBars = useAppStore((s) => loopBars(s.chords));
   const setMelodyStepResolution = useAppStore((s) => s[actions.setStepResolution]);
   const setMelodyView = useAppStore((s) => s[actions.setView]);
   const setMelodyOctave = useAppStore((s) => s[actions.setOctave]);
@@ -58,7 +58,6 @@ export function useLeadGridModel(trackId: MelodyTrackId) {
 
   const meter = getMeter(meterId);
   const stepsPerBar = meter.stepsPerBar;
-  const totalBars = loopBars(chords);
   const divisors = loopLengthDivisors(totalBars);
   const stride = strideFor(melodyStepResolution);
   const colsPerBar = columnsPerBar(stepsPerBar, stride);

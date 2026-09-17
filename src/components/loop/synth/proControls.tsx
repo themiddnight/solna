@@ -33,6 +33,13 @@ export type SubtractivePatch = EnginePatch<'subtractive'>;
 export interface PatchPanelProps {
   patch: SubtractivePatch;
   onPatch: (next: SubtractivePatch) => void;
+  /** Ends the gesture the last `onPatch` opened, writing the draft to the
+   *  store exactly once. Every `KnobSpec` a panel builds wires its own
+   *  `onCommit: () => onCommit()` to this. */
+  onCommit: () => void;
+  /** Ends the gesture by discarding the draft. Optional at the `Knob` level
+   *  (see `Knob`'s own `onCancel` note), so panels wire it the same way. */
+  onCancel: () => void;
 }
 
 /**
@@ -272,6 +279,11 @@ export interface KnobSpec {
   scale?: KnobScale;
   format: (value: number) => string;
   onChange: (value: number) => void;
+  /** Ends the drag `onChange` previewed, committing it to the store exactly
+   *  once. Optional — a spec that omits it gets exactly today's behavior,
+   *  same rule as `Knob`'s own `onCommit`. */
+  onCommit?: (value: number) => void;
+  onCancel?: () => void;
 }
 
 /**
@@ -315,6 +327,8 @@ export function KnobGrid({
           scale={spec.scale}
           format={spec.format}
           onChange={spec.onChange}
+          onCommit={spec.onCommit}
+          onCancel={spec.onCancel}
         />
       ))}
     </div>
@@ -446,6 +460,8 @@ export function RouteRow({
   color,
   dbRange,
   onChange,
+  onCommit,
+  onCancel,
 }: {
   /** Ids are `select-${idPrefix}-target` and `slider-${idPrefix}-amount`. */
   idPrefix: string;
@@ -461,6 +477,9 @@ export function RouteRow({
   /** The dB bound this row's routes obey — see `amountControlFor`. */
   dbRange?: { min: number; max: number };
   onChange: (next: ModRoute | null) => void;
+  /** Ends the amount knob's drag, committing it to the store exactly once. */
+  onCommit?: () => void;
+  onCancel?: () => void;
 }) {
   const amount = route ? amountControlFor(route, dbRange) : null;
   return (
@@ -483,13 +502,18 @@ export function RouteRow({
           id={`select-${idPrefix}-target`}
           className="select select-xs w-full text-[11px] font-semibold"
           value={route?.target ?? NO_ROUTE}
-          onChange={(e) =>
+          onChange={(e) => {
+            // A discrete pick, not a drag: preview and commit together — it
+            // has no `pointerup` of its own to hook a separate commit onto,
+            // unlike the amount knob below, whose own onCommit fires on its
+            // release.
             onChange(
               e.target.value === NO_ROUTE
                 ? null
                 : defaultRouteFor(e.target.value as ModTarget),
-            )
-          }
+            );
+            onCommit?.();
+          }}
         >
           <option value={NO_ROUTE}>Off</option>
           {MOD_TARGETS.map((target) => (
@@ -513,6 +537,8 @@ export function RouteRow({
           step={amount.step}
           format={amount.format}
           onChange={(value) => onChange({ ...route, amount: value })}
+          onCommit={onCommit}
+          onCancel={onCancel}
         />
       )}
     </div>

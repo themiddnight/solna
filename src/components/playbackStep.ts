@@ -1,6 +1,9 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { playbackAudibleDelaySec } from '@/audio/playback/playbackEngine';
+import { segmentForFocus, type MixLayerId } from '@/store/focusTrack';
+import { useAppStore } from '@/store/store';
 import type { PlayerModule } from '@/store/types';
+import type { PatternSegment } from '@/types';
 
 /** One id per clock-driven player that publishes a 16th-note step. */
 export type StepPlayerId = 'chords' | 'lead' | 'fx' | 'sequencer';
@@ -185,6 +188,54 @@ export function useCurrentStep(player: StepPlayerId): number {
   const subscribe = useCallback(
     (onStoreChange: () => void) => stepPublisher.subscribe(player, onStoreChange),
     [player],
+  );
+  const getSnapshot = useCallback(() => stepPublisher.getStep(player), [player]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/**
+ * Whether a step-marker subscription for `segment` should be live given the
+ * app's current `focus`. Pure, so `useSegmentGatedStep`'s gating decision is
+ * testable without mounting a hook — it is exactly `segmentForFocus`'s
+ * equality check, named for what it decides rather than what it calls.
+ */
+export function shouldSubscribeToStep(focus: MixLayerId, segment: PatternSegment): boolean {
+  return segmentForFocus(focus) === segment;
+}
+
+/**
+ * `useCurrentStep`, but gated on SEGMENT FOCUS — not on whether this segment
+ * is actually visible. The gate is exactly `segmentForFocus(focusTrack) ===
+ * segment`; it has no idea whether `activeTab` even shows a Pattern segment
+ * at all. Every Pattern segment stays mounted (see CLAUDE.md), so the case
+ * this was built for is the ~4x reduction across Pattern's own four segments
+ * (Lead, FX, Accompaniment, Beat): a playhead whose segment focus does not
+ * currently match otherwise re-renders at the clock's 8-16Hz for nothing
+ * while a DIFFERENT Pattern segment is on screen. It does NOT know or care
+ * whether the user is on Sound, Arrange or Master, where no Pattern segment
+ * is visible at all — the subscription stays exactly as live there as it
+ * would on Pattern itself, because `focusTrack`, not `activeTab`, is the
+ * only thing this gates on. When `segmentForFocus(focusTrack)` is not
+ * `segment`, `subscribe` registers no listener at all — the caller simply
+ * stops re-rendering on step ticks until focus returns to it — and
+ * `useSyncExternalStore` still serves the latest published value on the next
+ * subscribe, so the marker resumes at the live position rather than a stale
+ * one.
+ *
+ * This gates ONLY the visual subscription. It has no connection to and no
+ * effect on the players that actually schedule audio
+ * (`useLeadPlayback`/`useSequencerPlayback`/chord-bass playback) — those
+ * subscribe to the clock directly and are unaffected by `focusTrack`, so a
+ * segment the user has navigated away from keeps sounding exactly as before.
+ */
+export function useSegmentGatedStep(player: StepPlayerId, segment: PatternSegment): number {
+  const focusTrack = useAppStore((s) => s.focusTrack);
+  const active = shouldSubscribeToStep(focusTrack, segment);
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) =>
+      active ? stepPublisher.subscribe(player, onStoreChange) : () => {},
+    [player, active],
   );
   const getSnapshot = useCallback(() => stepPublisher.getStep(player), [player]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

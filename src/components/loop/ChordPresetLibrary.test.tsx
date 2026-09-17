@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToString } from 'react-dom/server';
 import {
   ChordPresetLibrary,
@@ -7,10 +9,14 @@ import {
   templateAuditionClassName,
   customAuditionClassName,
 } from './ChordPresetLibrary';
-import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById } from '@/audio/chordProgressions';
 import { SCALES } from '@/data/scales';
+
+const source = readFileSync(
+  join(process.cwd(), 'src/components/loop/ChordPresetLibrary.tsx'),
+  'utf8',
+);
 
 const noop = () => {};
 
@@ -24,7 +30,6 @@ const html = renderToString(
     scaleRoot="C"
     scaleType="Major"
     autoReharmonize
-    synthParams={SUBTRACTIVE_INIT}
     onApplyChords={noop}
   />
 );
@@ -165,10 +170,100 @@ describe('ChordPresetLibrary closed', () => {
         scaleRoot="C"
         scaleType="Major"
         autoReharmonize
-        synthParams={SUBTRACTIVE_INIT}
         onApplyChords={noop}
       />,
     );
     expect(closedHtml).toBe('');
+  });
+});
+
+/**
+ * Perf fix (DEV react-perf-fixes task 6): `ChordPresetLibrary` no longer
+ * takes Lead's whole synth patch as a prop, so the always-mounted `ChordView`
+ * that renders it (behind a closed `<Suspense>`-gated drawer, almost always)
+ * no longer needs to subscribe to `s.synthParams` just to forward it here. A
+ * runtime render-count is not testable in this no-DOM harness (same caveat
+ * `CustomPatternTimeline.test.tsx` records for its own React.memo claim), so
+ * this proves the code-shape property that implies it instead: the prop type
+ * has no `synthParams` field at all (a type-level guard — this file would
+ * stop compiling under `bun run lint` if the field were re-added and any
+ * call site above still omitted it), and the one remaining read is a fresh
+ * `useAppStore.getState()` snapshot taken inside the `audition` click
+ * handler, not a prop threaded down from a subscription.
+ */
+describe('ChordPresetLibrary no longer subscribes to synthParams', () => {
+  test('the component\'s props carry no synthParams field', () => {
+    // A type-level guard: if `synthParams` were ever re-added to
+    // ChordPresetLibraryProps, this assignment would stop compiling because
+    // `Props` would then require the field.
+    type Props = Parameters<typeof ChordPresetLibrary>[0];
+    type AssertNoSynthParams = 'synthParams' extends keyof Props
+      ? 'FAIL: synthParams re-added to ChordPresetLibraryProps'
+      : true;
+    const guard: AssertNoSynthParams = true;
+    expect(guard).toBe(true);
+  });
+
+  test('audition reads a fresh synthParams snapshot at click time, not from a prop', () => {
+    expect(source).toContain(
+      'previewChordProgression(chordsToPlay, useAppStore.getState().synthParams)',
+    );
+    // Neither the props interface nor the internal command-hook's parameter
+    // object may still type or destructure a `synthParams` field — a stray
+    // comment mentioning the word (the ChordLibraryFooter render-cost note)
+    // is the only other legitimate hit, so this checks the specific
+    // declaration shapes rather than a raw occurrence count.
+    expect(source).not.toContain('synthParams: ActiveSynth');
+    expect(source).not.toMatch(/^\s*synthParams,$/m);
+    expect(source).not.toContain("import type { ActiveSynth }");
+  });
+});
+
+/**
+ * Perf fix (react-perf-fixes task 10): `PresetLibrary` now memoizes its
+ * `groups` derivation on `[groupEntries, filtered, query, category]`
+ * (`PresetLibrary.tsx`), which is inert unless every caller-supplied
+ * `groupEntries` closure is itself referentially stable across renders.
+ * `ChordPresetLibrary` used to build a fresh `groupEntries` closure on every
+ * render, which would defeat that memoization end to end even though
+ * `PresetLibrary.tsx` was fixed correctly (the exact "looks memoized, isn't"
+ * trap task 9 of this same plan fell into first). A runtime render-count is
+ * not testable in this no-DOM harness (same caveat noted above for the
+ * `synthParams` fix), so this proves the code-shape properties that jointly
+ * guarantee stability instead:
+ *   1. `groupEntries` is wrapped in `useCallback`, not a bare arrow function.
+ *   2. Its dependency array is exactly `[tonic]` — no more (which would be
+ *      over-invalidation, not a correctness bug, but would defeat the memo
+ *      on every scaleRoot/scaleType-unrelated render if `tonic` were rebuilt
+ *      needlessly) and no less (which would serve stale groups, per the
+ *      brief's step 3 warning).
+ *   3. The closure body is unchanged — still delegates to the module-level
+ *      `groupChordEntries` helper — so `tonic` really is the only free
+ *      variable the closure reads besides that stable top-level function.
+ */
+describe('ChordPresetLibrary groupEntries is stable across renders', () => {
+  test('groupEntries is wrapped in useCallback keyed on [tonic] only', () => {
+    expect(source).toMatch(
+      /const groupEntries = useCallback\(\s*\(filtered: ChordLibraryEntry\[\], _query: string, category: string\) =>\s*groupChordEntries\(filtered, tonic, category\),\s*\[tonic\],\s*\);/,
+    );
+  });
+
+  test('useCallback is imported from react', () => {
+    expect(source).toMatch(/import React, \{[^}]*\buseCallback\b[^}]*\} from 'react';/);
+  });
+
+  test('groupChordEntries stays a module-level helper, not redefined per render', () => {
+    // A top-level `function` declaration is hoisted and created once per
+    // module load; if this ever moved inside the component body it would
+    // become a fresh reference every render and reintroduce exactly the
+    // instability this task fixes, even with groupEntries's own useCallback
+    // still in place (its dependency array doesn't name groupChordEntries,
+    // so a change there would go undetected by [tonic] alone).
+    expect(source).toMatch(/^function groupChordEntries\(/m);
+  });
+
+  test('ChordPresetLibrary using the new groupEntries still renders its groups (smoke test)', () => {
+    expect(html).toContain('Progression Library');
+    expect(html).toContain(`Key of C`);
   });
 });

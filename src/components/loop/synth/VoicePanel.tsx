@@ -25,10 +25,15 @@ import { KnobGrid, ProModule, ToggleRow, type PatchPanelProps } from './proContr
  */
 const VOICE_COLOR = 'text-module-voice' as const;
 
-export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
+export function VoicePanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   const common = patch.common;
   const write = (next: Partial<CommonVoiceParams>) =>
     onPatch({ ...patch, common: { ...common, ...next } });
+  // Mono/Poly is a discrete pick, not a drag: preview and commit together.
+  const writeCommitted = (next: Partial<CommonVoiceParams>) => {
+    write(next);
+    onCommit();
+  };
 
   return (
     <ProModule
@@ -45,7 +50,7 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
           { value: 'mono', label: 'MONO, monophonic', content: 'MONO' },
           { value: 'poly', label: 'POLY, polyphonic', content: 'POLY' },
         ]}
-        onSelect={(voiceMode) => write({ voiceMode })}
+        onSelect={(voiceMode) => writeCommitted({ voiceMode })}
       />
 
       <KnobGrid
@@ -60,6 +65,8 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
             step: 1,
             format: (v) => String(Math.round(v)),
             onChange: (unisonVoices) => write({ unisonVoices }),
+            onCommit,
+            onCancel,
           },
           {
             id: 'slider-voice-spread',
@@ -70,6 +77,8 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
             step: 1,
             format: (v) => `${Math.round(v)} ct`,
             onChange: (unisonDetuneCents) => write({ unisonDetuneCents }),
+            onCommit,
+            onCancel,
           },
           {
             id: 'slider-voice-glide',
@@ -80,6 +89,8 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
             step: 0.01,
             format: (v) => (v < 1 ? `${Math.round(v * 1000)} ms` : `${v.toFixed(2)} s`),
             onChange: (glideSeconds) => write({ glideSeconds }),
+            onCommit,
+            onCancel,
           },
           {
             id: 'slider-voice-width',
@@ -90,6 +101,8 @@ export function VoicePanel({ patch, onPatch }: PatchPanelProps) {
             step: 0.01,
             format: (v) => `${Math.round(v * 100)}%`,
             onChange: (stereoWidth) => write({ stereoWidth }),
+            onCommit,
+            onCancel,
           },
         ]}
       />

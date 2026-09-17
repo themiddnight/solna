@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Bookmark, Drum, RotateCcw } from 'lucide-react';
 import { BEAT_PRESETS } from '@/data/beatPresets';
 import { useAppStore } from '@/store/store';
@@ -199,18 +199,19 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
   const draftFilter = (patch: Partial<BeatFilterParams>) =>
     update((params: BeatParams) => ({ ...params, filter: { ...params.filter, ...patch } }));
 
-  const draftVoiceParam = (voice: BeatVoiceId, key: string, value: number) =>
-    update((params: BeatParams) => ({
-      ...params,
-      voices: withVoiceParam(params.voices, voice, key, value),
-    }));
+  // `useCallback`: unbound, reaches every `BeatVoiceCard` via `BeatVoiceGrid`
+  // — a fresh identity here fails `BeatVoiceCard`'s `React.memo` for all 11.
+  const draftVoiceParam = useCallback(
+    (voice: BeatVoiceId, key: string, value: number) =>
+      update((p: BeatParams) => ({ ...p, voices: withVoiceParam(p.voices, voice, key, value) })),
+    [update],
+  );
 
-  const preview = (voice: BeatVoiceId) => {
-    // The gesture that needs a context is this one: `init()` is idempotent but
-    // not free, so it runs on the tap and never per scheduled hit.
+  // `init()` is idempotent but not free, so it runs on the tap, not per hit.
+  const preview = useCallback((voice: BeatVoiceId) => {
     ensureDrumEngine();
     triggerPad(voice, BEAT_PREVIEW_VELOCITY);
-  };
+  }, []);
 
   return (
     <SectionCard

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import {
   customPatternCells,
+  customPatternFoldedStep,
   customPatternKeyOutcome,
   customPatternPositionLabel,
   resizedPatternLength,
@@ -349,5 +350,28 @@ describe('customPatternPositionLabel', () => {
       customPatternPositionLabel(column, 16, [4, 4, 4, 4]),
     );
     expect(new Set(labels).size).toBe(labels.length);
+  });
+});
+
+describe('customPatternFoldedStep', () => {
+  test('passes a step through unchanged when it already fits the cycle', () => {
+    expect(customPatternFoldedStep(0, 32)).toBe(0);
+    expect(customPatternFoldedStep(20, 32)).toBe(20);
+  });
+
+  test('folds a run-absolute step by the lane cycle, so a shorter lane repeats', () => {
+    // Two lanes, one published step: a one-bar (16-step) lane sees column 4
+    // where a two-bar (32-step) lane sees column 20 — the exact case that
+    // makes the chord and bass lanes draw different playhead columns for the
+    // SAME published step.
+    expect(customPatternFoldedStep(20, 16)).toBe(4);
+    expect(customPatternFoldedStep(20, 32)).toBe(20);
+    // One cycle later lands on the same column.
+    expect(customPatternFoldedStep(20 + 32, 32)).toBe(20);
+    expect(customPatternFoldedStep(20 + 2 * 32, 32)).toBe(20);
+  });
+
+  test('is null in, null out — a stopped or unarmed transport folds to no column', () => {
+    expect(customPatternFoldedStep(null, 32)).toBeNull();
   });
 });

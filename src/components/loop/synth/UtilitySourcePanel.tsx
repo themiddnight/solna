@@ -54,10 +54,17 @@ function UtilityHalf({
   );
 }
 
-export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
+export function UtilitySourcePanel({ patch, onPatch, onCommit, onCancel }: PatchPanelProps) {
   const utility = patch.synth.utility;
   const write = (next: Partial<UtilitySourceParams>) =>
     onPatch({ ...patch, synth: { ...patch.synth, utility: { ...utility, ...next } } });
+  // Every discrete pick on this panel (enable toggles, octave choice, noise
+  // colour) previews and commits together — none has a `pointerup` of its
+  // own to hook a separate commit onto.
+  const writeCommitted = (next: Partial<UtilitySourceParams>) => {
+    write(next);
+    onCommit();
+  };
 
   return (
     <ProModule
@@ -70,7 +77,7 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
           title="SUB OSC"
           enabledId="btn-sub-enabled"
           enabled={utility.subEnabled}
-          onToggle={() => write({ subEnabled: !utility.subEnabled })}
+          onToggle={() => writeCommitted({ subEnabled: !utility.subEnabled })}
         >
           <ToggleRow
             idPrefix="btn-sub-octave"
@@ -84,7 +91,7 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
               { value: 'minus1', label: '−1, one octave down', content: '−1' },
               { value: 'minus2', label: '−2, two octaves down', content: '−2' },
             ]}
-            onSelect={(value) => write({ subOctave: value === 'minus1' ? -1 : -2 })}
+            onSelect={(value) => writeCommitted({ subOctave: value === 'minus1' ? -1 : -2 })}
           />
           <KnobGrid
             color={OSC_COLOR}
@@ -102,6 +109,8 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
                 step: 0.5,
                 format: levelDb,
                 onChange: (subLevelDb) => write({ subLevelDb }),
+                onCommit,
+                onCancel,
               },
             ]}
           />
@@ -111,7 +120,7 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
           title="NOISE"
           enabledId="btn-noise-enabled"
           enabled={utility.noiseEnabled}
-          onToggle={() => write({ noiseEnabled: !utility.noiseEnabled })}
+          onToggle={() => writeCommitted({ noiseEnabled: !utility.noiseEnabled })}
         >
           {/* A select, not a segmented row. Three colour chips plus their
               caption overflowed this column at the narrow breakpoint, and a
@@ -124,7 +133,7 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
               id="select-noise-color"
               className="select select-xs w-full text-[11px] font-semibold"
               value={utility.noiseColor}
-              onChange={(e) => write({ noiseColor: e.target.value as NoiseColor })}
+              onChange={(e) => writeCommitted({ noiseColor: e.target.value as NoiseColor })}
             >
               {NOISE_COLORS.map((color) => (
                 <option key={color.value} value={color.value}>
@@ -146,6 +155,8 @@ export function UtilitySourcePanel({ patch, onPatch }: PatchPanelProps) {
                 step: 0.5,
                 format: levelDb,
                 onChange: (noiseLevelDb) => write({ noiseLevelDb }),
+                onCommit,
+                onCancel,
               },
             ]}
           />

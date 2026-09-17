@@ -1,3 +1,4 @@
+import React from 'react';
 import { Play, RotateCcw } from 'lucide-react';
 import { Knob } from '@/components/ui/Knob';
 import { ModuleHeader } from '@/components/ui/ModuleHeader';
@@ -72,21 +73,54 @@ export interface BeatVoiceCardProps {
   /** `simple` is the voice's Primary set; `pro` is Primary then More in the
    *  SAME lane, because at that depth they are one set. */
   depth: SoundDepth;
-  onPreview: () => void;
+  /** The grid's own raw callback, unbound to a voice — the card calls it with
+   *  its own `voice` prop. Passing the same function reference to all eleven
+   *  cards (rather than a per-row closure built in `BeatVoiceGrid`'s `.map()`)
+   *  is what lets `React.memo` below actually bail on the cards a drag didn't
+   *  touch. */
+  onPreview: (voice: BeatVoiceId) => void;
   /** This voice's mixer mute. The per-voice mute drives the voice's gain node
    *  to 0 (`engineSync.pushBeatVoiceGains`), so Preview is genuinely silent
    *  while it is set — and the control that sets it lives on another tab, so
    *  the button has to name the reason rather than just doing nothing. */
   muted: boolean;
-  /** Writes one parameter into the draft and previews it. */
-  onDraft: (key: string, value: number) => void;
+  /** Writes one parameter into the draft and previews it. Same raw-callback
+   *  reasoning as `onPreview`. */
+  onDraft: (voice: BeatVoiceId, key: string, value: number) => void;
   onCommit: () => void;
   onCancel: () => void;
-  onReset: () => void;
+  onReset: (voice: BeatVoiceId) => void;
   /** True when the loop's base preset cannot be resolved: a voice reset copies
    *  FROM that preset, so there is nothing for it to do. */
   resetDisabled: boolean;
 }
+
+/**
+ * The exhaustiveness guard for `arePropsEqual` below. A `Record<keyof
+ * BeatVoiceCardProps, true>` literal fails to COMPILE the moment a prop is
+ * added to or removed from `BeatVoiceCardProps` without a matching edit
+ * here — TypeScript requires every key of the mapped type and rejects any
+ * key that isn't one. That closes half the gap a future 13th prop could slip
+ * through unnoticed; `BeatVoiceCard.test.tsx`'s "arePropsEqual is exhaustive"
+ * suite closes the other half, by asserting every key listed here actually
+ * flips the comparator's verdict when it changes — a key that compiles into
+ * this table but was never wired into `arePropsEqual`'s own `&&` chain still
+ * fails a test, not just a type a reviewer has to remember to re-check.
+ */
+export const BEAT_VOICE_CARD_PROP_KEYS: Record<keyof BeatVoiceCardProps, true> = {
+  voice: true,
+  meta: true,
+  ordinal: true,
+  voices: true,
+  depth: true,
+  onPreview: true,
+  muted: true,
+  onDraft: true,
+  onCommit: true,
+  onCancel: true,
+  onReset: true,
+  resetDisabled: true,
+};
 
 /**
  * One voice, as one compartment of the instrument, wearing the synth rack's
@@ -119,7 +153,34 @@ export interface BeatVoiceCardProps {
  * switch is the one disclosure model on this surface; a second one on top of
  * it was two models in one screen.
  */
-export function BeatVoiceCard({
+/**
+ * Custom comparator, not the default shallow compare `React.memo` would use
+ * otherwise: `voices` is the WHOLE eleven-voice record, and `BeatSoundSection`
+ * spreads a fresh top-level object into it on every drag frame
+ * (`withVoiceParam`) — only the dragged voice's own nested object gets a new
+ * reference, the other ten keep theirs. Comparing `prev.voices === next.voices`
+ * would therefore find every card "changed" on every frame and the memo would
+ * bail on nothing; comparing this card's own slice (`voices[voice]`) is what
+ * actually lets the other ten cards skip re-rendering.
+ */
+export function arePropsEqual(prev: BeatVoiceCardProps, next: BeatVoiceCardProps): boolean {
+  return (
+    prev.voice === next.voice &&
+    prev.meta === next.meta &&
+    prev.ordinal === next.ordinal &&
+    prev.voices[prev.voice] === next.voices[next.voice] &&
+    prev.depth === next.depth &&
+    prev.onPreview === next.onPreview &&
+    prev.onDraft === next.onDraft &&
+    prev.onCommit === next.onCommit &&
+    prev.onCancel === next.onCancel &&
+    prev.onReset === next.onReset &&
+    prev.muted === next.muted &&
+    prev.resetDisabled === next.resetDisabled
+  );
+}
+
+export const BeatVoiceCard = React.memo(function BeatVoiceCard({
   voice,
   meta,
   ordinal,
@@ -161,7 +222,7 @@ export function BeatVoiceCard({
       step={control.step}
       scale={control.scale}
       format={control.format}
-      onChange={(value) => onDraft(control.key, value)}
+      onChange={(value) => onDraft(voice, control.key, value)}
       onCommit={onCommit}
       onCancel={onCancel}
     />
@@ -192,7 +253,7 @@ export function BeatVoiceCard({
                 className={VOICE_ACTION}
                 title={muted ? `${meta.label} is muted in the mixer` : `Preview ${meta.label}`}
                 aria-label={`Preview ${meta.label}`}
-                onClick={onPreview}
+                onClick={() => onPreview(voice)}
               >
                 <Play className="w-3 h-3" />
               </button>
@@ -203,7 +264,7 @@ export function BeatVoiceCard({
                 className={VOICE_ACTION}
                 title={resetDisabled ? 'This patch has no preset to reset to' : `Reset ${meta.label}`}
                 aria-label={`Reset ${meta.label}`}
-                onClick={onReset}
+                onClick={() => onReset(voice)}
               >
                 <RotateCcw className="w-3 h-3" />
               </button>
@@ -215,4 +276,4 @@ export function BeatVoiceCard({
       </div>
     </PanelCard>
   );
-}
+}, arePropsEqual);

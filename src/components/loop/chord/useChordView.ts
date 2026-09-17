@@ -63,7 +63,6 @@ export function useChordViewState() {
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
   const spellingKey = { scaleRoot, scaleType };
-  const synthParams = useAppStore((s) => s.synthParams);
   const chordSynthParams = useAppStore((s) => s.chordSynthParams);
   const rhythmId = useAppStore((s) => s.chordRhythmId);
   const chordOctave = useAppStore((s) => s.chordOctave);
@@ -135,7 +134,7 @@ export function useChordViewState() {
 
   return {
     chords, setChords, playheadBeat, playheadChordIndex, playheadChordStartBeat, meterId,
-    scaleRoot, scaleType, spellingKey, synthParams, chordSynthParams, rhythmId, chordOctave,
+    scaleRoot, scaleType, spellingKey, chordSynthParams, rhythmId, chordOctave,
     bassPatternId, chordRhythmMode, customChordRhythm, bassPatternMode, customBassPattern, bpm,
     playback, chordIds, chordCycle, bassCycle,
   };

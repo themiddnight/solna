@@ -238,21 +238,39 @@ export const TransportBar = React.memo(function TransportBar() {
   const setMasterVolume = useAppStore((s) => s.setMasterVolume);
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
-  const songLoopIndex = useAppStore((s) => s.songLoopIndex);
-  const loops = useAppStore((s) => s.loops);
   const playbackScope = useAppStore((s) => s.playbackScope);
   const activeTab = useAppStore((s) => s.activeTab);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
+  // Narrow selectors for label derivations: instead of subscribing to the whole
+  // loops array (which changes on ANY loop field edit for ANY loop), each selector
+  // reads only what it needs and returns a derived STRING. Re-render suppression
+  // comes from that returned string's VALUE staying equal across an unrelated
+  // `set()` (zustand's default `Object.is` comparator) — not from watching a
+  // length or an index directly — so an edit to a loop's mix or mute leaves the
+  // returned string unchanged and neither selector below re-renders this
+  // component.
+  //
+  // This is a deliberate deviation from the original plan, which explicitly
+  // REJECTED a `.find()`-based selector here: a narrower selector still
+  // re-evaluates its body on every store `set()` app-wide (zustand has no
+  // per-key subscription), and at the time that reasoning was written, a knob
+  // drag's pointermove and a MIDI CC frame both wrote the store on every event
+  // — making "re-evaluates on every set()" a real, measured cost, since a drag
+  // could fire this selector dozens of times a second. Task 4 (synth/effects
+  // draft-commit) and Task 8 (MIDI CC coalescing) removed both of those
+  // high-frequency write sources, so the plan's own objection no longer applies
+  // — a `set()` now happens at user-gesture rate, not per-pointermove/per-CC —
+  // while the selector's win (skipping a full `TransportBar` subtree re-render
+  // on every unrelated loop mix/mute edit) is unchanged. That is why the
+  // narrower selector was reinstated here rather than reverted back to a
+  // whole-array read.
+  const activeLoopName = useAppStore((s) => {
+    const activeLoop = s.loops.find((loop) => loop.id === s.activeLoopId);
+    return activeLoop ? loopLabel(activeLoop) : '';
+  });
 
   const aggregate = useAppStore(aggregateAllPlayers);
   const layer = layerForTab(activeTab);
-  // Derived in the render body, not in a selector: a zustand selector runs on
-  // every store set() — including every pointermove of a knob drag, which does
-  // not re-render this bar at all — whereas `loops` and `activeLoopId` are
-  // already subscribed above, so scanning here costs one pass per render of
-  // THIS component instead.
-  const activeLoop = loops.find((loop) => loop.id === activeLoopId);
-  const activeLoopName = activeLoop ? loopLabel(activeLoop) : '';
   // On the song layer a solo-looping card leaves the master button offering
   // Play (a one-click takeover). On the loop layer the button owns the solo
   // loop of the loop being edited. Hard stop stays live off the REAL player
@@ -265,7 +283,13 @@ export const TransportBar = React.memo(function TransportBar() {
   // every player's state the same way, so a second selector re-running
   // `allPlayerStates` on every store set() would only duplicate this one.
   const hardStopDisabled = !isPlaying;
-  const songLabel = songModeLabel(songLoopIndex, loops);
+  // Same narrow-selector tradeoff as `activeLoopName` above, and calls
+  // `songModeLabel` directly rather than re-deriving its rule inline — the two
+  // had drifted into two copies of one rule, with the tested one
+  // (`TransportBar.test.tsx`) not the one that ran in production. `loops[i]` on
+  // an empty array already yields `undefined`, so `songModeLabel` needs no
+  // separate `loops.length === 0` guard for that case.
+  const songLabel = useAppStore((s) => songModeLabel(s.songLoopIndex, s.loops));
   // The layer IS the choice: playAll() on song, soloLoop(activeLoopId) on loop.
   // It went through a `masterPlayTarget(layer)` helper that returned its own
   // argument — a function, a test and an import proving a ternary copied the

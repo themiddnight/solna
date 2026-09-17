@@ -1,4 +1,4 @@
-import type { SynthChannel } from '@/utils/synthControl';
+import type { SynthChannel, SynthControlTarget } from '@/utils/synthControl';
 import { ArpeggiatorPanel } from './ArpeggiatorPanel';
 import { AmpEnvelopePanel, ModEnvelopePanel } from './EnvelopePanel';
 import { FilterPanel } from './FilterPanel';
@@ -6,7 +6,7 @@ import { LfoPanel } from './LfoPanel';
 import { OscillatorPanel } from './OscillatorPanel';
 import { UtilitySourcePanel } from './UtilitySourcePanel';
 import { VoicePanel } from './VoicePanel';
-import type { SubtractivePatch } from './proControls';
+import { useSynthPatchDraft } from './useSynthPatchDraft';
 
 /**
  * The approved Subtractive Pro surface — prototype Variant A, reconstructed
@@ -32,11 +32,20 @@ import type { SubtractivePatch } from './proControls';
  * repeat what the modules underneath it already say. A reader who needs the
  * chain named reads the module headings in order.
  */
-export function SubtractiveProPanel({ channel }: { channel: SynthChannel }) {
-  const activeSynth = channel.activeSynth;
-  const patch: SubtractivePatch = activeSynth.patch;
-  const onPatch = (next: SubtractivePatch) =>
-    channel.setActiveSynth({ ...activeSynth, patch: next });
+export function SubtractiveProPanel({
+  channel,
+  synthTarget,
+}: {
+  channel: SynthChannel;
+  /** Which of the five melodic buses `channel` belongs to — this component
+   *  is the SAME instance for Lead, Chord, Bass, Pad and FX, so the engine
+   *  preview needs to be told which bus to move. See useSynthPatchDraft.ts. */
+  synthTarget: SynthControlTarget;
+}) {
+  // Previews every module's drag straight to the engine and writes the store
+  // exactly once on release — see useSynthPatchDraft.ts for why, and why it
+  // is not simply useBeatParamDraft reused.
+  const draft = useSynthPatchDraft(channel, synthTarget);
 
   return (
     /* A flex WRAP, not a grid. It replaced two nested grids that named their
@@ -53,14 +62,16 @@ export function SubtractiveProPanel({ channel }: { channel: SynthChannel }) {
        around them inset the whole rack from the section card that holds it and
        bought nothing but a frame around a frame. */
     <div className="w-full min-w-0 flex flex-wrap gap-2">
-      <VoicePanel patch={patch} onPatch={onPatch} />
-      <OscillatorPanel patch={patch} onPatch={onPatch} />
-      <UtilitySourcePanel patch={patch} onPatch={onPatch} />
-      <FilterPanel patch={patch} onPatch={onPatch} />
-      <AmpEnvelopePanel patch={patch} onPatch={onPatch} />
-      <ModEnvelopePanel patch={patch} onPatch={onPatch} />
-      <LfoPanel patch={patch} onPatch={onPatch} />
-      {/* Arp takes the Arp object and no patch — see ArpeggiatorPanel. */}
+      <VoicePanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      <OscillatorPanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      <UtilitySourcePanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      <FilterPanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      <AmpEnvelopePanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      <ModEnvelopePanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      <LfoPanel patch={draft.patch} onPatch={draft.onPatch} onCommit={draft.onCommit} onCancel={draft.onCancel} />
+      {/* Arp takes the Arp object and no patch — see ArpeggiatorPanel. Arp
+          settings write straight to the store on every change already (no
+          engine preview to protect), so this task leaves it untouched. */}
       <ArpeggiatorPanel arp={channel.arpSettings} onArp={channel.setArpSettings} />
     </div>
   );

@@ -1,8 +1,24 @@
 import { useAppStore } from '@/store/store';
 import { leadMarkerFollowsClock } from '@/store/leadRecord';
-import { useCurrentStep } from '@/components/playbackStep';
+import { useSegmentGatedStep } from '@/components/playbackStep';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
+import type { PatternSegment } from '@/types';
 import { leadMarkerColumn } from './melodyGrid';
+
+/**
+ * Lead and FX are different Pattern segments (CLAUDE.md: "Pattern's own four
+ * segments (Lead, FX, Accompaniment, Beat)"), so the gate below needs a
+ * per-track segment, not one hardcoded literal. `MELODY_TRACKS` carries no
+ * `segment` column — its `id`s happen to spell the same two literals
+ * (`'lead'`, `'fx'`) as their segments, but that is a coincidence of two
+ * separate vocabularies (`MelodyTrackId` and `PatternSegment`), not a
+ * guarantee, so the mapping is written out rather than relied on by string
+ * identity.
+ */
+const SEGMENT_FOR_TRACK: Record<MelodyTrackId, PatternSegment> = {
+  lead: 'lead',
+  fx: 'fx',
+};
 
 /**
  * The marker's column, from whichever source is live. The two sources are
@@ -33,7 +49,7 @@ import { leadMarkerColumn } from './melodyGrid';
  */
 export function useLeadMarkerColumn(trackId: MelodyTrackId, columns: number): number {
   const track = melodyTrack(trackId);
-  const currentStep = useCurrentStep(track.stepPlayer);
+  const currentStep = useSegmentGatedStep(track.stepPlayer, SEGMENT_FOR_TRACK[trackId]);
   const cursor = useAppStore((s) => s[track.cursor]);
   const followsClock = useAppStore((s) => leadMarkerFollowsClock(s, trackId));
   return leadMarkerColumn(followsClock, currentStep, cursor, columns);

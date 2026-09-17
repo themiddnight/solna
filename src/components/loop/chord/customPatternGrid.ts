@@ -185,3 +185,24 @@ export function customPatternPositionLabel(
   const step = (column % stepsPerBar) - beatStart + 1;
   return `bar ${bar} beat ${beat} step ${step}`;
 }
+
+/**
+ * The run-absolute step the 'chords' publisher emits, folded into THIS lane's
+ * own cycle. Null in, null out: a stopped or unarmed transport has no step to
+ * fold, not a step at column 0.
+ *
+ * The chord and bass lanes have independently-sized cycles (a two-bar chord
+ * lane under a four-bar bass lane is normal), so a bar-relative step would
+ * name a column only one of them has — the producer emits one
+ * progression-relative absolute step and every reader folds it locally, by
+ * its OWN `cycleSteps`. Without the modulo a two-bar lane would have no
+ * column for step 20; with it, step 20 and step 20 + cycleSteps are the same
+ * place, which is what makes a lane shorter than the run repeat correctly.
+ */
+export function customPatternFoldedStep(
+  currentStep: number | null,
+  cycleSteps: number,
+): number | null {
+  if (currentStep === null) return null;
+  return ((currentStep % cycleSteps) + cycleSteps) % cycleSteps;
+}
