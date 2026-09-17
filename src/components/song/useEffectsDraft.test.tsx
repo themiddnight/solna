@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
+import { audioEngine } from '@/audio/engine';
 import { INITIAL_EFFECTS } from '@/store/initialState';
 import type { MasterEffects } from '@/types';
 import { createEffectsDraftMachine, useEffectsDraft } from './useEffectsDraft';
@@ -25,6 +26,54 @@ describe('createEffectsDraftMachine', () => {
 
     expect(commits.length).toBe(1);
     expect(commits[0]!.reverbWet).toBe(0.8);
+  });
+
+  /**
+   * The regression the review caught: `EffectsRackView` has no direct engine
+   * call of its own, so the pre-existing store write WAS its preview
+   * mechanism (engineSync.ts's `effects` subscription pushes every store
+   * write to `audioEngine.updateEffects`). Once `onPatch` stopped writing
+   * the store, a drag went silent until release unless `onPatch` pushes to
+   * the engine itself — which is exactly what `previewEffects` does.
+   */
+  test('onPatch previews straight to the engine without writing the store', () => {
+    const updateEffects = spyOn(audioEngine, 'updateEffects').mockClear();
+    try {
+      const committed = effectsWithReverbWet(0.2);
+      const commits: MasterEffects[] = [];
+      const machine = createEffectsDraftMachine(committed);
+
+      machine.onPatch({ reverbWet: 0.8 });
+
+      expect(updateEffects).toHaveBeenCalledTimes(1);
+      expect((updateEffects.mock.calls[0]![0] as MasterEffects).reverbWet).toBe(0.8);
+      expect(commits.length).toBe(0);
+
+      machine.commit((effects) => commits.push(effects));
+      expect(commits.length).toBe(1);
+    } finally {
+      updateEffects.mockRestore();
+    }
+  });
+
+  test('cancel restores the engine to committed and never commits', () => {
+    const updateEffects = spyOn(audioEngine, 'updateEffects').mockClear();
+    try {
+      const committed = effectsWithReverbWet(0.2);
+      let commitCount = 0;
+      const machine = createEffectsDraftMachine(committed);
+
+      machine.onPatch({ reverbWet: 0.8 });
+      machine.cancel();
+
+      expect(updateEffects).toHaveBeenCalledTimes(2);
+      expect((updateEffects.mock.calls[1]![0] as MasterEffects).reverbWet).toBe(0.2);
+
+      machine.commit(() => { commitCount += 1; });
+      expect(commitCount).toBe(1);
+    } finally {
+      updateEffects.mockRestore();
+    }
   });
 
   test('commit writes setEffects exactly once with the last drafted value', () => {
