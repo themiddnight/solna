@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { previewSynthPatch } from '@/store/synthPatchPreview';
+import { useDraftGestureForceRender } from '@/components/useDraftGestureForceRender';
 import type { SynthChannel, SynthControlTarget } from '@/utils/synthControl';
 import type { ActiveSynth } from '@/types/synth';
 import type { SubtractivePatch } from './proControls';
@@ -152,13 +153,10 @@ export function useSynthPatchDraft(channel: SynthChannel, source: SynthControlTa
   const machine = machineRef.current.machine;
   machine.sync(channel.activeSynth);
 
-  const [, forceRender] = useReducer((n: number) => n + 1, 0);
-
-  // The ONE effect here, and it is an unmount teardown only — never a render
-  // path (see useBeatParamDraft's identical note: a knob can be dragging
-  // when its own subtree goes away, e.g. a Pro/Simple depth switch, and
-  // nothing else would ever restore the engine to the committed patch).
-  useEffect(() => () => machine.cancelIfDragging(), [machine]);
+  // A knob can be dragging when its own subtree goes away (e.g. a Pro/Simple
+  // depth switch) — `useDraftGestureForceRender`'s unmount teardown is what
+  // restores the engine to the committed patch when that happens.
+  const forceRender = useDraftGestureForceRender(machine);
 
   const onPatch = useCallback(
     (next: SubtractivePatch) => {

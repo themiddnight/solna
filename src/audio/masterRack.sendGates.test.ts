@@ -65,7 +65,7 @@ describe('effect sends physically disconnect when idle', () => {
     // the waveshaper's live input while distortionGain's fade is still
     // audibly non-zero (see DISTORTION_SEND_SETTLE_MS).
     expect(gate._connectTargets).toContain(node);
-    expect((engine as any).masterRack.distortionDisconnectTimer).not.toBeNull();
+    expect((engine as any).masterRack.distortionSend.disconnectTimer).not.toBeNull();
   });
 
   test('re-enabling distortion before the settle timer fires cancels the pending disconnect', () => {
@@ -80,7 +80,7 @@ describe('effect sends physically disconnect when idle', () => {
     const gate = (engine as any).masterRack.distortionSendGate;
     const node = (engine as any).masterRack.distortionNode;
     expect(gate._connectTargets).toContain(node);
-    expect((engine as any).masterRack.distortionDisconnectTimer).toBeNull();
+    expect((engine as any).masterRack.distortionSend.disconnectTimer).toBeNull();
   });
 
   test('distortion send also schedules a disconnect at 0% wet with no explicit bypass', () => {
@@ -93,7 +93,7 @@ describe('effect sends physically disconnect when idle', () => {
     const gate = (engine as any).masterRack.distortionSendGate;
     const node = (engine as any).masterRack.distortionNode;
     expect(gate._connectTargets).toContain(node);
-    expect((engine as any).masterRack.distortionDisconnectTimer).not.toBeNull();
+    expect((engine as any).masterRack.distortionSend.disconnectTimer).not.toBeNull();
   });
 
   test('reverb send stays connected until its decay tail has finished, using fake timers', () => {
@@ -137,7 +137,7 @@ describe('effect sends physically disconnect when idle', () => {
     // Still connected immediately after bypass — the feedback tail has not
     // finished ringing out yet.
     expect(gate._connectTargets).toContain(node);
-    expect((engine as any).masterRack.delayDisconnectTimer).not.toBeNull();
+    expect((engine as any).masterRack.delaySend.disconnectTimer).not.toBeNull();
   });
 
   test('re-enabling delay before the tail timer fires cancels the pending disconnect', () => {
@@ -152,7 +152,7 @@ describe('effect sends physically disconnect when idle', () => {
     const gate = (engine as any).masterRack.delaySendGate;
     const node = (engine as any).masterRack.delayNode;
     expect(gate._connectTargets).toContain(node);
-    expect((engine as any).masterRack.delayDisconnectTimer).toBeNull();
+    expect((engine as any).masterRack.delaySend.disconnectTimer).toBeNull();
   });
 
   test('every source bus connects to the send gates, never straight to the effect nodes', () => {

@@ -72,6 +72,53 @@ export const BEAT_FILTER_XFADE_SEC = 0.008;
  */
 const DISTORTION_SEND_SETTLE_MS = 250;
 
+/**
+ * A parallel-send gate: connects its gate node to its effect node on
+ * `activate()`, and disconnects only after `releaseAfter(tailMs)`'s timer
+ * fires with no intervening `activate()` — so an in-flight tail is never cut
+ * short by the send going idle mid-ring. Shared by the delay and distortion
+ * sends, whose gating is otherwise identical bar the tail computation.
+ *
+ * The reverb send does NOT use this: it coordinates a second feed
+ * (`drumSendGate`) under one shared timer, a shape this single-feed class
+ * doesn't fit — see `updateReverbSend`, which stays bespoke.
+ */
+class DebouncedSendGate {
+  private connected = false;
+  private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private readonly gate: GainNode,
+    private readonly node: AudioNode,
+  ) {}
+
+  activate(): void {
+    if (this.disconnectTimer) {
+      clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
+    }
+    if (!this.connected) {
+      this.gate.connect(this.node);
+      this.connected = true;
+    }
+  }
+
+  releaseAfter(tailMs: number): void {
+    if (!this.connected || this.disconnectTimer) return;
+    this.disconnectTimer = setTimeout(() => {
+      this.disconnectTimer = null;
+      this.gate.disconnect(this.node);
+      this.connected = false;
+    }, tailMs);
+  }
+
+  /** Cancels a pending disconnect without running it. Used when the whole graph is rebuilt. */
+  dispose(): void {
+    if (this.disconnectTimer) clearTimeout(this.disconnectTimer);
+    this.disconnectTimer = null;
+  }
+}
+
 export class MasterRack {
   // Master bus nodes
   private masterGain: GainNode | null = null;
@@ -146,8 +193,6 @@ export class MasterRack {
   private delaySendGate: GainNode | null = null;
   private distortionSendGate: GainNode | null = null;
   private reverbSendConnected = false;
-  private delaySendConnected = false;
-  private distortionSendConnected = false;
   // Tracks drumSendGate's own connection to reverbNode — see updateReverbSend.
   private drumSendReverbConnected = false;
   // Reverb and delay carry a real internal tail (the convolver's impulse
@@ -161,8 +206,11 @@ export class MasterRack {
   // mid-ramp — an audible click whose size tracks whatever wet level was
   // playing — so the disconnect waits for the fade to settle first.
   private reverbDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private delayDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private distortionDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Delay and distortion's own connected/timer bookkeeping lives on their
+  // DebouncedSendGate instance instead (reverb keeps its own fields above,
+  // since its two-feed shared timer doesn't fit that class).
+  private delaySend: DebouncedSendGate | null = null;
+  private distortionSend: DebouncedSendGate | null = null;
   private eqLowNode: BiquadFilterNode | null = null;
   private eqMidNode: BiquadFilterNode | null = null;
   private eqHighNode: BiquadFilterNode | null = null;
@@ -320,15 +368,13 @@ export class MasterRack {
     this.delaySendGate = delaySendGate;
     this.distortionSendGate = distortionSendGate;
     this.reverbSendConnected = false;
-    this.delaySendConnected = false;
-    this.distortionSendConnected = false;
     this.drumSendReverbConnected = false;
     if (this.reverbDisconnectTimer) clearTimeout(this.reverbDisconnectTimer);
-    if (this.delayDisconnectTimer) clearTimeout(this.delayDisconnectTimer);
-    if (this.distortionDisconnectTimer) clearTimeout(this.distortionDisconnectTimer);
     this.reverbDisconnectTimer = null;
-    this.delayDisconnectTimer = null;
-    this.distortionDisconnectTimer = null;
+    this.delaySend?.dispose();
+    this.distortionSend?.dispose();
+    this.delaySend = null;
+    this.distortionSend = null;
     return { reverbSendGate, delaySendGate, distortionSendGate };
   }
 
@@ -461,8 +507,8 @@ export class MasterRack {
     this.delayNode.connect(this.delayFeedbackGain);
     this.delayFeedbackGain.connect(this.delayNode);
     this.delayNode.connect(this.delayGain);
-    delaySendGate.connect(this.delayNode);
-    this.delaySendConnected = true;
+    this.delaySend = new DebouncedSendGate(delaySendGate, this.delayNode);
+    this.delaySend.activate();
 
     // Distortion
     this.distortionNode = this.ctx.createWaveShaper();
@@ -472,8 +518,8 @@ export class MasterRack {
     this.distortionGain.gain.value = 0.0;
 
     this.distortionNode.connect(this.distortionGain);
-    distortionSendGate.connect(this.distortionNode);
-    this.distortionSendConnected = true;
+    this.distortionSend = new DebouncedSendGate(distortionSendGate, this.distortionNode);
+    this.distortionSend.activate();
 
     // Reverb (synthesized impulse response)
     this.reverbNode = this.ctx.createConvolver();
@@ -635,26 +681,12 @@ export class MasterRack {
    * their own tail. Reconnecting cancels any pending disconnect outright.
    */
   private updateDistortionSend(active: boolean): void {
-    if (!this.distortionSendGate || !this.distortionNode) return;
+    if (!this.distortionSend) return;
     if (active) {
-      if (this.distortionDisconnectTimer) {
-        clearTimeout(this.distortionDisconnectTimer);
-        this.distortionDisconnectTimer = null;
-      }
-      if (!this.distortionSendConnected) {
-        this.distortionSendGate.connect(this.distortionNode);
-        this.distortionSendConnected = true;
-      }
+      this.distortionSend.activate();
       return;
     }
-    if (!this.distortionSendConnected || this.distortionDisconnectTimer) return;
-    this.distortionDisconnectTimer = setTimeout(() => {
-      this.distortionDisconnectTimer = null;
-      if (this.distortionSendGate && this.distortionNode) {
-        this.distortionSendGate.disconnect(this.distortionNode);
-      }
-      this.distortionSendConnected = false;
-    }, DISTORTION_SEND_SETTLE_MS);
+    this.distortionSend.releaseAfter(DISTORTION_SEND_SETTLE_MS);
   }
 
   /**
@@ -715,27 +747,15 @@ export class MasterRack {
    * cannot book an absurd timer.
    */
   private updateDelaySend(active: boolean, feedback: number): void {
-    if (!this.delaySendGate || !this.delayNode) return;
+    if (!this.delaySend) return;
     if (active) {
-      if (this.delayDisconnectTimer) {
-        clearTimeout(this.delayDisconnectTimer);
-        this.delayDisconnectTimer = null;
-      }
-      if (!this.delaySendConnected) {
-        this.delaySendGate.connect(this.delayNode);
-        this.delaySendConnected = true;
-      }
+      this.delaySend.activate();
       return;
     }
-    if (!this.delaySendConnected || this.delayDisconnectTimer) return;
     const DELAY_TIME_SEC = 0.25;
     const repeats = feedback > 0.001 ? Math.log(0.001) / Math.log(feedback) : 0;
     const tailMs = Math.min(Math.max(repeats, 0) * DELAY_TIME_SEC * 1000, 30_000);
-    this.delayDisconnectTimer = setTimeout(() => {
-      this.delayDisconnectTimer = null;
-      if (this.delaySendGate && this.delayNode) this.delaySendGate.disconnect(this.delayNode);
-      this.delaySendConnected = false;
-    }, tailMs);
+    this.delaySend.releaseAfter(tailMs);
   }
 
   private makeDistortionCurve(amount = 20): Float32Array<ArrayBuffer> {

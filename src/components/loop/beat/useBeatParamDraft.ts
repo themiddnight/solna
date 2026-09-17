@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { cancelBeatPreview, previewBeatParams, restoreBeatParams } from '@/store/beatPreview';
+import { useDraftGestureForceRender } from '@/components/useDraftGestureForceRender';
 import type { BeatParams } from '@/types';
 
 export interface BeatParamDraft {
@@ -150,18 +151,12 @@ export function useBeatParamDraft(
   const machine = machineRef.current;
   machine.sync(committedParams, activeLoopId);
 
-  const [, forceRender] = useReducer((n: number) => n + 1, 0);
-
-  // The ONE effect here, and it is an unmount teardown only — never a render
-  // path. Both editor surfaces are conditionally mounted (`SoundView` drops
-  // the whole Beat section on a synth target; `BeatSoundSection` drops the
-  // voice grid below `minimal` depth), so a knob can be dragging when its own
-  // subtree goes away: the `pointerup` then fires no React handler, nothing
-  // commits and nothing cancels, and the engine is left playing an
-  // uncommitted draft with the store showing the old patch and nothing on
-  // screen to explain it. `useEffect` does not run under `renderToString`,
-  // which is exactly right — a DOM-less render has no gesture to abandon.
-  useEffect(() => () => machine.cancelIfDragging(), [machine]);
+  // Both editor surfaces are conditionally mounted (`SoundView` drops the
+  // whole Beat section on a synth target; `BeatSoundSection` drops the voice
+  // grid below `minimal` depth), so a knob can be dragging when its own
+  // subtree goes away — that is exactly the case `useDraftGestureForceRender`'s
+  // unmount teardown exists to cover.
+  const forceRender = useDraftGestureForceRender(machine);
 
   // `useCallback`, not inline closures: `machine` and `forceRender` are both
   // stable for the lifetime of this hook instance (the former lives in a

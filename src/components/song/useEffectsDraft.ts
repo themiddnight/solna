@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { previewEffects } from '@/store/effectsPreview';
+import { useDraftGestureForceRender } from '@/components/useDraftGestureForceRender';
 import type { MasterEffects } from '@/types';
 
 export interface EffectsDraft {
@@ -114,11 +115,7 @@ export function useEffectsDraft(
   const machine = machineRef.current;
   machine.sync(committedEffects);
 
-  const [, forceRender] = useReducer((n: number) => n + 1, 0);
-
-  // The ONE effect here, and it is an unmount teardown only — never a render
-  // path (see useBeatParamDraft's identical note).
-  useEffect(() => () => machine.cancelIfDragging(), [machine]);
+  const forceRender = useDraftGestureForceRender(machine);
 
   const onPatch = useCallback(
     (updates: Partial<MasterEffects>) => {
