@@ -136,7 +136,7 @@ import { stepCells } from '../sequencerGrid';
 import { getMeter } from '@/utils/meter';
 import { StepHeader } from '../ui/StepHeader';
 import { TrackRow } from './sequencer/TrackRow';
-import { useCurrentStep } from '../playbackStep';
+import { useSegmentGatedStep } from '../playbackStep';
 import React from 'react';
 
 describe('SequencerGrid', () => {
@@ -175,13 +175,25 @@ describe('SequencerGrid', () => {
   // file: `setState` cannot move it here, so a full `<SequencerGrid
   // isPlaying-through-the-store />` render can never show the highlight under
   // this harness, playing or not. What this harness CAN exercise is the
-  // exact hook call SequencerGrid makes (`useCurrentStep('sequencer')`),
-  // wired into the same leaves with `isPlaying` supplied directly — proving
-  // the publisher's value actually reaches the grid, the same way
-  // StepRow.test.tsx proves PlayingStepRow's gated ring with a literal prop.
+  // exact hook call SequencerGrid makes for its playhead
+  // (`useSegmentGatedStep('sequencer', 'beat')`), wired into the same leaves
+  // with `isPlaying` supplied directly — proving the publisher's value
+  // actually reaches the grid, the same way StepRow.test.tsx proves
+  // PlayingStepRow's gated ring with a literal prop.
+  //
+  // This still does not exercise `useSegmentGatedStep`'s FOCUS gate itself
+  // (whether `subscribe` attaches a listener at all): `renderToString` never
+  // invokes `useSyncExternalStore`'s `subscribe` argument — each call below is
+  // a fresh render, not a live-mounted tree receiving a notification — so
+  // `getSnapshot` (unconditional, reads `stepPublisher.getStep` regardless of
+  // focus) is all that is actually observed here, exactly as it was for the
+  // plain `useCurrentStep` this replaced. The gate's pure decision function,
+  // `shouldSubscribeToStep`, is unit-tested directly in
+  // `playbackStep.test.ts`, which is the only place in this no-DOM repo that
+  // CAN test it.
   test('reads the playhead from the step publisher', () => {
     function Probe() {
-      const currentStep = useCurrentStep('sequencer');
+      const currentStep = useSegmentGatedStep('sequencer', 'beat');
       return <StepHeader cells={cells} currentStep={currentStep} isPlaying />;
     }
     stepPublisher.reset('sequencer');
