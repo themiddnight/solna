@@ -41,6 +41,29 @@ function clockEngine(bpm = 120) {
 }
 
 describe('shared clock dispatch: a throwing listener', () => {
+  test('a throwing clock listener does not stop other listeners from receiving the same step', () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { engine, tick } = clockEngine();
+      const received: number[] = [];
+      const unsubBad = engine.subscribeClock(() => {
+        throw new Error('boom');
+      });
+      const unsubGood = engine.subscribeClock((step) => {
+        received.push(step);
+      });
+
+      tick();
+
+      expect(received.length).toBeGreaterThan(0);
+      expect(errors).toHaveBeenCalled();
+      unsubBad();
+      unsubGood();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   test('a listener that throws does not stall the grid', () => {
     const errors = spyOn(console, 'error').mockImplementation(() => {});
     try {

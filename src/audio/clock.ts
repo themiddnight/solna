@@ -245,13 +245,13 @@ export class Clock {
       // call order), so this ordering has no audible effect.
       this.dispatchingStep = true;
       try {
-        this.clockListeners.forEach((fn) => {
+        for (const fn of this.clockListeners) {
           try {
             fn(step, beat, time);
           } catch (err) {
             console.error('[audioEngine] clock listener threw; continuing', err);
           }
-        });
+        }
 
         if (this.metronomeEnabled && isBeatBoundary(stepInBar, this.meter.accentGroups)) {
           this.playMetronomeClick(stepInBar === 0, time);
