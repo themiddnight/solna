@@ -12,6 +12,33 @@ function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbD
 }
 
 /**
+ * Captures the single `setTimeout` call a test body triggers and lets it
+ * fire on demand, instead of waiting out the real reverb-tail delay. Only
+ * safe when exactly one timer is armed during the patched window — every
+ * test below arranges that by leaving delay/distortion active (their
+ * INITIAL_EFFECTS defaults are non-zero) and only toggling reverb.
+ */
+function withFakeTimer() {
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  let callback: (() => void) | undefined;
+  globalThis.setTimeout = ((fn: () => void) => {
+    callback = fn;
+    return 1;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {
+    callback = undefined;
+  }) as typeof clearTimeout;
+  return {
+    fire: () => callback?.(),
+    restore: () => {
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+    },
+  };
+}
+
+/**
  * Split out of masterRack.test.ts to stay under the file's own line-count
  * gate (see eslint.config.js's max-lines comment: "Split the file, never
  * raise the cap"). Covers the send gates that sit between every source bus
@@ -142,5 +169,83 @@ describe('effect sends physically disconnect when idle', () => {
     expect(bus._connectTargets).not.toContain(rack.reverbNode);
     expect(bus._connectTargets).not.toContain(rack.delayNode);
     expect(bus._connectTargets).not.toContain(rack.distortionNode);
+  });
+});
+
+/**
+ * Final-review fix (perf/audio-engine-fixes, Finding 1): Task 1's send-gate
+ * fix above only ever gated `reverbSendGate` — the per-source-bus feed. The
+ * drum bus's own authored reverb send (`drumSendGate`, wired straight to
+ * `reverbNode` in `setupMasterChain` and never touched again) stayed
+ * permanently connected regardless of `reverbWet`/`reverbBypass`, so a
+ * project with any drums (the common case) kept the convolver running
+ * full-rate FFT convolution even with reverb fully bypassed — the perf win
+ * barely materialized in practice. Split into its own `describe` (rather
+ * than folded into the block above) to stay under this file's own
+ * `max-lines-per-function` gate.
+ */
+describe('the drum reverb send shares the reverb tail gate, not a permanent connection', () => {
+  test('the drum reverb send is a second feed into the convolver, wired at setup like reverbSendGate', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    const drumGate = (engine as any).masterRack.drumSendGate;
+    const node = (engine as any).masterRack.reverbNode;
+    expect(drumGate._connectTargets).toContain(node);
+  });
+
+  test('bypassing reverb also tail-waits the drum send, sharing the reverb tail timer', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    engine.updateEffects(fxWith({ reverbBypass: true }));
+
+    const drumGate = (engine as any).masterRack.drumSendGate;
+    const node = (engine as any).masterRack.reverbNode;
+    // Still connected immediately — the tail has not decayed yet, exactly
+    // like reverbSendGate above.
+    expect(drumGate._connectTargets).toContain(node);
+    expect((engine as any).masterRack.reverbDisconnectTimer).not.toBeNull();
+  });
+
+  test('re-enabling reverb before the tail fires keeps the drum send connected too', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    engine.updateEffects(fxWith({ reverbBypass: true }));
+    engine.updateEffects(fxWith({ reverbBypass: false, reverbWet: 0.3 }));
+
+    const drumGate = (engine as any).masterRack.drumSendGate;
+    const node = (engine as any).masterRack.reverbNode;
+    expect(drumGate._connectTargets).toContain(node);
+    expect((engine as any).masterRack.reverbDisconnectTimer).toBeNull();
+  });
+
+  test('once the shared tail timer fires, BOTH the per-source and the drum send physically disconnect from the convolver', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    const timer = withFakeTimer();
+    try {
+      engine.updateEffects(fxWith({ reverbBypass: true }));
+      timer.fire();
+    } finally {
+      timer.restore();
+    }
+
+    const reverbGate = (engine as any).masterRack.reverbSendGate;
+    const drumGate = (engine as any).masterRack.drumSendGate;
+    const node = (engine as any).masterRack.reverbNode;
+    expect(reverbGate._connectTargets).not.toContain(node);
+    expect(drumGate._connectTargets).not.toContain(node);
+    expect((engine as any).masterRack.reverbDisconnectTimer).toBeNull();
   });
 });

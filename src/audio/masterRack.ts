@@ -134,16 +134,22 @@ export class MasterRack {
   // Unity gates sitting BETWEEN every source bus and the three parallel-send
   // effect nodes. A bus always connects to the gate (static); the gate's
   // connection to the effect node is what updateEffects toggles, so a
-  // bypassed/idle send stops feeding the convolver/waveshaper/delay
-  // altogether instead of merely zeroing their already-computed output —
-  // the series-stage equivalent of what rewireMasterDynamics already does
-  // for the compressor/limiter.
+  // bypassed/idle send stops feeding the waveshaper/delay altogether instead
+  // of merely zeroing their already-computed output — the series-stage
+  // equivalent of what rewireMasterDynamics already does for the
+  // compressor/limiter. The convolver has a SECOND permanent feed —
+  // `drumSendGate`, the authored per-voice drum reverb send — which
+  // `updateReverbSend` gates in lockstep with `reverbSendGate` (see that
+  // method): both feeds are driven by the same reverbWet/reverbBypass
+  // decision, so the convolver goes idle only once neither is connected.
   private reverbSendGate: GainNode | null = null;
   private delaySendGate: GainNode | null = null;
   private distortionSendGate: GainNode | null = null;
   private reverbSendConnected = false;
   private delaySendConnected = false;
   private distortionSendConnected = false;
+  // Tracks drumSendGate's own connection to reverbNode — see updateReverbSend.
+  private drumSendReverbConnected = false;
   // Reverb and delay carry a real internal tail (the convolver's impulse
   // response; the delay's own feedback loop) that must finish ringing before
   // the send is physically cut, or an in-flight tail is truncated.
@@ -316,6 +322,7 @@ export class MasterRack {
     this.reverbSendConnected = false;
     this.delaySendConnected = false;
     this.distortionSendConnected = false;
+    this.drumSendReverbConnected = false;
     if (this.reverbDisconnectTimer) clearTimeout(this.reverbDisconnectTimer);
     if (this.delayDisconnectTimer) clearTimeout(this.delayDisconnectTimer);
     if (this.distortionDisconnectTimer) clearTimeout(this.distortionDisconnectTimer);
@@ -479,7 +486,10 @@ export class MasterRack {
     this.reverbSendConnected = true;
     // Gate BEFORE the convolver: mute blocks new drum input while the reverb
     // tail already inside the shared processor keeps decaying naturally.
+    // This connection is structural seeding only — updateReverbSend owns
+    // whether it stays connected once the master reverb send goes idle.
     this.drumSendGate.connect(this.reverbNode);
+    this.drumSendReverbConnected = true;
 
     // The fixed low -> mid -> high -> masterGain tail is wired here once and
     // never rebuilt. The four mix sources' own routing into that tail (or
@@ -590,6 +600,18 @@ export class MasterRack {
    * nothing here fades a gain toward zero first the way the distortion send's
    * disconnect waits out its own downstream ramp — there is no in-flight fade
    * to protect and no ring to let finish, so the reroute happens immediately.
+   *
+   * NOTE — toggling bypass while a band is boosted or cut can click, in
+   * either direction: a lowshelf/peaking/highshelf gain away from 0 dB means
+   * the biquad's own output differs from its input, so rerouting around (or
+   * back into) it steps the sample stream discontinuously — exactly the
+   * A/B-against-flat case a user reaches for this control to hear. Accepted,
+   * not worked around, for the same reasons `rewireMasterDynamics` accepts
+   * its own click risk above: it is a discrete, infrequent user action, the
+   * step is zero whenever every band already sits at 0 dB (the common case),
+   * and a click-free version — crossfade the four sources between the two
+   * routes instead of an instant reroute — is real additional work this fix
+   * wave does not attempt.
    */
   private rewireEq(bypassed: boolean): void {
     if (
@@ -640,6 +662,18 @@ export class MasterRack {
    * fed real signal. Reconnecting cancels any pending disconnect outright;
    * disconnecting waits out the tail first so an in-flight decay is never
    * cut short by the send going idle mid-ring.
+   *
+   * TWO independent feeds reach the convolver — `reverbSendGate` (every
+   * non-drum source bus, gated on `updateEffects`'s reverbWet/reverbBypass)
+   * and `drumSendGate` (the authored per-voice drum reverb send, which has
+   * no bypass of its own). Both are driven by the SAME `active` decision —
+   * there is no separate "drum reverb send" master toggle — so this method
+   * gates both gates under the one shared tail timer rather than inventing
+   * a second one: the convolver only truly goes idle once NEITHER feed is
+   * connected, and reconnecting either feed cancels the pending disconnect
+   * for both. A per-voice send still only wires up when that voice's own
+   * `reverbSend` level is > 0 (see `wireDrumVoice` in drumSynth.ts); this
+   * gate is the structural on/off for the shared path downstream of that.
    */
   private updateReverbSend(active: boolean): void {
     if (!this.reverbSendGate || !this.reverbNode) return;
@@ -652,14 +686,22 @@ export class MasterRack {
         this.reverbSendGate.connect(this.reverbNode);
         this.reverbSendConnected = true;
       }
+      if (this.drumSendGate && !this.drumSendReverbConnected) {
+        this.drumSendGate.connect(this.reverbNode);
+        this.drumSendReverbConnected = true;
+      }
       return;
     }
-    if (!this.reverbSendConnected || this.reverbDisconnectTimer) return;
+    if ((!this.reverbSendConnected && !this.drumSendReverbConnected) || this.reverbDisconnectTimer) {
+      return;
+    }
     const tailMs = (this.reverbDecay + 0.25) * 1000;
     this.reverbDisconnectTimer = setTimeout(() => {
       this.reverbDisconnectTimer = null;
       if (this.reverbSendGate && this.reverbNode) this.reverbSendGate.disconnect(this.reverbNode);
       this.reverbSendConnected = false;
+      if (this.drumSendGate && this.reverbNode) this.drumSendGate.disconnect(this.reverbNode);
+      this.drumSendReverbConnected = false;
     }, tailMs);
   }
 
