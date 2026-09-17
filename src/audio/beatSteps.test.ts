@@ -95,10 +95,11 @@ describe('beatStepEvents', () => {
     const copyOfStep0 = [...eventsAtStep0];
     const eventsAtStep4 = beatStepEvents(pattern, mix, 4);
 
-    // The step-4 call must not have been corrupted by whatever step 0 left
-    // behind, and must not retroactively change what was already read out of
-    // step 0's copy.
-    expect(copyOfStep0.map((e) => e.voice)).toEqual(eventsAtStep0.length ? copyOfStep0.map((e) => e.voice) : []);
-    expect(eventsAtStep4.every((e) => pattern.rows[e.voice]?.[4])).toBe(true);
+    // The copy captured after step 0 must preserve only step 0's events, not
+    // have those events overwritten by the step 4 call. Both assertions use
+    // fixed values so a stale-data leak would cause a test failure, not a
+    // tautological self-comparison.
+    expect(copyOfStep0.map((e) => e.voice)).toEqual(['kick']);
+    expect(eventsAtStep4.map((e) => e.voice)).toEqual(['snare']);
   });
 });

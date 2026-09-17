@@ -21,6 +21,14 @@ export interface BeatStepEvent {
 // (~8/sec at 120bpm) for the whole play session, and every caller consumes
 // the result synchronously (see fireBeatStepEvents in
 // components/useSequencerPlayback.ts) — nothing retains it past that call.
+//
+// Safe from re-entrancy only because the live caller (useSequencerPlayback)
+// is mounted exactly once (SequencerView.tsx:200 → SequencerGrid.tsx:43) and
+// its clock callback synchronously drains events via fireBeatStepEvents before
+// returning, with no nested call back into the scheduler. The offline caller
+// (renderMixdown.ts) uses sequential calls within one loop, never nested. If
+// Beat playback ever becomes per-loop or multi-instance, this array must be
+// thread-safe or per-instance.
 const stepEventScratch: BeatStepEvent[] = [];
 
 /**
