@@ -238,21 +238,20 @@ export const TransportBar = React.memo(function TransportBar() {
   const setMasterVolume = useAppStore((s) => s.setMasterVolume);
   const metronomeActive = useAppStore((s) => s.metronomeActive);
   const toggleMetronome = useAppStore((s) => s.toggleMetronome);
-  const songLoopIndex = useAppStore((s) => s.songLoopIndex);
-  const loops = useAppStore((s) => s.loops);
   const playbackScope = useAppStore((s) => s.playbackScope);
   const activeTab = useAppStore((s) => s.activeTab);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
+  // Narrow selectors for label derivations: instead of subscriing to the whole
+  // loops array (which changes on ANY loop field edit for ANY loop), select only
+  // the active loop's name and the count. activeLoopName only updates when the
+  // active loop's name changes; songLabel count only updates when loop count changes.
+  const activeLoopName = useAppStore((s) => {
+    const activeLoop = s.loops.find((loop) => loop.id === s.activeLoopId);
+    return activeLoop ? loopLabel(activeLoop) : '';
+  });
 
   const aggregate = useAppStore(aggregateAllPlayers);
   const layer = layerForTab(activeTab);
-  // Derived in the render body, not in a selector: a zustand selector runs on
-  // every store set() — including every pointermove of a knob drag, which does
-  // not re-render this bar at all — whereas `loops` and `activeLoopId` are
-  // already subscribed above, so scanning here costs one pass per render of
-  // THIS component instead.
-  const activeLoop = loops.find((loop) => loop.id === activeLoopId);
-  const activeLoopName = activeLoop ? loopLabel(activeLoop) : '';
   // On the song layer a solo-looping card leaves the master button offering
   // Play (a one-click takeover). On the loop layer the button owns the solo
   // loop of the loop being edited. Hard stop stays live off the REAL player
@@ -265,7 +264,14 @@ export const TransportBar = React.memo(function TransportBar() {
   // every player's state the same way, so a second selector re-running
   // `allPlayerStates` on every store set() would only duplicate this one.
   const hardStopDisabled = !isPlaying;
-  const songLabel = songModeLabel(songLoopIndex, loops);
+  // Use a narrow selector for the song label: when songLoopIndex changes or
+  // loop count changes, re-evaluate. When unrelated loop fields (mix, mute) change,
+  // the derived name stays the same because we only watch the length and index.
+  const songLabel = useAppStore((s) => {
+    if (s.songLoopIndex === null || s.loops.length === 0) return null;
+    const loop = s.loops[s.songLoopIndex];
+    return loop ? `Song · ${loopLabel(loop)}` : null;
+  });
   // The layer IS the choice: playAll() on song, soloLoop(activeLoopId) on loop.
   // It went through a `masterPlayTarget(layer)` helper that returned its own
   // argument — a function, a test and an import proving a ternary copied the
