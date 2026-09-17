@@ -560,6 +560,30 @@ describe('the metronome does not run the clock', () => {
   });
 });
 
+describe('afterStepTasks drain guard', () => {
+  test('an empty after-step queue runs no tasks and does not throw', () => {
+    const { engine, tick } = clockEngine();
+    engine.subscribeClock(() => {});
+
+    // Drive one step with no queueAfterClockStep call made for it
+    expect(() => tick()).not.toThrow();
+  });
+
+  test('a queued after-step task still runs exactly once', () => {
+    const { engine, tick } = clockEngine();
+    let ran = 0;
+    engine.subscribeClock((step) => {
+      if (step === 0) {
+        engine.scheduleAfterClockStep(() => { ran += 1; });
+      }
+    });
+
+    tick();
+
+    expect(ran).toBe(1);
+  });
+});
+
 
 /**
  * Cancels every teardown timer the voice manager still has booked.

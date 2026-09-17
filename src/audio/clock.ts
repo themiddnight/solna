@@ -258,12 +258,14 @@ export class Clock {
         }
       } finally {
         this.dispatchingStep = false;
-        const tasks = this.afterStepTasks.splice(0);
-        for (const task of tasks) {
-          try {
-            task();
-          } catch (err) {
-            console.error('[audioEngine] after-step task threw; continuing', err);
+        if (this.afterStepTasks.length > 0) {
+          const tasks = this.afterStepTasks.splice(0);
+          for (const task of tasks) {
+            try {
+              task();
+            } catch (err) {
+              console.error('[audioEngine] after-step task threw; continuing', err);
+            }
           }
         }
       }
