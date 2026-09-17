@@ -42,6 +42,20 @@ export function setRandomSource(fn: (() => number) | null | undefined): void {
 }
 
 /**
+ * Reads whatever source is currently installed, without changing it. Exists
+ * so a long-running seeded caller that must yield control mid-run (an
+ * `await` that lets other macrotasks — a live `setInterval` clock tick among
+ * them — run before it resumes) can save its own generator, release the
+ * global for the duration of the yield, and reassert its own generator
+ * before drawing from it again. See `withSeededRandom`'s own restore-on-exit
+ * contract: this is the same discipline applied around an INNER pause rather
+ * than only around the whole run.
+ */
+export function getRandomSource(): () => number {
+  return randomSource;
+}
+
+/**
  * A tiny deterministic PRNG (mulberry32), ported verbatim from
  * scripts/calibration/seededRandom.ts — which now re-exports THIS one — so the
  * offline mixdown render and the calibration renders draw from one

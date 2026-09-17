@@ -61,6 +61,17 @@ const BEAT_FILTER_TYPES: readonly FilterType[] = ['lowpass', 'bandpass', 'highpa
 /** Seconds of crossfade when the Beat filter TYPE changes. */
 export const BEAT_FILTER_XFADE_SEC = 0.008;
 
+/**
+ * How long `updateDistortionSend` waits before physically disconnecting an
+ * idle distortion send. Not a tail — a WaveShaperNode has no memory — but
+ * `updateEffects` fades `distortionGain` toward 0 with a `setTargetAtTime`
+ * time constant of 0.05s, and five time constants (~250ms) is the point a
+ * `setTargetAtTime` ramp is conventionally treated as settled (<1% of the
+ * starting value); disconnecting any earlier cuts the waveshaper's live
+ * input while the downstream gain is still audibly non-zero.
+ */
+const DISTORTION_SEND_SETTLE_MS = 250;
+
 export class MasterRack {
   // Master bus nodes
   private masterGain: GainNode | null = null;
@@ -120,9 +131,46 @@ export class MasterRack {
   private delayGain: GainNode | null = null;
   private distortionNode: WaveShaperNode | null = null;
   private distortionGain: GainNode | null = null;
+  // Unity gates sitting BETWEEN every source bus and the three parallel-send
+  // effect nodes. A bus always connects to the gate (static); the gate's
+  // connection to the effect node is what updateEffects toggles, so a
+  // bypassed/idle send stops feeding the waveshaper/delay altogether instead
+  // of merely zeroing their already-computed output — the series-stage
+  // equivalent of what rewireMasterDynamics already does for the
+  // compressor/limiter. The convolver has a SECOND permanent feed —
+  // `drumSendGate`, the authored per-voice drum reverb send — which
+  // `updateReverbSend` gates in lockstep with `reverbSendGate` (see that
+  // method): both feeds are driven by the same reverbWet/reverbBypass
+  // decision, so the convolver goes idle only once neither is connected.
+  private reverbSendGate: GainNode | null = null;
+  private delaySendGate: GainNode | null = null;
+  private distortionSendGate: GainNode | null = null;
+  private reverbSendConnected = false;
+  private delaySendConnected = false;
+  private distortionSendConnected = false;
+  // Tracks drumSendGate's own connection to reverbNode — see updateReverbSend.
+  private drumSendReverbConnected = false;
+  // Reverb and delay carry a real internal tail (the convolver's impulse
+  // response; the delay's own feedback loop) that must finish ringing before
+  // the send is physically cut, or an in-flight tail is truncated.
+  // Distortion (a WaveShaperNode) has no such memory, but its physical
+  // disconnect is deferred too: updateEffects fades distortionGain toward 0
+  // over DISTORTION_SEND_SETTLE_MS via setTargetAtTime, and that fade needs
+  // live input to sound continuous. Cutting the waveshaper's input the
+  // instant the fade starts drops its raw output straight to curve(0) = 0
+  // mid-ramp — an audible click whose size tracks whatever wet level was
+  // playing — so the disconnect waits for the fade to settle first.
+  private reverbDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private delayDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private distortionDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private eqLowNode: BiquadFilterNode | null = null;
   private eqMidNode: BiquadFilterNode | null = null;
   private eqHighNode: BiquadFilterNode | null = null;
+  // Which routing rewireEq last wired: false = through the three biquads,
+  // true = the four mix sources go straight to masterGain. Seeded null so
+  // setupMasterChain's own seeding call always runs, the same sentinel
+  // `dynamicsTopology` uses for the same reason.
+  private eqBypassed: boolean | null = null;
   dryGain: GainNode | null = null;
   // Drum bus filter: all drum voices route through this single filter
   // (SequencerView "Drum Filter" card controls cutoff/resonance/type). The
@@ -241,6 +289,48 @@ export class MasterRack {
     return { input, lanes };
   }
 
+  /**
+   * Builds the three unity send gates that sit between every source bus and
+   * the reverb/delay/distortion nodes, and resets the connected-state
+   * tracking `updateReverbSend`/`updateDelaySend`/`updateDistortionSend`
+   * read. Split out of `setupMasterChain` purely to keep that method under
+   * the line-count gate — the gates themselves are still wired into their
+   * effect node inline, right next to the node's own creation, once each
+   * node exists below.
+   */
+  private createSendGates(): {
+    reverbSendGate: GainNode;
+    delaySendGate: GainNode;
+    distortionSendGate: GainNode;
+  } {
+    const ctx = this.ctx;
+    if (!ctx) throw new Error('createSendGates called before init()');
+    // Send gates: every source bus connects here (getSourceBus), never
+    // straight to the effect node. Cleared implicitly with the rest of the
+    // graph — setupMasterChain only runs once per context in production (see
+    // the comment at the top of that method) but a gate is cheap to recreate
+    // alongside everything else it is not cleared explicitly here.
+    const reverbSendGate = ctx.createGain();
+    reverbSendGate.gain.value = 1;
+    const delaySendGate = ctx.createGain();
+    delaySendGate.gain.value = 1;
+    const distortionSendGate = ctx.createGain();
+    distortionSendGate.gain.value = 1;
+    this.reverbSendGate = reverbSendGate;
+    this.delaySendGate = delaySendGate;
+    this.distortionSendGate = distortionSendGate;
+    this.reverbSendConnected = false;
+    this.delaySendConnected = false;
+    this.distortionSendConnected = false;
+    this.drumSendReverbConnected = false;
+    if (this.reverbDisconnectTimer) clearTimeout(this.reverbDisconnectTimer);
+    if (this.delayDisconnectTimer) clearTimeout(this.delayDisconnectTimer);
+    if (this.distortionDisconnectTimer) clearTimeout(this.distortionDisconnectTimer);
+    this.reverbDisconnectTimer = null;
+    this.delayDisconnectTimer = null;
+    this.distortionDisconnectTimer = null;
+    return { reverbSendGate, delaySendGate, distortionSendGate };
+  }
 
   setupMasterChain(): void {
     if (!this.ctx) return;
@@ -358,6 +448,8 @@ export class MasterRack {
     // already disagreed with initialState.ts (distortionWet 0.1 vs 0.0, eqLow
     // 2 vs 0, eqHigh 3 vs 0) and was silently overwritten anyway.
 
+    const { reverbSendGate, delaySendGate, distortionSendGate } = this.createSendGates();
+
     // Delay
     this.delayNode = this.ctx.createDelay(2.0);
     this.delayNode.delayTime.value = 0.25;
@@ -369,6 +461,8 @@ export class MasterRack {
     this.delayNode.connect(this.delayFeedbackGain);
     this.delayFeedbackGain.connect(this.delayNode);
     this.delayNode.connect(this.delayGain);
+    delaySendGate.connect(this.delayNode);
+    this.delaySendConnected = true;
 
     // Distortion
     this.distortionNode = this.ctx.createWaveShaper();
@@ -378,6 +472,8 @@ export class MasterRack {
     this.distortionGain.gain.value = 0.0;
 
     this.distortionNode.connect(this.distortionGain);
+    distortionSendGate.connect(this.distortionNode);
+    this.distortionSendConnected = true;
 
     // Reverb (synthesized impulse response)
     this.reverbNode = this.ctx.createConvolver();
@@ -386,19 +482,25 @@ export class MasterRack {
     this.reverbGain.gain.value = 0;
 
     this.reverbNode.connect(this.reverbGain);
+    reverbSendGate.connect(this.reverbNode);
+    this.reverbSendConnected = true;
     // Gate BEFORE the convolver: mute blocks new drum input while the reverb
     // tail already inside the shared processor keeps decaying naturally.
+    // This connection is structural seeding only — updateReverbSend owns
+    // whether it stays connected once the master reverb send goes idle.
     this.drumSendGate.connect(this.reverbNode);
+    this.drumSendReverbConnected = true;
 
-    // Connect effects back to EQ chain
-    this.dryGain.connect(this.eqLowNode);
-    this.delayGain.connect(this.eqLowNode);
-    this.reverbGain.connect(this.eqLowNode);
-    this.distortionGain.connect(this.eqLowNode);
-
+    // The fixed low -> mid -> high -> masterGain tail is wired here once and
+    // never rebuilt. The four mix sources' own routing into that tail (or
+    // around it, when EQ is bypassed) is owned by rewireEq, seeded below —
+    // the same split setupMasterChain already uses for the dynamics tail.
     this.eqLowNode.connect(this.eqMidNode);
     this.eqMidNode.connect(this.eqHighNode);
     this.eqHighNode.connect(this.masterGain);
+
+    this.eqBypassed = null;
+    this.rewireEq(false);
 
     // Everything below masterGain is owned by rewireMasterDynamics — including
     // BOTH analyser taps, which it re-makes on every pass. Seeding through it
@@ -482,6 +584,158 @@ export class MasterRack {
     node.connect(this.ctx.destination);
 
     this.dynamicsTopology = topology;
+  }
+
+  /**
+   * EQ sits IN SERIES between the four mix sources (dry/delay/reverb/
+   * distortion) and masterGain — unlike the parallel sends above, there is
+   * no dry path around it, so "bypass" here means physically rerouting those
+   * four sources to masterGain directly rather than zeroing a send gain: the
+   * same real-reconnect shape `rewireMasterDynamics` already uses for the
+   * compressor/limiter, applied to the three biquads instead of a source's
+   * own wet gain.
+   *
+   * No settle wait, unlike the reverb/delay/distortion sends above: a biquad
+   * carries no meaningful tail (no convolution buffer, no feedback loop), and
+   * nothing here fades a gain toward zero first the way the distortion send's
+   * disconnect waits out its own downstream ramp — there is no in-flight fade
+   * to protect and no ring to let finish, so the reroute happens immediately.
+   *
+   * NOTE — toggling bypass while a band is boosted or cut can click, in
+   * either direction: a lowshelf/peaking/highshelf gain away from 0 dB means
+   * the biquad's own output differs from its input, so rerouting around (or
+   * back into) it steps the sample stream discontinuously — exactly the
+   * A/B-against-flat case a user reaches for this control to hear. Accepted,
+   * not worked around, for the same reasons `rewireMasterDynamics` accepts
+   * its own click risk above: it is a discrete, infrequent user action, the
+   * step is zero whenever every band already sits at 0 dB (the common case),
+   * and a click-free version — crossfade the four sources between the two
+   * routes instead of an instant reroute — is real additional work this fix
+   * wave does not attempt.
+   */
+  private rewireEq(bypassed: boolean): void {
+    if (
+      !this.dryGain || !this.delayGain || !this.reverbGain ||
+      !this.distortionGain || !this.eqLowNode || !this.masterGain
+    ) return;
+    if (bypassed === this.eqBypassed) return;
+
+    const sources = [this.dryGain, this.delayGain, this.reverbGain, this.distortionGain];
+    for (const source of sources) {
+      source.disconnect();
+      source.connect(bypassed ? this.masterGain : this.eqLowNode);
+    }
+    this.eqBypassed = bypassed;
+  }
+
+  /**
+   * Distortion has no tail of its own, but the downstream `distortionGain`
+   * fade needs live input to sound continuous (see `DISTORTION_SEND_SETTLE_MS`),
+   * so disconnecting waits out that fade the same way reverb/delay wait out
+   * their own tail. Reconnecting cancels any pending disconnect outright.
+   */
+  private updateDistortionSend(active: boolean): void {
+    if (!this.distortionSendGate || !this.distortionNode) return;
+    if (active) {
+      if (this.distortionDisconnectTimer) {
+        clearTimeout(this.distortionDisconnectTimer);
+        this.distortionDisconnectTimer = null;
+      }
+      if (!this.distortionSendConnected) {
+        this.distortionSendGate.connect(this.distortionNode);
+        this.distortionSendConnected = true;
+      }
+      return;
+    }
+    if (!this.distortionSendConnected || this.distortionDisconnectTimer) return;
+    this.distortionDisconnectTimer = setTimeout(() => {
+      this.distortionDisconnectTimer = null;
+      if (this.distortionSendGate && this.distortionNode) {
+        this.distortionSendGate.disconnect(this.distortionNode);
+      }
+      this.distortionSendConnected = false;
+    }, DISTORTION_SEND_SETTLE_MS);
+  }
+
+  /**
+   * Reverb's convolver keeps a real tail (up to `reverbDecay` seconds) once
+   * fed real signal. Reconnecting cancels any pending disconnect outright;
+   * disconnecting waits out the tail first so an in-flight decay is never
+   * cut short by the send going idle mid-ring.
+   *
+   * TWO independent feeds reach the convolver — `reverbSendGate` (every
+   * non-drum source bus, gated on `updateEffects`'s reverbWet/reverbBypass)
+   * and `drumSendGate` (the authored per-voice drum reverb send, which has
+   * no bypass of its own). Both are driven by the SAME `active` decision —
+   * there is no separate "drum reverb send" master toggle — so this method
+   * gates both gates under the one shared tail timer rather than inventing
+   * a second one: the convolver only truly goes idle once NEITHER feed is
+   * connected, and reconnecting either feed cancels the pending disconnect
+   * for both. A per-voice send still only wires up when that voice's own
+   * `reverbSend` level is > 0 (see `wireDrumVoice` in drumSynth.ts); this
+   * gate is the structural on/off for the shared path downstream of that.
+   */
+  private updateReverbSend(active: boolean): void {
+    if (!this.reverbSendGate || !this.reverbNode) return;
+    if (active) {
+      if (this.reverbDisconnectTimer) {
+        clearTimeout(this.reverbDisconnectTimer);
+        this.reverbDisconnectTimer = null;
+      }
+      if (!this.reverbSendConnected) {
+        this.reverbSendGate.connect(this.reverbNode);
+        this.reverbSendConnected = true;
+      }
+      if (this.drumSendGate && !this.drumSendReverbConnected) {
+        this.drumSendGate.connect(this.reverbNode);
+        this.drumSendReverbConnected = true;
+      }
+      return;
+    }
+    if ((!this.reverbSendConnected && !this.drumSendReverbConnected) || this.reverbDisconnectTimer) {
+      return;
+    }
+    const tailMs = (this.reverbDecay + 0.25) * 1000;
+    this.reverbDisconnectTimer = setTimeout(() => {
+      this.reverbDisconnectTimer = null;
+      if (this.reverbSendGate && this.reverbNode) this.reverbSendGate.disconnect(this.reverbNode);
+      this.reverbSendConnected = false;
+      if (this.drumSendGate && this.reverbNode) this.drumSendGate.disconnect(this.reverbNode);
+      this.drumSendReverbConnected = false;
+    }, tailMs);
+  }
+
+  /**
+   * The delay's feedback loop keeps ringing after its send goes idle.
+   * `delayTime` is the fixed 0.25s seeded in setupMasterChain (there is no
+   * user-facing delay-time control — see CLAUDE.md's "delayTime is GONE from
+   * MasterEffects" legacy-trap note), so the tail length is a function of
+   * feedback alone: n repeats to decay to -60dB is
+   * log(0.001) / log(feedback), clamped so a pathological feedback near 1
+   * cannot book an absurd timer.
+   */
+  private updateDelaySend(active: boolean, feedback: number): void {
+    if (!this.delaySendGate || !this.delayNode) return;
+    if (active) {
+      if (this.delayDisconnectTimer) {
+        clearTimeout(this.delayDisconnectTimer);
+        this.delayDisconnectTimer = null;
+      }
+      if (!this.delaySendConnected) {
+        this.delaySendGate.connect(this.delayNode);
+        this.delaySendConnected = true;
+      }
+      return;
+    }
+    if (!this.delaySendConnected || this.delayDisconnectTimer) return;
+    const DELAY_TIME_SEC = 0.25;
+    const repeats = feedback > 0.001 ? Math.log(0.001) / Math.log(feedback) : 0;
+    const tailMs = Math.min(Math.max(repeats, 0) * DELAY_TIME_SEC * 1000, 30_000);
+    this.delayDisconnectTimer = setTimeout(() => {
+      this.delayDisconnectTimer = null;
+      if (this.delaySendGate && this.delayNode) this.delaySendGate.disconnect(this.delayNode);
+      this.delaySendConnected = false;
+    }, tailMs);
   }
 
   private makeDistortionCurve(amount = 20): Float32Array<ArrayBuffer> {
@@ -571,9 +825,9 @@ export class MasterRack {
       const baseGain = this.sourceGains.get(source) ?? 1;
       bus.gain.value = this.sourceMuted.get(source) ? 0 : baseGain;
       bus.connect(this.dryGain);
-      if (this.delayNode) bus.connect(this.delayNode);
-      if (this.reverbNode) bus.connect(this.reverbNode);
-      if (this.distortionNode) bus.connect(this.distortionNode);
+      if (this.delaySendGate) bus.connect(this.delaySendGate);
+      if (this.reverbSendGate) bus.connect(this.reverbSendGate);
+      if (this.distortionSendGate) bus.connect(this.distortionSendGate);
       this.sourceBuses.set(source, bus);
     }
     return bus;
@@ -736,9 +990,17 @@ export class MasterRack {
     const delayWet = fx.delayBypass ? 0 : fx.delayWet;
     const delayFeedback = fx.delayBypass ? 0 : fx.delayFeedback;
     const distortionWet = fx.distortionBypass ? 0 : fx.distortionWet;
-    const eqLow = fx.eqBypass ? 0 : fx.eqLow;
-    const eqMid = fx.eqBypass ? 0 : fx.eqMid;
-    const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
+    // EQ bypass is a real reroute (rewireEq), not a gain-to-zero — see its
+    // docblock — so the band gains below always carry the user's real
+    // setting and a bypass-then-re-enable restores it rather than a stale 0.
+    this.rewireEq(!!fx.eqBypass);
+    const eqLow = fx.eqLow;
+    const eqMid = fx.eqMid;
+    const eqHigh = fx.eqHigh;
+
+    this.updateReverbSend(reverbWet > 0);
+    this.updateDelaySend(delayWet > 0, fx.delayFeedback);
+    this.updateDistortionSend(distortionWet > 0);
 
     // Both dynamics stages are max-ratio-or-not DynamicsCompressorNodes; the
     // "limiter" is a max-ratio compressor with a HARD KNEE, which is the

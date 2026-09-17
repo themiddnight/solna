@@ -19,6 +19,7 @@ declare module 'bun:test' {
   }
   export const test: TestFn;
   export function beforeAll(fn: () => void | Promise<void>): void;
+  export function afterAll(fn: () => void | Promise<void>): void;
   export function beforeEach(fn: () => void | Promise<void>): void;
   export function afterEach(fn: () => void | Promise<void>): void;
 

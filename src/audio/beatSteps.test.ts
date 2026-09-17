@@ -86,4 +86,20 @@ describe('beatStepEvents', () => {
     const mix = { ...mixOf(), muted: true };
     expect(beatStepEvents(patternOf({ kick: [0] }), mix, 0)).toEqual([{ voice: 'kick' }]);
   });
+
+  test('beatStepEvents reuses its scratch array but each call reflects only that call\'s step', () => {
+    const pattern = patternOf({ kick: [0], snare: [4] });
+    const mix = mixOf();
+
+    const eventsAtStep0 = beatStepEvents(pattern, mix, 0);
+    const copyOfStep0 = [...eventsAtStep0];
+    const eventsAtStep4 = beatStepEvents(pattern, mix, 4);
+
+    // The copy captured after step 0 must preserve only step 0's events, not
+    // have those events overwritten by the step 4 call. Both assertions use
+    // fixed values so a stale-data leak would cause a test failure, not a
+    // tautological self-comparison.
+    expect(copyOfStep0.map((e) => e.voice)).toEqual(['kick']);
+    expect(eventsAtStep4.map((e) => e.voice)).toEqual(['snare']);
+  });
 });

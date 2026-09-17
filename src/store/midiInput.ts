@@ -15,6 +15,12 @@ import { sliderPosTodB } from '../utils/gainUnits';
 
 let started = false;
 
+// Shared by both places a MIDI-held note is released without a real note-off
+// message: a device disconnect (flushInputNotes) and the tab-blur/
+// visibilitychange backstop below. One constant keeps a stranded voice's
+// fade identical whichever path caught it.
+const MIDI_RELEASE_SEC = 0.05;
+
 // Diffs two id lists and returns the ones that dropped out. Pure so the
 // device-disconnect trigger below is unit-testable without a real
 // MIDIAccess object.
@@ -63,6 +69,17 @@ export function createHeldNoteTracker() {
       if (!notes) return [];
       const held = Array.from(notes, ([note, voiceId]) => ({ note, voiceId }));
       notesByInput.delete(inputId);
+      return held;
+    },
+    /** Every held note across every tracked input, forgetting all of them. Used
+     * by the window-blur/visibilitychange backstop, which has no single
+     * input id to target. */
+    releaseAll(): HeldMidiNote[] {
+      const held: HeldMidiNote[] = [];
+      for (const notes of notesByInput.values()) {
+        for (const [note, voiceId] of notes) held.push({ note, voiceId });
+      }
+      notesByInput.clear();
       return held;
     },
   };
@@ -228,7 +245,7 @@ export function startMidiInputBridge(): void {
 
       const flushInputNotes = (inputId: string): void => {
         heldNotes.release(inputId).forEach(({ note, voiceId }) => {
-          synthPlaybackNoteOff(voiceId, note, 0.05);
+          synthPlaybackNoteOff(voiceId, note, MIDI_RELEASE_SEC);
         });
       };
 
@@ -253,6 +270,28 @@ export function startMidiInputBridge(): void {
       };
 
       setupInputs(access);
+
+      // A held physical MIDI key is released only by a real 0x80 message or
+      // the disconnect flush above — neither fires on a tab freeze, aggressive
+      // background-tab throttling, or OS sleep, so a note can drone until the
+      // same note or a project reload clears it. useInputDeck's
+      // useHeldNoteRelease backstops the computer-keyboard/on-screen-keyboard
+      // input the same way for the same reason; this mirrors it for the
+      // separate `heldNotes` tracker MIDI uses. `window`/`document` are
+      // guarded because this module runs under Bun's test runtime, which has
+      // neither.
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        const releaseAllHeldMidiNotes = () => {
+          heldNotes.releaseAll().forEach(({ note, voiceId }) => {
+            synthPlaybackNoteOff(voiceId, note, MIDI_RELEASE_SEC);
+          });
+        };
+        window.addEventListener('blur', releaseAllHeldMidiNotes);
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) releaseAllHeldMidiNotes();
+        });
+      }
+
       access.onstatechange = (event) => {
         // A reused port id must keep resolving to the same MIDIPort across
         // connect/disconnect (WebAudio/web-midi-api#79), so Chromium never

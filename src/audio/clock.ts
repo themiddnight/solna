@@ -245,25 +245,27 @@ export class Clock {
       // call order), so this ordering has no audible effect.
       this.dispatchingStep = true;
       try {
-        this.clockListeners.forEach((fn) => {
+        for (const fn of this.clockListeners) {
           try {
             fn(step, beat, time);
           } catch (err) {
             console.error('[audioEngine] clock listener threw; continuing', err);
           }
-        });
+        }
 
         if (this.metronomeEnabled && isBeatBoundary(stepInBar, this.meter.accentGroups)) {
           this.playMetronomeClick(stepInBar === 0, time);
         }
       } finally {
         this.dispatchingStep = false;
-        const tasks = this.afterStepTasks.splice(0);
-        for (const task of tasks) {
-          try {
-            task();
-          } catch (err) {
-            console.error('[audioEngine] after-step task threw; continuing', err);
+        if (this.afterStepTasks.length > 0) {
+          const tasks = this.afterStepTasks.splice(0);
+          for (const task of tasks) {
+            try {
+              task();
+            } catch (err) {
+              console.error('[audioEngine] after-step task threw; continuing', err);
+            }
           }
         }
       }

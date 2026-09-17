@@ -37,7 +37,7 @@ import {
   type ChordPlanSnapshot,
 } from '../playback/plan/chordPlan';
 import { planMelodyStep, type MelodyPlanSnapshot } from '../playback/plan/melodyPlan';
-import { MIXDOWN_SEED, withSeededRandom } from '../rng';
+import { MIXDOWN_SEED, getRandomSource, setRandomSource, withSeededRandom } from '../rng';
 import { DEFAULT_VELOCITY } from '../constants';
 import { loopDwellSteps, loopEffectiveLengthSteps } from '@/utils/songStructure';
 import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
@@ -65,6 +65,58 @@ export const MIXDOWN_SAMPLE_RATE = 44100;
 const MIXDOWN_CHANNELS = 2;
 /** The floor on the tail: release + reverb. Never shorter than this. */
 const MIXDOWN_TAIL_SEC = 2;
+
+/** How many total dwell-steps to schedule between yields. Chosen so a yield
+ * lands roughly every few hundred AudioNode constructions on a dense
+ * arrangement — frequent enough that Cancel feels responsive, rare enough
+ * that the yield overhead (a macrotask hop) stays negligible next to the
+ * scheduling work itself. */
+const SCHEDULE_YIELD_INTERVAL_STEPS = 200;
+
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Yields exactly like `yieldToMainThread`, but additionally protects the
+ * seeded RNG stream `withSeededRandom` installed for this render from being
+ * corrupted by a concurrent caller.
+ *
+ * `rng.ts`'s `randomSource` is a module GLOBAL, and this render's own draws
+ * (a drum voice's noise start offset, a reverb impulse sample, an LFO's
+ * random waveform sample) all go through the shared `random()` seam with no
+ * argument identifying who is asking. Between two of THIS walk's own
+ * synchronous bursts nothing else can run — JS has one thread — so the only
+ * window where a foreign draw can land on our stream is the macrotask gap
+ * `setTimeout(resolve, 0)` opens. If the user is ALSO playing the project
+ * live while exporting (nothing pauses live playback for an export — see
+ * `store/mixdownSlice.ts`), the live 16th-clock's `setInterval` tick is a
+ * macrotask too, and a live note triggered in that gap would otherwise steal
+ * a draw from this render's mulberry32 generator, silently shifting every
+ * value the render reads after it resumes.
+ *
+ * The fix is to hand the generator itself, not just the intent to use it,
+ * out of scope for the gap: capture whatever `withSeededRandom` installed,
+ * swap the global to the ambient default so a foreign draw lands on
+ * `Math.random` instead (harmless — live playback has no determinism
+ * contract), then reassert this render's own generator before drawing from
+ * it again. The generator's internal counter is therefore only ever
+ * advanced by calls this render itself makes.
+ *
+ * Exported for `renderMixdownRngIsolation.test.ts` — proving this needs no
+ * `OfflineAudioContext`, only a seeded generator and a foreign `random()`
+ * call landing mid-yield, so the test drives this function directly rather
+ * than a whole render.
+ */
+export async function yieldPreservingRandomStream(): Promise<void> {
+  const ownRandomSource = getRandomSource();
+  setRandomSource(null);
+  try {
+    await yieldToMainThread();
+  } finally {
+    setRandomSource(ownRandomSource);
+  }
+}
 
 /** One source bus, its gain already converted from the store's dB to linear. */
 interface MixdownBusState {
@@ -485,15 +537,17 @@ function scheduleMelodyStep(
   }
 }
 
-function scheduleArrangement(
+async function scheduleArrangement(
   engine: AudioEngine,
   snapshot: MixdownSnapshot,
   plan: ArrangementPlan,
-): void {
+  signal?: AbortSignal,
+): Promise<{ cancelled: boolean }> {
   const stepDur = stepDurationSec(snapshot.bpm);
   const tickDur = stepDur / TICKS_PER_SIXTEENTH;
   const { stepsPerBar, meterId } = snapshot;
   const loopAutomation = planLoopAudioAutomation(snapshot, plan);
+  let stepsSinceYield = 0;
 
   for (let passIndex = 0; passIndex < plan.passes.length; passIndex += 1) {
     const pass = plan.passes[passIndex];
@@ -601,8 +655,16 @@ function scheduleArrangement(
       // leadActivePosAt/leadSoundingNotes.
       scheduleMelodyStep(engine, leadTrack, stepInPass, stepsPerBar, tickDur, time);
       scheduleMelodyStep(engine, fxTrack, stepInPass, stepsPerBar, tickDur, time);
+
+      stepsSinceYield += 1;
+      if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {
+        stepsSinceYield = 0;
+        await yieldPreservingRandomStream();
+        if (signal?.aborted) return { cancelled: true };
+      }
     }
   }
+  return { cancelled: false };
 }
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
@@ -719,11 +781,14 @@ export async function renderMixdown(
     // default — so seeding only applyMasterState + scheduleArrangement would
     // leave an unseeded impulse in the graph for the store's default project,
     // and two renders of it would differ.
-    await withSeededRandom(MIXDOWN_SEED, () => {
+    const scheduleResult = await withSeededRandom(MIXDOWN_SEED, async () => {
       const engine = createRenderEngine(ctx);
       applyMasterState(engine, snapshot);
-      scheduleArrangement(engine, snapshot, plan);
+      return scheduleArrangement(engine, snapshot, plan, signal);
     });
+    if (scheduleResult.cancelled) {
+      return { ok: false, reason: { kind: 'cancelled' } };
+    }
 
     report({ phase: 'rendering', percent: 1 });
     scheduleProgressCheckpoints(ctx, report);
