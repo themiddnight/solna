@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Music, Play, Sparkles, Trash2, Upload } from 'lucide-react';
 import type { ChordItem, CustomChordProgressionItem } from '@/types';
-import type { ActiveSynth } from '@/types/synth';
 import { useAppStore } from '@/store/store';
 import { sanitizeCustomChordProgressions } from '@/store/sanitize';
 import { CHORD_PROGRESSIONS, type ChordProgression } from '@/data/chordProgressions';
@@ -56,7 +55,6 @@ interface ChordPresetLibraryProps {
   scaleRoot: string;
   scaleType: string;
   autoReharmonize: boolean;
-  synthParams: ActiveSynth;
   onApplyChords: (chords: ChordItem[]) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -218,7 +216,6 @@ function useChordLibraryCommands({
   scaleRoot,
   scaleType,
   autoReharmonize,
-  synthParams,
   onApplyChords,
   onClose,
   showToast,
@@ -227,7 +224,6 @@ function useChordLibraryCommands({
   scaleRoot: string;
   scaleType: string;
   autoReharmonize: boolean;
-  synthParams: ActiveSynth;
   onApplyChords: (chords: ChordItem[]) => void;
   onClose: () => void;
   showToast: (msg: string, tone?: 'success' | 'error') => void;
@@ -243,7 +239,7 @@ function useChordLibraryCommands({
   // presetPreview.ts; the auditioning-name pulse state stays here.
   const audition = (chordsToPlay: ChordItem[], progName: string) => {
     previewRef.current?.();
-    previewRef.current = previewChordProgression(chordsToPlay, synthParams);
+    previewRef.current = previewChordProgression(chordsToPlay, useAppStore.getState().synthParams);
     setAuditioningName(progName);
     window.setTimeout(() => {
       setAuditioningName(null);
@@ -652,7 +648,6 @@ export function ChordPresetLibrary({
   scaleRoot,
   scaleType,
   autoReharmonize,
-  synthParams,
   onApplyChords,
   isOpen,
   onClose,
@@ -670,7 +665,6 @@ export function ChordPresetLibrary({
     scaleRoot,
     scaleType,
     autoReharmonize,
-    synthParams,
     onApplyChords,
     onClose,
     showToast,
