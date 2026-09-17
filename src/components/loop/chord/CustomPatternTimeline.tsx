@@ -5,6 +5,7 @@ import { cx } from '@/components/ui/cx';
 import { beatIndexAt } from '@/utils/meter';
 import {
   customPatternCells,
+  customPatternFoldedStep,
   customPatternKeyOutcome,
   customPatternPositionLabel,
   resizedPatternLength,
@@ -34,10 +35,18 @@ import {
  *  - The pointer plumbing. The resize gesture is `useSpanResize`; this file
  *    must not add a window listener of its own.
  *
- * It is presentational apart from one subscription: the public
- * `CustomPatternTimeline` reads the shared `'chords'` step. `View` is exported
- * separately and takes `currentStep` as a prop, because this repo has no DOM
- * and a subscriber cannot be handed a step in a server-render test.
+ * It is presentational apart from one subscription, and that subscription is
+ * isolated to its own leaf: `CustomPatternTimeline` (the memoized cell grid,
+ * exported below) never reads the shared `'chords'` step, so a step tick
+ * cannot force it to rebuild its up-to-~128 cells or its per-cell context.
+ * `CustomPatternPlayhead` is the ONLY thing in this file that calls
+ * `useCurrentStep` — mirroring the Lead grid's `LeadMarker`/`LeadMarkerView`
+ * split — and `CustomPatternTimeline` renders it inline, as a grid item
+ * inside the SAME `display:grid` container the cells live in (unlike
+ * `LeadMarker`, which is a plain sibling positioned by pixel `translateX`:
+ * this lane's columns are `1fr` tracks, so only a fellow grid item lines up
+ * with them). A step change therefore re-renders `CustomPatternPlayhead`
+ * alone; the grid is untouched.
  */
 
 /** Fallback step width while dragging, when the grid cannot be measured (server render). */
@@ -269,7 +278,7 @@ function patternPlayheadNode(foldedStep: number, positionLabel: string): React.R
   );
 }
 
-export interface CustomPatternTimelineViewProps<TValue> {
+export interface CustomPatternTimelineProps<TValue> {
   /** Bar-major fixed-width storage, `loopLength * MAX_STEPS_PER_BAR` entries. */
   values: readonly TValue[];
   /** Hold length in 16th steps per stored slot; see `customPatternCells`. */
@@ -292,8 +301,6 @@ export interface CustomPatternTimelineViewProps<TValue> {
   valueLabel?: (value: TValue) => string;
   /** Whether the transport runs; a stopped lane draws no playhead. */
   isPlaying: boolean;
-  /** The run-absolute step, or null. Folded by this lane's cycle before drawing. */
-  currentStep: number | null;
   /** A click or Enter/Space on a column: set the event there. */
   onActivate: (column: number) => void;
   /** Delete/Backspace: clear the event at that column. */
@@ -304,11 +311,167 @@ export interface CustomPatternTimelineViewProps<TValue> {
   className?: string;
 }
 
+interface CustomPatternPlayheadProps {
+  /** The lane's cycle length in bars: a divisor of the progression's bars. */
+  loopLength: number;
+  /** Bar length of the ACTIVE meter, in 16th steps. */
+  stepsPerBar: number;
+  /** The active meter's accent groups, summing to `stepsPerBar`. */
+  accentGroups: readonly number[];
+  /** Whether the transport runs; a stopped lane draws no playhead. */
+  isPlaying: boolean;
+}
+
 /**
- * The timeline as markup, with the transport position handed in. Exported
- * because a subscriber cannot be given a step under `renderToString`.
+ * The playhead alone, subscribed. The ONLY thing in this file that calls
+ * `useCurrentStep` — mirroring `LeadMarker` — so a published step (8-16/sec
+ * while this lane's transport runs) re-renders one grid item instead of the
+ * whole lane. Rendered as a CHILD of `CustomPatternTimeline`'s own grid
+ * container, not as a component-tree sibling the way `LeadMarker` is: this
+ * lane's columns are `1fr` tracks sized by the browser, not a fixed pixel
+ * width, so `gridColumn` placement only lines up with the cells when the
+ * playhead is a fellow item of that same `display:grid` container.
  */
-export function CustomPatternTimelineView<TValue>({
+function CustomPatternPlayhead({
+  loopLength,
+  stepsPerBar,
+  accentGroups,
+  isPlaying,
+}: CustomPatternPlayheadProps): React.ReactNode {
+  const currentStep = useCurrentStep('chords');
+  const cycleSteps = loopLength * stepsPerBar;
+  const foldedStep = customPatternFoldedStep(currentStep, cycleSteps);
+  if (!isPlaying || foldedStep === null) return null;
+  return patternPlayheadNode(
+    foldedStep,
+    customPatternPositionLabel(foldedStep, stepsPerBar, accentGroups),
+  );
+}
+
+/** Everything `usePatternCellContext` needs, one object so its own signature
+ * stays a single parameter — see the planner convention this mirrors. */
+interface PatternCellContextInput<TValue> {
+  label: string;
+  color: string;
+  valueLabel?: (value: TValue) => string;
+  stepsPerBar: number;
+  accentGroups: readonly number[];
+  cycleSteps: number;
+  gridRef: React.RefObject<HTMLDivElement | null>;
+  onActivate: (column: number) => void;
+  onErase: (column: number) => void;
+  onResize: (column: number, length: number) => void;
+}
+
+/**
+ * The per-cell context object, split out of `CustomPatternTimeline` so the
+ * component's own body stays short enough to read: everything here is
+ * `useCallback`/`useMemo`'d on the actual data dependencies, so a step tick —
+ * which never reaches this hook at all — cannot be what rebuilds it.
+ */
+function usePatternCellContext<TValue>({
+  label,
+  color,
+  valueLabel,
+  stepsPerBar,
+  accentGroups,
+  cycleSteps,
+  gridRef,
+  onActivate,
+  onErase,
+  onResize,
+}: PatternCellContextInput<TValue>): PatternCellContext<TValue> {
+  const identities = React.useRef(new Map<number, PatternSpanIdentity>());
+  const { previewFor, startResize } = useSpanResize<PatternSpanIdentity>();
+
+  // `previewFor` compares identity BY REFERENCE, so a span must keep the ONE
+  // object it began its gesture with. One object per column, minted lazily and
+  // reused for as long as the lane is mounted — a fresh literal per render
+  // would silently stop the preview from ever matching.
+  const identityFor = React.useCallback((column: number): PatternSpanIdentity => {
+    let identity = identities.current.get(column);
+    if (!identity) {
+      identity = { column };
+      identities.current.set(column, identity);
+    }
+    return identity;
+  }, []);
+
+  // Empty columns shade by beat, matching the drum grid's zebra.
+  const isAltBeat = React.useCallback(
+    (column: number): boolean => beatIndexAt(column % stepsPerBar, accentGroups) % 2 === 0,
+    [stepsPerBar, accentGroups],
+  );
+  const columnWidthPx = React.useCallback(
+    (): number => patternColumnWidthPx(gridRef.current, cycleSteps),
+    [gridRef, cycleSteps],
+  );
+
+  const nameOf = React.useCallback(
+    (column: number, spanName: string): string =>
+      `${label} ${spanName} at ${customPatternPositionLabel(column, stepsPerBar, accentGroups)}`,
+    [label, stepsPerBar, accentGroups],
+  );
+
+  const onKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLElement>, cell: CustomPatternCell<TValue>): void => {
+      const outcome = customPatternKeyOutcome(event.key, event.shiftKey, cell);
+      if (outcome === 'none') return;
+      // Enter and Space would otherwise also fire the button's click, writing
+      // the activation twice.
+      event.preventDefault();
+      if (outcome === 'erase') {
+        onErase(cell.column);
+      } else if (outcome === 'resize' && cell.kind === 'head') {
+        onResize(cell.column, resizedPatternLength(cell, event.key));
+      } else {
+        onActivate(cell.column);
+      }
+    },
+    [onErase, onResize, onActivate],
+  );
+
+  return React.useMemo<PatternCellContext<TValue>>(
+    () => ({
+      nameOf,
+      valueLabel,
+      color,
+      identityFor,
+      isAltBeat,
+      columnWidthPx,
+      previewFor,
+      startResize,
+      onKeyDown,
+      onActivate,
+      onResize,
+    }),
+    [
+      nameOf,
+      valueLabel,
+      color,
+      identityFor,
+      isAltBeat,
+      columnWidthPx,
+      previewFor,
+      startResize,
+      onKeyDown,
+      onActivate,
+      onResize,
+    ],
+  );
+}
+
+/**
+ * The cell grid: every column, drawn from `values`/`holds`, with no per-step
+ * subscription anywhere in it — `currentStep` never reaches this component at
+ * all. Memoized for the same reason as `LeadMelodyCells`: up to ~128 cells and
+ * a `PatternCellContext` of ~10 closures used to be rebuilt from scratch on
+ * every render, 8-16x/sec whenever this lane's transport ran, including while
+ * the Accompaniment segment was CSS-hidden behind Lead/FX/Beat (every segment
+ * stays mounted). `cells` and `context` are now `useMemo`'d on the data that
+ * actually changes them, so only a real pattern edit rebuilds either.
+ */
+export const CustomPatternTimeline = React.memo(function CustomPatternTimeline<TValue>({
   values,
   holds,
   loopLength,
@@ -320,77 +483,31 @@ export function CustomPatternTimelineView<TValue>({
   color,
   valueLabel,
   isPlaying,
-  currentStep,
   onActivate,
   onErase,
   onResize,
   className,
-}: CustomPatternTimelineViewProps<TValue>) {
+}: CustomPatternTimelineProps<TValue>) {
   const cycleSteps = loopLength * stepsPerBar;
-  const cells = customPatternCells(values, holds, loopLength, stepsPerBar, empty, boundaries);
-  const identities = React.useRef(new Map<number, PatternSpanIdentity>());
+  const cells = React.useMemo(
+    () => customPatternCells(values, holds, loopLength, stepsPerBar, empty, boundaries),
+    [values, holds, loopLength, stepsPerBar, empty, boundaries],
+  );
   const gridRef = React.useRef<HTMLDivElement>(null);
-  const { previewFor, startResize } = useSpanResize<PatternSpanIdentity>();
-
-  // `previewFor` compares identity BY REFERENCE, so a span must keep the ONE
-  // object it began its gesture with. One object per column, minted lazily and
-  // reused for as long as the lane is mounted — a fresh literal per render
-  // would silently stop the preview from ever matching.
-  const identityFor = (column: number): PatternSpanIdentity => {
-    let identity = identities.current.get(column);
-    if (!identity) {
-      identity = { column };
-      identities.current.set(column, identity);
-    }
-    return identity;
-  };
-
-  // Empty columns shade by beat, matching the drum grid's zebra.
-  const isAltBeat = (column: number): boolean =>
-    beatIndexAt(column % stepsPerBar, accentGroups) % 2 === 0;
-  const columnWidthPx = (): number => patternColumnWidthPx(gridRef.current, cycleSteps);
-
-  const nameOf = (column: number, spanName: string): string =>
-    `${label} ${spanName} at ${customPatternPositionLabel(column, stepsPerBar, accentGroups)}`;
-
-  const onKeyDown = (
-    event: React.KeyboardEvent<HTMLElement>,
-    cell: CustomPatternCell<TValue>,
-  ): void => {
-    const outcome = customPatternKeyOutcome(event.key, event.shiftKey, cell);
-    if (outcome === 'none') return;
-    // Enter and Space would otherwise also fire the button's click, writing
-    // the activation twice.
-    event.preventDefault();
-    if (outcome === 'erase') {
-      onErase(cell.column);
-    } else if (outcome === 'resize' && cell.kind === 'head') {
-      onResize(cell.column, resizedPatternLength(cell, event.key));
-    } else {
-      onActivate(cell.column);
-    }
-  };
-
-  const context: PatternCellContext<TValue> = {
-    nameOf,
-    valueLabel,
+  const context = usePatternCellContext<TValue>({
+    label,
     color,
-    identityFor,
-    isAltBeat,
-    columnWidthPx,
-    previewFor,
-    startResize,
-    onKeyDown,
+    valueLabel,
+    stepsPerBar,
+    accentGroups,
+    cycleSteps,
+    gridRef,
     onActivate,
+    onErase,
     onResize,
-  };
+  });
 
   const gridStyle = { gridTemplateColumns: `repeat(${cycleSteps}, minmax(0, 1fr))` };
-  // The 'chords' publisher emits a PROGRESSION-relative step, so this lane
-  // folds it by its own cycle: without the modulo a two-bar lane would have no
-  // column for step 20, and with it step 20 and step 52 are the same place.
-  const foldedStep =
-    currentStep === null ? null : ((currentStep % cycleSteps) + cycleSteps) % cycleSteps;
 
   return (
     <div className={cx('overflow-x-auto', className)}>
@@ -400,29 +517,14 @@ export function CustomPatternTimelineView<TValue>({
         <div ref={gridRef} className={GRID_CLASS} style={gridStyle}>
           {cells.map((cell) => patternCellNode(cell, context))}
           {patternBarDividers(loopLength, stepsPerBar)}
-          {isPlaying && foldedStep !== null
-            ? patternPlayheadNode(
-                foldedStep,
-                customPatternPositionLabel(foldedStep, stepsPerBar, accentGroups),
-              )
-            : null}
+          <CustomPatternPlayhead
+            loopLength={loopLength}
+            stepsPerBar={stepsPerBar}
+            accentGroups={accentGroups}
+            isPlaying={isPlaying}
+          />
         </div>
       </div>
     </div>
   );
-}
-
-/** Every view prop except the one the subscriber supplies. */
-export type CustomPatternTimelineProps<TValue> = Omit<
-  CustomPatternTimelineViewProps<TValue>,
-  'currentStep'
->;
-
-/**
- * The timeline as the panels use it: the thin subscriber that reads the shared
- * chord step and hands it down.
- */
-export function CustomPatternTimeline<TValue>(props: CustomPatternTimelineProps<TValue>) {
-  const currentStep = useCurrentStep('chords');
-  return <CustomPatternTimelineView<TValue> {...props} currentStep={currentStep} />;
-}
+}) as <TValue>(props: CustomPatternTimelineProps<TValue>) => React.ReactElement;

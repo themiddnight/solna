@@ -8,7 +8,7 @@ import type { LoopCopyGroupId } from '@/store/loopCopy';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import { BassModulePanel } from './BassModulePanel';
 import { ChordModulePanel } from './ChordModulePanel';
-import { CustomPatternTimelineView } from './CustomPatternTimeline';
+import { customPatternFoldedStep } from './customPatternGrid';
 import { PadModulePanel } from './PadModulePanel';
 import { BASS_TOOLS, bassToolValue } from './bassStepChoice';
 import { chordActivationValue } from './ChordModulePanel';
@@ -418,33 +418,16 @@ describe('the bass note palette', () => {
  * Two lanes, one published step, two cycles: the 'chords' producer emits a
  * PROGRESSION-relative step and each lane folds it by its own width, so the
  * same tick can sit on column 4 of a one-bar chord lane and column 20 of a
- * two-bar bass lane. Rendered through the View because the subscriber cannot
- * be handed a step under `renderToString`.
+ * two-bar bass lane. This is now a pure-function assertion on
+ * `customPatternFoldedStep` rather than a rendered one: the playhead is drawn
+ * by `CustomPatternPlayhead`, which subscribes to the shared step itself
+ * (mirroring `LeadMarker`) and so cannot be handed one under
+ * `renderToString` — see `CustomPatternTimeline.test.tsx` for that boundary.
  */
 describe('the two lanes fold the same published step differently', () => {
-  const render = (loopLength: number, label: string): string =>
-    renderToString(
-      <CustomPatternTimelineView<boolean>
-        values={new Array<boolean>(2 * MAX_STEPS_PER_BAR).fill(false)}
-        holds={new Array<number>(2 * MAX_STEPS_PER_BAR).fill(1)}
-        loopLength={loopLength}
-        stepsPerBar={16}
-        accentGroups={[4, 4, 4, 4]}
-        boundaries={[0, 16, 32]}
-        empty={false}
-        label={label}
-        color="bg-module-chord text-module-chord-content"
-        isPlaying
-        currentStep={20}
-        onActivate={noop}
-        onErase={noop}
-        onResize={noop}
-      />,
-    );
-
   test('one absolute step lands on a different column in each lane', () => {
-    expect(render(1, 'Chord')).toContain('data-playhead-column="4"');
-    expect(render(2, 'Bass')).toContain('data-playhead-column="20"');
+    expect(customPatternFoldedStep(20, 1 * 16)).toBe(4);
+    expect(customPatternFoldedStep(20, 2 * 16)).toBe(20);
   });
 });
 
