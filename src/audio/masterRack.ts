@@ -160,6 +160,11 @@ export class MasterRack {
   private eqLowNode: BiquadFilterNode | null = null;
   private eqMidNode: BiquadFilterNode | null = null;
   private eqHighNode: BiquadFilterNode | null = null;
+  // Which routing rewireEq last wired: false = through the three biquads,
+  // true = the four mix sources go straight to masterGain. Seeded null so
+  // setupMasterChain's own seeding call always runs, the same sentinel
+  // `dynamicsTopology` uses for the same reason.
+  private eqBypassed: boolean | null = null;
   dryGain: GainNode | null = null;
   // Drum bus filter: all drum voices route through this single filter
   // (SequencerView "Drum Filter" card controls cutoff/resonance/type). The
@@ -476,15 +481,16 @@ export class MasterRack {
     // tail already inside the shared processor keeps decaying naturally.
     this.drumSendGate.connect(this.reverbNode);
 
-    // Connect effects back to EQ chain
-    this.dryGain.connect(this.eqLowNode);
-    this.delayGain.connect(this.eqLowNode);
-    this.reverbGain.connect(this.eqLowNode);
-    this.distortionGain.connect(this.eqLowNode);
-
+    // The fixed low -> mid -> high -> masterGain tail is wired here once and
+    // never rebuilt. The four mix sources' own routing into that tail (or
+    // around it, when EQ is bypassed) is owned by rewireEq, seeded below —
+    // the same split setupMasterChain already uses for the dynamics tail.
     this.eqLowNode.connect(this.eqMidNode);
     this.eqMidNode.connect(this.eqHighNode);
     this.eqHighNode.connect(this.masterGain);
+
+    this.eqBypassed = null;
+    this.rewireEq(false);
 
     // Everything below masterGain is owned by rewireMasterDynamics — including
     // BOTH analyser taps, which it re-makes on every pass. Seeding through it
@@ -568,6 +574,36 @@ export class MasterRack {
     node.connect(this.ctx.destination);
 
     this.dynamicsTopology = topology;
+  }
+
+  /**
+   * EQ sits IN SERIES between the four mix sources (dry/delay/reverb/
+   * distortion) and masterGain — unlike the parallel sends above, there is
+   * no dry path around it, so "bypass" here means physically rerouting those
+   * four sources to masterGain directly rather than zeroing a send gain: the
+   * same real-reconnect shape `rewireMasterDynamics` already uses for the
+   * compressor/limiter, applied to the three biquads instead of a source's
+   * own wet gain.
+   *
+   * No settle wait, unlike the reverb/delay/distortion sends above: a biquad
+   * carries no meaningful tail (no convolution buffer, no feedback loop), and
+   * nothing here fades a gain toward zero first the way the distortion send's
+   * disconnect waits out its own downstream ramp — there is no in-flight fade
+   * to protect and no ring to let finish, so the reroute happens immediately.
+   */
+  private rewireEq(bypassed: boolean): void {
+    if (
+      !this.dryGain || !this.delayGain || !this.reverbGain ||
+      !this.distortionGain || !this.eqLowNode || !this.masterGain
+    ) return;
+    if (bypassed === this.eqBypassed) return;
+
+    const sources = [this.dryGain, this.delayGain, this.reverbGain, this.distortionGain];
+    for (const source of sources) {
+      source.disconnect();
+      source.connect(bypassed ? this.masterGain : this.eqLowNode);
+    }
+    this.eqBypassed = bypassed;
   }
 
   /**
@@ -912,9 +948,13 @@ export class MasterRack {
     const delayWet = fx.delayBypass ? 0 : fx.delayWet;
     const delayFeedback = fx.delayBypass ? 0 : fx.delayFeedback;
     const distortionWet = fx.distortionBypass ? 0 : fx.distortionWet;
-    const eqLow = fx.eqBypass ? 0 : fx.eqLow;
-    const eqMid = fx.eqBypass ? 0 : fx.eqMid;
-    const eqHigh = fx.eqBypass ? 0 : fx.eqHigh;
+    // EQ bypass is a real reroute (rewireEq), not a gain-to-zero — see its
+    // docblock — so the band gains below always carry the user's real
+    // setting and a bypass-then-re-enable restores it rather than a stale 0.
+    this.rewireEq(!!fx.eqBypass);
+    const eqLow = fx.eqLow;
+    const eqMid = fx.eqMid;
+    const eqHigh = fx.eqHigh;
 
     this.updateReverbSend(reverbWet > 0);
     this.updateDelaySend(delayWet > 0, fx.delayFeedback);

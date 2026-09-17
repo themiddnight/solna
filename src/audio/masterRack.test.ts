@@ -340,6 +340,74 @@ describe("master chain", () => {
   });
 });
 
+// EQ sits IN SERIES with no dry path around it, unlike the parallel sends
+// (reverb/delay/distortion), so bypass reroutes the four mix sources to
+// masterGain directly instead of zeroing a gain — the same real-reconnect
+// shape as the dynamics stages above, applied to rewireEq's one connection
+// point (eqLowNode) rather than to each of the three biquads individually.
+// Cutting the only feed into eqLowNode starves the whole low -> mid -> high
+// chain at once, since mid and high have no other input — there is nothing
+// left for either of those two nodes to compute once no source reaches the
+// first one, so a single reroute point covers all three bands.
+describe('EQ bypass physically routes around the biquads', () => {
+  test('bypassing EQ reroutes the four mix sources to masterGain, writes the real band gain rather than zeroing it, and leaves the biquad chain itself unrewired', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    const dryGain = (engine as any).masterRack.dryGain;
+    const delayGain = (engine as any).masterRack.delayGain;
+    const reverbGain = (engine as any).masterRack.reverbGain;
+    const distortionGain = (engine as any).masterRack.distortionGain;
+    const eqLowNode = (engine as any).masterRack.eqLowNode;
+    const eqMidNode = (engine as any).masterRack.eqMidNode;
+    const eqHighNode = (engine as any).masterRack.eqHighNode;
+    const masterGain = (engine as any).masterRack.masterGain;
+    const sources = [dryGain, delayGain, reverbGain, distortionGain];
+    for (const source of sources) expect(source._connectTargets).toContain(eqLowNode);
+
+    engine.updateEffects(fxWith({ eqBypass: true, eqLow: 6 }));
+
+    // Cutting the only feed into eqLowNode starves the whole low->mid->high
+    // chain at once (mid/high have no other input), so rerouting the single
+    // entry point covers all three bands without rewiring any of them.
+    for (const source of sources) {
+      expect(source._connectTargets).not.toContain(eqLowNode);
+      expect(source._connectTargets).toContain(masterGain);
+    }
+    expect(eqLowNode._connectTargets).toEqual([eqMidNode]);
+    expect(eqMidNode._connectTargets).toEqual([eqHighNode]);
+    expect(eqHighNode._connectTargets).toEqual([masterGain]);
+    // Bypass is a reroute, not a gain-to-zero, so the band's own param
+    // already carries the real value while disconnected.
+    expect(eqLowNode.gain.targets.at(-1)!.v).toBe(6);
+  });
+
+  test('re-enabling EQ restores the biquad path, and a repeated bypass state does not re-wire on every updateEffects call', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    (engine as any).masterRack.setupMasterChain();
+
+    const dryGain = (engine as any).masterRack.dryGain;
+    const eqLowNode = (engine as any).masterRack.eqLowNode;
+    const masterGain = (engine as any).masterRack.masterGain;
+
+    engine.updateEffects(fxWith({ eqBypass: true }));
+    engine.updateEffects(fxWith({ eqBypass: false }));
+
+    expect(dryGain._connectTargets).toContain(eqLowNode);
+    expect(dryGain._connectTargets).not.toContain(masterGain);
+
+    // rewireEq's own topology guard (mirroring dynamicsTopology's) should
+    // make a repeat of the same state a no-op rather than a disconnect+reconnect.
+    const disconnectsSoFar = dryGain._disconnects;
+    engine.updateEffects(fxWith({ eqBypass: false }));
+    expect(dryGain._disconnects).toBe(disconnectsSoFar);
+  });
+});
+
 describe("master chain rebuilds, and its two analysers", () => {
 
   test('toggling the stages on and off again leaves no orphaned nodes', () => {
