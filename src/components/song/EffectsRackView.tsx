@@ -180,6 +180,7 @@ function DynamicsCard({
   updateFx,
   onKnobChange,
   onKnobCommit,
+  onKnobCancel,
 }: {
   spec: DynamicsCardSpec;
   effects: MasterEffects;
@@ -189,6 +190,10 @@ function DynamicsCard({
   onKnobChange: (updates: Partial<MasterEffects>) => void;
   /** Ends the knob's drag, committing the draft to the store exactly once. */
   onKnobCommit: () => void;
+  /** Ends an ABORTED drag (pointer leaves the window, gesture cancelled) by
+   *  discarding the draft — see the FxUnitProps comment for why this must
+   *  reach every knob, not just onCommit. */
+  onKnobCancel: () => void;
 }) {
   const enabled = effects[spec.enabledKey];
   return (
@@ -231,6 +236,7 @@ function DynamicsCard({
               format={knob.format}
               onChange={(v) => onKnobChange({ [knob.valueKey]: v })}
               onCommit={onKnobCommit}
+              onCancel={onKnobCancel}
             />
           ))}
         </div>
@@ -245,11 +251,20 @@ function DynamicsCard({
  *  discrete writer (bypass toggles — committed immediately, no drag of their
  *  own), and the knob-drag pair (preview to local draft state, commit once
  *  on release). */
-interface FxUnitProps {
+export interface FxUnitProps {
   effects: MasterEffects;
   updateFx: (updates: Partial<MasterEffects>) => void;
   onKnobChange: (updates: Partial<MasterEffects>) => void;
   onKnobCommit: () => void;
+  /** Ends an ABORTED drag (pointer leaves the window, browser cancels the
+   *  gesture) by discarding the draft. Every knob below must wire this
+   *  alongside onCommit: without it, an aborted drag leaves the draft
+   *  machine's `dragging` flag stuck true forever — `sync()` then refuses
+   *  every future committed value (a vibe swap, a project install, a preset
+   *  apply becomes invisible here), the engine keeps the abandoned preview
+   *  playing, and the next onCommit writes the stale draft back over
+   *  whatever changed in between. */
+  onKnobCancel: () => void;
 }
 
 /**
@@ -315,7 +330,7 @@ function FxKnobRow({ children }: { children: React.ReactNode }) {
 }
 
 /** 1. Algorithmic Reverb Unit */
-function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) {
+function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
   return (
     <FxCard
       badge={1}
@@ -342,6 +357,7 @@ function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitPro
           format={(v) => `${(v * 100).toFixed(0)}%`}
           onChange={(v) => onKnobChange({ reverbWet: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
         <Knob
           id="slider-reverb-decay"
@@ -356,6 +372,7 @@ function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitPro
           format={(v) => `${v.toFixed(1)}s`}
           onChange={(v) => onKnobChange({ reverbDecay: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
       </FxKnobRow>
     </FxCard>
@@ -363,7 +380,7 @@ function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitPro
 }
 
 /** 2. Stereo Delay Unit */
-function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) {
+function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
   return (
     <FxCard
       badge={2}
@@ -390,6 +407,7 @@ function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProp
           format={(v) => `${(v * 100).toFixed(0)}%`}
           onChange={(v) => onKnobChange({ delayWet: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
         <Knob
           id="slider-delay-feedback"
@@ -404,6 +422,7 @@ function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProp
           format={(v) => `${(v * 100).toFixed(0)}%`}
           onChange={(v) => onKnobChange({ delayFeedback: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
       </FxKnobRow>
     </FxCard>
@@ -411,7 +430,7 @@ function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProp
 }
 
 /** 3. Wave Distortion / Warmth Unit */
-function DistortionUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) {
+function DistortionUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
   return (
     <FxCard
       badge={3}
@@ -438,6 +457,7 @@ function DistortionUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUni
         format={(v) => `${(v * 100).toFixed(0)}%`}
         onChange={(v) => onKnobChange({ distortionWet: v })}
         onCommit={onKnobCommit}
+        onCancel={onKnobCancel}
       />
     </FxCard>
   );
@@ -451,6 +471,7 @@ function EqBandKnob({
   disabled,
   onChange,
   onCommit,
+  onCancel,
 }: {
   id: string;
   label: string;
@@ -458,6 +479,7 @@ function EqBandKnob({
   disabled: boolean | undefined;
   onChange: (value: number) => void;
   onCommit: () => void;
+  onCancel: () => void;
 }) {
   return (
     <Knob
@@ -473,12 +495,13 @@ function EqBandKnob({
       format={(v) => `${v > 0 ? `+${v}` : v}dB`}
       onChange={onChange}
       onCommit={onCommit}
+      onCancel={onCancel}
     />
   );
 }
 
 /** 4. 3-Band Equalizer */
-function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) {
+function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
   return (
     <FxCard
       badge={4}
@@ -500,6 +523,7 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) 
           disabled={effects.eqBypass}
           onChange={(v) => onKnobChange({ eqLow: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
         <EqBandKnob
           id="slider-eq-mid"
@@ -508,6 +532,7 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) 
           disabled={effects.eqBypass}
           onChange={(v) => onKnobChange({ eqMid: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
         <EqBandKnob
           id="slider-eq-high"
@@ -516,6 +541,7 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) 
           disabled={effects.eqBypass}
           onChange={(v) => onKnobChange({ eqHigh: v })}
           onCommit={onKnobCommit}
+          onCancel={onKnobCancel}
         />
       </FxKnobRow>
     </FxCard>
@@ -523,22 +549,22 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) 
 }
 
 /** The four-stage FX chain, in signal order. */
-function FxChain({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) {
+export function FxChain({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
   return (
     <section className="space-y-2">
       <h3 className={`${SECTION_HEADER} px-1`}>FX Chain</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <ReverbUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} />
-        <DelayUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} />
-        <DistortionUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} />
-        <EqUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} />
+        <ReverbUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
+        <DelayUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
+        <DistortionUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
+        <EqUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
       </div>
     </section>
   );
 }
 
 /** The two master dynamics stages, each one card off the DYNAMICS_CARDS table. */
-function MasterDynamicsSection({ effects, updateFx, onKnobChange, onKnobCommit }: FxUnitProps) {
+export function MasterDynamicsSection({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
   return (
     <section className="space-y-2">
       <h3 className={`${SECTION_HEADER} px-1`}>Master Dynamics</h3>
@@ -556,6 +582,7 @@ function MasterDynamicsSection({ effects, updateFx, onKnobChange, onKnobCommit }
             updateFx={updateFx}
             onKnobChange={onKnobChange}
             onKnobCommit={onKnobCommit}
+            onKnobCancel={onKnobCancel}
           />
         ))}
       </div>
@@ -646,6 +673,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
         updateFx={updateFx}
         onKnobChange={draft.onPatch}
         onKnobCommit={draft.onCommit}
+        onKnobCancel={draft.onCancel}
       />
 
       <MasterDynamicsSection
@@ -653,6 +681,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
         updateFx={updateFx}
         onKnobChange={draft.onPatch}
         onKnobCommit={draft.onCommit}
+        onKnobCancel={draft.onCancel}
       />
 
       <MonitorSection

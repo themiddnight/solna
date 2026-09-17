@@ -8,7 +8,7 @@ import {
 import {
   computeDisconnectedInputIds,
   createHeldNoteTracker,
-  flushMidiCcFrames,
+  __flushCcFramesForTests,
   startMidiInputBridge,
 } from './midiInput';
 import { useAppStore } from './store';
@@ -117,7 +117,7 @@ beforeAll(async () => {
 // this file — not only the coalescing describe block below — keeps every CC
 // test's first push a leading edge regardless of run order.
 afterEach(() => {
-  flushMidiCcFrames();
+  __flushCcFramesForTests();
 });
 
 function connect(id: string): FakeMidiInput {
@@ -387,7 +387,7 @@ describe('MIDI CC coalesces repeated messages to the same target', () => {
   const FRAME_MS = 40;
   const nextFrame = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, FRAME_MS));
 
-  // The file-wide `afterEach(flushMidiCcFrames)` above settles anything left
+  // The file-wide `afterEach(__flushCcFramesForTests)` above settles anything left
   // armed after each test, so the leading-edge assumption below never
   // depends on run order.
 

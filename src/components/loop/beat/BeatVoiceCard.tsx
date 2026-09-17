@@ -96,6 +96,33 @@ export interface BeatVoiceCardProps {
 }
 
 /**
+ * The exhaustiveness guard for `arePropsEqual` below. A `Record<keyof
+ * BeatVoiceCardProps, true>` literal fails to COMPILE the moment a prop is
+ * added to or removed from `BeatVoiceCardProps` without a matching edit
+ * here — TypeScript requires every key of the mapped type and rejects any
+ * key that isn't one. That closes half the gap a future 13th prop could slip
+ * through unnoticed; `BeatVoiceCard.test.tsx`'s "arePropsEqual is exhaustive"
+ * suite closes the other half, by asserting every key listed here actually
+ * flips the comparator's verdict when it changes — a key that compiles into
+ * this table but was never wired into `arePropsEqual`'s own `&&` chain still
+ * fails a test, not just a type a reviewer has to remember to re-check.
+ */
+export const BEAT_VOICE_CARD_PROP_KEYS: Record<keyof BeatVoiceCardProps, true> = {
+  voice: true,
+  meta: true,
+  ordinal: true,
+  voices: true,
+  depth: true,
+  onPreview: true,
+  muted: true,
+  onDraft: true,
+  onCommit: true,
+  onCancel: true,
+  onReset: true,
+  resetDisabled: true,
+};
+
+/**
  * One voice, as one compartment of the instrument, wearing the synth rack's
  * own header grammar: `[n] * Name` on the left, and on the right the `+N` chip
  * where a deeper depth has more to show, then Preview and Reset. Below it, one

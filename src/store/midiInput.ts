@@ -98,7 +98,7 @@ const ccFrames = createFrameCoalescer();
  * assertions for reasons that have nothing to do with the test itself. No
  * production caller needs this: the app never tears down `ccFrames`.
  */
-export function flushMidiCcFrames(): void {
+export function __flushCcFramesForTests(): void {
   ccFrames.flush();
 }
 

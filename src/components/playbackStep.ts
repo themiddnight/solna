@@ -204,12 +204,20 @@ export function shouldSubscribeToStep(focus: MixLayerId, segment: PatternSegment
 }
 
 /**
- * `useCurrentStep`, but VISUALLY gated on Pattern-segment focus: every
- * Pattern segment stays mounted (see CLAUDE.md), so a playhead belonging to a
- * segment the user is not looking at otherwise re-renders at the clock's
- * 8-16Hz for nothing. When `segment` is not the one `segmentForFocus`
- * currently shows, `subscribe` registers no listener at all — the caller
- * simply stops re-rendering on step ticks until focus returns to it — and
+ * `useCurrentStep`, but gated on SEGMENT FOCUS — not on whether this segment
+ * is actually visible. The gate is exactly `segmentForFocus(focusTrack) ===
+ * segment`; it has no idea whether `activeTab` even shows a Pattern segment
+ * at all. Every Pattern segment stays mounted (see CLAUDE.md), so the case
+ * this was built for is the ~4x reduction across Pattern's own four segments
+ * (Lead, FX, Accompaniment, Beat): a playhead whose segment focus does not
+ * currently match otherwise re-renders at the clock's 8-16Hz for nothing
+ * while a DIFFERENT Pattern segment is on screen. It does NOT know or care
+ * whether the user is on Sound, Arrange or Master, where no Pattern segment
+ * is visible at all — the subscription stays exactly as live there as it
+ * would on Pattern itself, because `focusTrack`, not `activeTab`, is the
+ * only thing this gates on. When `segmentForFocus(focusTrack)` is not
+ * `segment`, `subscribe` registers no listener at all — the caller simply
+ * stops re-rendering on step ticks until focus returns to it — and
  * `useSyncExternalStore` still serves the latest published value on the next
  * subscribe, so the marker resumes at the live position rather than a stale
  * one.

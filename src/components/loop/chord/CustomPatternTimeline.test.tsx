@@ -212,7 +212,7 @@ describe('the playhead subscription is isolated to its own leaf', () => {
     expect(source.match(/useSegmentGatedStep\(/g) ?? []).toHaveLength(1);
     expect(source).toContain("useSegmentGatedStep('chords', 'accompaniment')");
     const playheadStart = source.indexOf('function CustomPatternPlayhead');
-    const gridStart = source.indexOf('export const CustomPatternTimeline');
+    const gridStart = source.indexOf('export function CustomPatternTimeline');
     expect(playheadStart).toBeGreaterThan(-1);
     expect(gridStart).toBeGreaterThan(playheadStart);
     // The subscription sits inside CustomPatternPlayhead's own body, not the
@@ -223,7 +223,7 @@ describe('the playhead subscription is isolated to its own leaf', () => {
   });
 
   test('the grid renders the playhead as a child, not a value threaded through props', () => {
-    const gridStart = source.indexOf('export const CustomPatternTimeline');
+    const gridStart = source.indexOf('export function CustomPatternTimeline');
     expect(source.slice(gridStart)).toContain('<CustomPatternPlayhead');
   });
 });

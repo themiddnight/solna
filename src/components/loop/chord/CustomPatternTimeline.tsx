@@ -472,14 +472,34 @@ function usePatternCellContext<TValue>({
 /**
  * The cell grid: every column, drawn from `values`/`holds`, with no per-step
  * subscription anywhere in it — `currentStep` never reaches this component at
- * all. Memoized for the same reason as `LeadMelodyCells`: up to ~128 cells and
- * a `PatternCellContext` of ~10 closures used to be rebuilt from scratch on
- * every render, 8-16x/sec whenever this lane's transport ran, including while
- * the Accompaniment segment was CSS-hidden behind Lead/FX/Beat (every segment
- * stays mounted). `cells` and `context` are now `useMemo`'d on the data that
- * actually changes them, so only a real pattern edit rebuilds either.
+ * all, which is what actually isolates a step tick from this ~128-cell grid:
+ * `CustomPatternPlayhead` is the only subscriber and it renders as its own
+ * grid item, so a step change re-renders that one item and never walks back
+ * up into this component's own render at all. That isolation holds with or
+ * without a `React.memo` around the component below — a step tick was never
+ * going to re-render `CustomPatternTimeline` in the first place, because
+ * nothing in it reads the step.
+ *
+ * There IS no `React.memo` here, on purpose. One was tried and removed: its
+ * default shallow prop comparison never bails, because both call sites
+ * (`ChordModulePanel`, `BassModulePanel`) pass fresh `onActivate`/`onErase`
+ * closures on every render, so `prevProps.onActivate === nextProps.onActivate`
+ * is false on every single render regardless of whether anything changed — the
+ * exact same defect class the Beat voice grid's memo had before its own
+ * comparator was written (`BeatVoiceCard.tsx`'s `arePropsEqual`). A `memo`
+ * that never bails costs a shallow comparison every render and buys nothing,
+ * which reads as protection while providing none. The actual win inside this
+ * component is `cells` and `context` (`usePatternCellContext`'s own
+ * `useMemo`/`useCallback`s): both are memoized on the data that changes them,
+ * so a parent re-render that leaves `values`/`holds`/the callbacks referentially
+ * unchanged still skips rebuilding either — but neither call site currently
+ * holds its callbacks stable, so that win is theoretical today, not measured.
+ * Making it real means `useCallback`-wrapping `onActivate`/`onErase` at both
+ * call sites, deliberately left undone here rather than folded into this fix:
+ * expanding the surface without a measured need is a second decision, not
+ * an inert-memo cleanup.
  */
-export const CustomPatternTimeline = React.memo(function CustomPatternTimeline<TValue>({
+export function CustomPatternTimeline<TValue>({
   values,
   holds,
   loopLength,
@@ -535,4 +555,4 @@ export const CustomPatternTimeline = React.memo(function CustomPatternTimeline<T
       </div>
     </div>
   );
-}) as <TValue>(props: CustomPatternTimelineProps<TValue>) => React.ReactElement;
+}

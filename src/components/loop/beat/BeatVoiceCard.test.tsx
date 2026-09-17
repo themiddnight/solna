@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { arePropsEqual, BeatVoiceCard, type BeatVoiceCardProps } from './BeatVoiceCard';
+import {
+  arePropsEqual,
+  BEAT_VOICE_CARD_PROP_KEYS,
+  BeatVoiceCard,
+  type BeatVoiceCardProps,
+} from './BeatVoiceCard';
 import { BEAT_VOICE_ROWS } from './beatVoices';
 import { DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
 import type { BeatVoices } from '@/types';
@@ -100,6 +105,50 @@ describe('arePropsEqual (BeatVoiceCard React.memo comparator)', () => {
 
     const changed = results.filter((r) => !r.equal).map((r) => r.voice);
     expect(changed).toEqual(['hihat']);
+  });
+
+  /**
+   * Minor #1 (final review): a future 13th prop on `BeatVoiceCardProps` that
+   * `arePropsEqual`'s hand-written `&&` chain forgets to compare would
+   * otherwise be silently ignored by the comparator — the memo would then
+   * bail on a real prop change with no failing test anywhere.
+   * `BEAT_VOICE_CARD_PROP_KEYS` (BeatVoiceCard.tsx) closes the compile-time
+   * half: TypeScript refuses to build a `Record<keyof BeatVoiceCardProps,
+   * true>` missing an entry. This suite closes the runtime half: every key
+   * in that table must actually flip `arePropsEqual`'s verdict when changed
+   * alone, so a key present in the table but never wired into the
+   * comparator's own chain still fails here.
+   */
+  describe('arePropsEqual is exhaustive over BeatVoiceCardProps', () => {
+    const distinctValue: {
+      [K in keyof BeatVoiceCardProps]: (p: BeatVoiceCardProps) => BeatVoiceCardProps[K];
+    } = {
+      voice: () => 'snare',
+      meta: () => BEAT_VOICE_ROWS[1]!,
+      ordinal: (p) => p.ordinal + 1,
+      // Changing the CARD'S OWN voice's slice, not just the top-level
+      // reference — a top-level-only change is exactly what the comparator
+      // must see THROUGH (see the "single-voice drag" test above), so it
+      // would not prove this key is wired in at all.
+      voices: (p) => draggedVoices(p.voices, p.voice),
+      depth: () => 'pro',
+      onPreview: () => () => {},
+      muted: (p) => !p.muted,
+      onDraft: () => () => {},
+      onCommit: () => () => {},
+      onCancel: () => () => {},
+      onReset: () => () => {},
+      resetDisabled: (p) => !p.resetDisabled,
+    };
+
+    for (const key of Object.keys(BEAT_VOICE_CARD_PROP_KEYS) as (keyof BeatVoiceCardProps)[]) {
+      test(`changing "${key}" alone makes arePropsEqual report unequal`, () => {
+        const before = baseProps();
+        const after = { ...before, [key]: distinctValue[key](before) } as BeatVoiceCardProps;
+
+        expect(arePropsEqual(before, after)).toBe(false);
+      });
+    }
   });
 });
 
