@@ -45,8 +45,7 @@ export interface LoopCopyGroup {
  * Neither label field appears here and neither can: `name` and `tempName` are
  * loop-slot identity, so `LoopContent` (Pick<Loop, LoopFlatKey>) does not
  * carry them and `keyof LoopContent` cannot name one. `repeatCount` is out
- * for the same structural reason — it is
- * arrangement data, not loop content.
+ * for the same structural reason — it is arrangement data, not loop content.
  *
  * padVolume/padMuted reach a Loop through PadState rather than through the
  * other ten mixer fields' path; they still belong to `mix`, because the

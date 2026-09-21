@@ -702,7 +702,6 @@ export interface Loop extends PadState, FxState {
   bassMuted: boolean;
 }
 
-
 /**
  * The per-loop mixer: what an Arrange card's channel strips edit.
  *
