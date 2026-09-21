@@ -200,6 +200,7 @@ export function fakeCtx(opts: FakeOpts = {}) {
   const shapers: ReturnType<typeof fakeNode>[] = [];
   return {
     currentTime: 10,
+    destination: fakeNode(opts),
     // Deliberately tiny: createNoiseNode fills sampleRate * 2 samples with
     // Math.random(), and the real 44_100 would make every test that touches
     // noise fill 88_200 floats for no added coverage.
@@ -235,6 +236,17 @@ export function fakeCtx(opts: FakeOpts = {}) {
       return f;
     },
     createAnalyser: () => ({ ...fakeNode(opts), fftSize: 2048, smoothingTimeConstant: 0.8 }),
+    createDynamicsCompressor: () => ({
+      ...fakeNode(opts),
+      threshold: fakeParam(opts),
+      knee: fakeParam(opts),
+      ratio: fakeParam(opts),
+      attack: fakeParam(opts),
+      release: fakeParam(opts),
+      reduction: 0,
+    }),
+    createConvolver: () => fakeNode(opts),
+    createDelay: () => ({ ...fakeNode(opts), delayTime: fakeParam(opts) }),
     createBuffer: (_channels: number, length: number, sampleRate: number) => ({
       sampleRate,
       // Real AudioBuffers expose duration; noiseStartOffset reads it to pick a
@@ -268,11 +280,12 @@ export function fakeCtx(opts: FakeOpts = {}) {
  * and this is the door that does.
  */
 export function bindFakeCtx(engine: EngineInstance, ctx: unknown): void {
-  // Spelled as a widened structural cast rather than `(engine as any).ctx` so the
-  // mechanical cast-rewriter that walks this tree cannot rewrite this line into a
-  // call to itself.
-  (engine as unknown as { ctx: unknown }).ctx = ctx;
-  (engine as any).bindSubsystems();
+  engine.bindContext(ctx as BaseAudioContext);
+  const recorded = ctx as Record<string, unknown>;
+  for (const key of ['_gains', '_filters', '_bufferSources', '_oscillators', '_panners', '_shapers']) {
+    const values = recorded[key];
+    if (Array.isArray(values)) values.length = 0;
+  }
 }
 
 /**

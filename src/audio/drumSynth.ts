@@ -135,6 +135,7 @@ interface SoundingHat {
  * rack's sequencer tap and reverb send, and owns none of those nodes.
  */
 export class DrumSynth {
+  private disposed = false;
   /** Seed levels, kept even before the AudioContext exists so the setter
    *  no-ops safely like every other and applyEngineSnapshot re-applies. */
   private drumTrackLevels = new Map<string, number>();
@@ -192,7 +193,32 @@ export class DrumSynth {
 
   /** Binds the context this subsystem builds its nodes and schedules against. */
   bind(ctx: BaseAudioContext): void {
+    if (this.disposed) return;
     this.ctx = ctx;
+  }
+
+  /** Stops every tracked one-shot before releasing this context generation. */
+  dispose(at?: number): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (!this.ctx) {
+      this.soundingHats.clear();
+      return;
+    }
+    const stopAt = at ?? this.ctx.currentTime;
+    for (const voices of this.soundingHats.values()) {
+      for (const voice of voices) {
+        for (const source of voice.sources) {
+          try { source.stop(stopAt); } catch { /* already stopped */ }
+          try { source.disconnect(); } catch { /* already disconnected */ }
+        }
+        for (const env of voice.envs) {
+          try { env.disconnect(); } catch { /* already disconnected */ }
+        }
+      }
+    }
+    this.soundingHats.clear();
+    this.ctx = null;
   }
 
   private drumTrackGain(instrument: string): GainNode | null {

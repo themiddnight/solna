@@ -463,17 +463,15 @@ export function buildLoopVoices(
  * (src/store/engineSync.ts) uses, so an export is configured by the same
  * call sequence a live session uses rather than a parallel one.
  *
- * `time` 0 on the two bus setters: an offline render has no "now" to
- * automate against, and passing 0 makes the bus state settled before the
- * first event instead of ramping into it.
+ * At time zero an offline render has no prior sample to transition from, so
+ * each source bus settles before the first event rather than ramping into it.
  */
 function applyMasterState(engine: AudioEngine, snapshot: MixdownSnapshot): void {
   engine.setClockBpm(snapshot.bpm);
   engine.setMeter(getMeter(snapshot.meterId));
   engine.setMasterVolume(snapshot.masterVolume);
   for (const bus of snapshot.buses) {
-    engine.setSourceGain(bus.source, bus.gain, 0);
-    engine.setSourceMuted(bus.source, bus.muted, 0);
+    engine.setSourceState(bus.source, { gain: bus.gain, muted: bus.muted }, 0, 'settle');
   }
   // No Beat here: every loop installs its own at its pass boundary below, so
   // there is nothing arrangement-wide left to settle.
@@ -484,8 +482,12 @@ function applyMasterState(engine: AudioEngine, snapshot: MixdownSnapshot): void 
 /** Install per-loop audio state at the same boundary where live song mode loads the loop. */
 function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): void {
   for (const bus of state.buses) {
-    engine.setSourceGain(bus.source, bus.gain, state.time);
-    engine.setSourceMuted(bus.source, bus.muted, state.time);
+    engine.setSourceState(
+      bus.source,
+      { gain: bus.gain, muted: bus.muted },
+      state.time,
+      state.time === 0 ? 'settle' : 'transition',
+    );
   }
   // The Beat patch, BEFORE this pass schedules a single hit: a drum voice is
   // built from the kit installed at the moment it is scheduled, so a patch

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+/* eslint-disable max-lines -- disposal exercises the same voice/timer harness as the lifecycle suite. */
 import type { ActiveSynth, CommonVoiceParams, EnginePatch, LfoParams } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import { noteFrequency } from '@/utils/musicTheory';
@@ -164,6 +165,31 @@ function event(over: Partial<SynthVoiceNoteOn> = {}): SynthVoiceNoteOn {
 }
 
 describe('SynthVoiceManager voice identity', () => {
+  test('dispose hard-stops groups, cancels teardown timers, detaches LFOs, and clears ownership maps', () => {
+    const detached: string[] = [];
+    const lfoBank = {
+      connectVoice() {},
+      disconnectVoice(voice: ManagedVoice) { detached.push(voice.id); },
+      retireVoiceOffline() {},
+      updateSource() {},
+    };
+    const { manager, created, timers } = harness({ lfoBank });
+    const released = manager.noteOn(event({ frequency: C4 }));
+    manager.noteOff(released!, 2, 1);
+    manager.noteOn(event({ frequency: E4 }));
+    manager.noteOn(event({ source: 'bass', synth: MONO, frequency: C2 }));
+
+    manager.dispose(4);
+    manager.dispose(4);
+
+    expect(timers.every((timer) => timer.cancelled)).toBe(true);
+    expect(created.every((voice) => voice.stops.includes(4))).toBe(true);
+    expect(created.every((voice) => voice.disconnects === 1)).toBe(true);
+    expect(detached.sort()).toEqual(created.map((voice) => voice.id).sort());
+    expect(manager.diagnosticSnapshot()).toEqual({ groups: 0, physicalVoices: 0, registered: 0, bySource: {} });
+    expect(manager.noteOn(event())).toBeNull();
+  });
+
   test('a key-up on one owner cannot cut short another owner playing the same note', () => {
     const { manager } = harness();
 

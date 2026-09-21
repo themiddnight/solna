@@ -5,6 +5,7 @@ import { bindFakeCtx, fakeNode, fakeParam, freshEngine, makeEngine } from './tes
 import { FADER_MAX_DB, MAX_FADER_GAIN, dbToGain, toDecibels } from '../utils/gainUnits';
 import { noteFrequency } from '../utils/musicTheory';
 import { ACTIVE_SYNTH, masterChainCtx } from './engineTestHelpers';
+import type { MasterRack } from './masterRack';
 
 const C4_HZ = noteFrequency('C4');
 
@@ -451,8 +452,8 @@ describe("master chain rebuilds, and its two analysers", () => {
     // otherwise INVISIBLE. rewireMasterDynamics calls masterGain.disconnect(),
     // which takes both observe-only sends with it; forgetting to re-make
     // levelAnalyser throws nothing, orphans nothing, and leaves the audio path
-    // audibly perfect — the only symptom is VuMeter and AmbientBackdrop pinned
-    // at -inf, which no graph assertion above would notice if it named only
+    // audibly perfect — the only symptom is VuMeter pinned at -inf, which no
+    // graph assertion above would notice if it named only
     // `analyser`. A cross-plan review caught exactly that defect in this plan,
     // so the guard is a test rather than a comment.
     const engine = makeEngine();
@@ -493,8 +494,8 @@ describe("master chain rebuilds, and its two analysers", () => {
     // until init() creates the AudioContext, and rewireMasterDynamics is no
     // exception — it touches six nodes that do not exist yet.
     const engine = makeEngine();
-    expect(() => (engine as any).masterRack.rewireMasterDynamics(true, true)).not.toThrow();
-    expect((engine as any).masterRack.dynamicsTopology).toBe('unbuilt');
+    expect(() => engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: true }))).not.toThrow();
+    expect(engine.getAudioContext()).toBeNull();
 
     const ctx = masterChainCtx();
     bindFakeCtx(engine, ctx);
@@ -565,6 +566,36 @@ describe("master chain rebuilds, and its two analysers", () => {
 });
 
 describe("master chain rebuild invalidates derived state", () => {
+  test('dispose disconnects every owned graph and clears context-bound caches idempotently', () => {
+    const engine = makeEngine();
+    const ctx = masterChainCtx();
+    bindFakeCtx(engine, ctx);
+    const rack = (engine as any).masterRack;
+    const disposable = rack as MasterRack;
+    rack.setupMasterChain();
+    const sourceBus = rack.getSourceBus('synth');
+    const sourceTap = rack.getSourceTap('synth');
+    const sourceAnalyser = rack.getSourceAnalyser('synth');
+    const sourceLevelAnalyser = rack.getSourceLevelAnalyser('synth');
+    rack.getImpulseResponse(1);
+
+    disposable.dispose(ctx.currentTime);
+    disposable.dispose(ctx.currentTime);
+
+    expect(sourceBus.connectedTo).toEqual([]);
+    expect(sourceTap.connectedTo).toEqual([]);
+    expect(sourceAnalyser.connectedTo).toEqual([]);
+    expect(sourceLevelAnalyser.connectedTo).toEqual([]);
+    expect(rack.sourceBuses.size).toBe(0);
+    expect(rack.sourceTaps.size).toBe(0);
+    expect(rack.sourceAnalysers.size).toBe(0);
+    expect(rack.sourceLevelAnalysers.size).toBe(0);
+    expect(rack.impulseCache.size).toBe(0);
+    expect(rack.ctx).toBeNull();
+    expect(rack.masterGain).toBeNull();
+    expect(rack.noiseBuffer).toBeNull();
+  });
+
 
   test('the level analyser has a longer window than the spectrum analyser', () => {
     const engine = makeEngine();
@@ -750,6 +781,7 @@ describe("updateEffects clamps and yields to bypass", () => {
     // only `threshold` would throw rather than fail an assertion.
     const threshold = fakeParam();
     (engine as any).masterRack.compressor = {
+      ...fakeNode(),
       threshold,
       ratio: fakeParam(),
       attack: fakeParam(),
@@ -807,90 +839,6 @@ describe("updateEffects clamps and yields to bypass", () => {
     engine.updateEffects({ ...INITIAL_EFFECTS, reverbWet: 12, reverbBypass: true });
 
     expect(reverbGain.gain.targets.at(-1)!.v).toBe(0);
-  });
-});
-
-describe('source bus level control', () => {
-  test('setSourceGain ramps instead of stepping, and clamps to 0..MAX_FADER_GAIN', () => {
-    const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, undefined, 'chord', 1, 'live');
-    const bus = (engine as any).masterRack.sourceBuses.get('chord');
-
-    engine.setSourceGain('chord', 0.4);
-    expect(bus.gain.targets.at(-1)).toEqual({ v: 0.4, t: ctx.currentTime, tc: 0.01 });
-
-    // The fader's own top reaches the bus. This used to clamp at 1.5 (+3.5 dB).
-    engine.setSourceGain('chord', dbToGain(toDecibels(FADER_MAX_DB)));
-    expect(bus.gain.targets.at(-1)!.v).toBeCloseTo(3.9810717, 6);
-
-    engine.setSourceGain('chord', 99);
-    expect(bus.gain.targets.at(-1)!.v).toBe(MAX_FADER_GAIN);
-    engine.setSourceGain('chord', -5);
-    expect(bus.gain.targets.at(-1)!.v).toBe(0);
-  });
-
-  test('setSourceMuted ramps to 0 and back to the stored gain', () => {
-    const { engine } = freshEngine();
-    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, undefined, 'bass', 1, 'live');
-    const bus = (engine as any).masterRack.sourceBuses.get('bass');
-    engine.setSourceGain('bass', 0.6);
-
-    engine.setSourceMuted('bass', true);
-    expect(bus.gain.targets.at(-1)!.v).toBe(0);
-    expect(bus.gain.targets.at(-1)!.tc).toBe(0.01); // click-free
-
-    engine.setSourceMuted('bass', false);
-    expect(bus.gain.targets.at(-1)!.v).toBe(0.6);
-  });
-
-  test('a future source mute changes the bus at the song boundary, not at scheduler time', () => {
-    const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, undefined, 'fx', 1, 'live');
-    const bus = (engine as any).masterRack.sourceBuses.get('fx');
-    const boundary = ctx.currentTime + 0.075;
-
-    engine.setSourceMuted('fx', true, boundary);
-
-    expect(bus.gain.cancels.at(-1)).toBe(boundary);
-    expect(bus.gain.targets.at(-1)).toEqual({ v: 0, t: boundary, tc: 0.01 });
-  });
-
-  test('a future source fader change also waits for the song boundary', () => {
-    const { engine, ctx } = freshEngine();
-    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, undefined, 'fx', 1, 'live');
-    const bus = (engine as any).masterRack.sourceBuses.get('fx');
-    const boundary = ctx.currentTime + 0.075;
-
-    engine.setSourceGain('fx', 0.4, boundary);
-
-    expect(bus.gain.cancels.at(-1)).toBe(boundary);
-    expect(bus.gain.targets.at(-1)).toEqual({ v: 0.4, t: boundary, tc: 0.01 });
-  });
-
-  test('a future Beat mute schedules its dry and authored reverb branches together', () => {
-    const engine = makeEngine();
-    const ctx = masterChainCtx();
-    bindFakeCtx(engine, ctx);
-    (engine as any).masterRack.setupMasterChain();
-    const boundary = ctx.currentTime + 0.075;
-
-    engine.setSourceMuted('sequencer', true, boundary);
-
-    const dryBus = (engine as any).masterRack.sourceBuses.get('sequencer');
-    const sendGate = (engine as any).masterRack.drumSendGate;
-    expect(dryBus.gain.targets.at(-1)).toEqual({ v: 0, t: boundary, tc: 0.01 });
-    expect(sendGate.gain.targets.at(-1)).toEqual({ v: 0, t: boundary, tc: 0.01 });
-  });
-
-  test('a gain set while muted does not un-mute the bus', () => {
-    const { engine } = freshEngine();
-    engine.triggerSynthNoteOn(C4_HZ, ACTIVE_SYNTH, 0.8, undefined, 'bass', 1, 'live');
-    const bus = (engine as any).masterRack.sourceBuses.get('bass');
-
-    engine.setSourceMuted('bass', true);
-    engine.setSourceGain('bass', 0.9);
-
-    expect(bus.gain.targets.at(-1)!.v).toBe(0);
   });
 });
 

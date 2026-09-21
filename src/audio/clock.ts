@@ -1,6 +1,7 @@
 import { clampBpm, stepDurationSec } from '../utils/musicTheory';
 import { beatIndexAt, getMeter, isBeatBoundary, DEFAULT_METER_ID, type Meter } from '../utils/meter';
 import type { EngineHooks, MasterRack } from './masterRack';
+import type { ClockDiagnosticSnapshot } from './diagnostics';
 
 /**
  * The shared 16th-note lookahead clock and the metronome click. One master grid on the
@@ -10,6 +11,7 @@ import type { EngineHooks, MasterRack } from './masterRack';
  * decided from that and the live voice count together.
  */
 export class Clock {
+  private disposed = false;
   // Metronome click buffer & state
   private clickBufferHigh: AudioBuffer | null = null;
   private clickBufferLow: AudioBuffer | null = null;
@@ -26,6 +28,9 @@ export class Clock {
   // this. Set through store/engineSync.ts, never from a component.
   private meter: Meter = getMeter(DEFAULT_METER_ID);
   private clockListeners = new Set<(step: number, beat: number, time: number) => void>();
+  private diagnosticDispatches = 0;
+  private diagnosticStalls = 0;
+  private diagnosticMaxStallMs = 0;
   /**
    * Task 5 (synth engine + presets): who wants to know the transport's
    * origin/reset instant. `SynthLfoBank` phase-locks a shared transport LFO
@@ -70,12 +75,37 @@ export class Clock {
 
   /** Binds the context this subsystem builds its nodes and schedules against. */
   bind(ctx: BaseAudioContext): void {
+    if (this.disposed) return;
     this.ctx = ctx;
+  }
+
+  /** Permanently releases every timer, callback, and context-owned buffer. */
+  dispose(at?: number): void {
+    void at;
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopClockTimer();
+    this.clockListeners.clear();
+    this.transportOriginListeners.clear();
+    this.afterStepTasks.length = 0;
+    this.dispatchingStep = false;
+    this.clickBufferHigh = null;
+    this.clickBufferLow = null;
+    this.ctx = null;
   }
 
   /** How many players currently hold a clock subscription. */
   listenerCount(): number {
     return this.clockListeners.size;
+  }
+
+  diagnosticSnapshot(): ClockDiagnosticSnapshot {
+    return {
+      listeners: this.clockListeners.size,
+      dispatches: this.diagnosticDispatches,
+      stalls: this.diagnosticStalls,
+      maxStallMs: this.diagnosticMaxStallMs,
+    };
   }
 
   /**
@@ -105,6 +135,7 @@ export class Clock {
    * never restarts the grid, so live changes stay glitch-free.
    */
   subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
+    if (this.disposed) return () => {};
     this.clockListeners.add(listener);
     this.ensureClockRunning();
     this.hooks.markActivity();
@@ -123,11 +154,14 @@ export class Clock {
    * Outside a clock dispatch it retains the old microtask deferral semantics.
    */
   scheduleAfterCurrentStep(task: () => void): void {
+    if (this.disposed) return;
     if (this.dispatchingStep) {
       this.afterStepTasks.push(task);
       return;
     }
-    queueMicrotask(task);
+    queueMicrotask(() => {
+      if (!this.disposed) task();
+    });
   }
 
   setClockBpm(bpm: number): void {
@@ -147,6 +181,7 @@ export class Clock {
    * to lock to.
    */
   subscribeTransportOrigin(listener: (time: number) => void): () => void {
+    if (this.disposed) return () => {};
     this.transportOriginListeners.add(listener);
     return () => {
       this.transportOriginListeners.delete(listener);
@@ -175,6 +210,7 @@ export class Clock {
    * clockTick burst every step in between.
    */
   resetClock(atTime?: number): void {
+    if (this.disposed) return;
     this.clockStepIndex = 0;
     if (!this.ctx) {
       this.clockNextStepTime = 0;
@@ -197,7 +233,7 @@ export class Clock {
   // swaps) don't restart the grid and glitch every listener. clockTick's
   // resync branch re-anchors the schedule after idle gaps.
   private ensureClockRunning(): void {
-    if (this.clockTimer) return;
+    if (this.disposed || !this.ctx || this.clockTimer) return;
     this.clockTimer = setInterval(() => this.clockTick(), Clock.CLOCK_UPDATE_MS);
   }
 
@@ -212,6 +248,9 @@ export class Clock {
     if (!this.ctx) return;
     // Resync after stalls or initial start instead of bursting missed steps
     if (this.clockNextStepTime < this.ctx.currentTime - Clock.CLOCK_STALL_THRESHOLD) {
+      const stallMs = (this.ctx.currentTime - this.clockNextStepTime) * 1000;
+      this.diagnosticStalls++;
+      this.diagnosticMaxStallMs = Math.max(this.diagnosticMaxStallMs, stallMs);
       this.clockNextStepTime = this.ctx.currentTime + Clock.CLOCK_REANCHOR_DELAY;
     }
     while (this.clockNextStepTime < this.ctx.currentTime + Clock.CLOCK_LOOKAHEAD) {
@@ -226,6 +265,7 @@ export class Clock {
       // would be frozen, not just the broken listener.
       this.clockNextStepTime += stepDuration;
       this.clockStepIndex++;
+      this.diagnosticDispatches++;
 
       // THE MONOTONIC-COUNTER TRAP: clockStepIndex never resets, so every
       // bar-relative decision must be derived here rather than taken from the

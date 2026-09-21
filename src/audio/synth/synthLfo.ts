@@ -494,10 +494,52 @@ export class SynthLfoBank {
    */
   private nextTeardownId = 0;
 
-  constructor(
-    private readonly ctx: BaseAudioContext,
-    private readonly random: () => number = sharedRandom,
-  ) {}
+  private ctx: BaseAudioContext | null;
+
+  constructor(ctx: BaseAudioContext, private readonly random: () => number = sharedRandom) {
+    this.ctx = ctx;
+  }
+
+  /** Stops and disconnects every generator and edge owned by this bank. */
+  dispose(at?: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const stopAt = at ?? ctx.currentTime;
+    const generators = new Set<Generator>();
+    const gains = new Set<GainNode>();
+
+    for (const entry of this.channels.values()) {
+      generators.add(entry.generator);
+      gains.add(entry.scaleGain);
+    }
+    for (const entry of this.voices.values()) {
+      entry.voice.lfoSource = undefined;
+      if (entry.generator) generators.add(entry.generator);
+      if (entry.connection) {
+        severConnection(entry.connection);
+        gains.add(entry.connection.scaleGain);
+      }
+    }
+    for (const pending of this.pendingTeardowns.values()) {
+      generators.add(pending.generator);
+      gains.add(pending.scaleGain);
+      for (const { voice, connection } of pending.connections) {
+        voice.lfoSource = undefined;
+        severConnection(connection);
+      }
+    }
+    for (const generator of generators) {
+      try { generator.node.stop(stopAt); } catch { /* already stopped */ }
+      try { generator.node.disconnect(); } catch { /* already disconnected */ }
+    }
+    for (const gain of gains) {
+      try { gain.disconnect(); } catch { /* already disconnected */ }
+    }
+    this.pendingTeardowns.clear();
+    this.voices.clear();
+    this.channels.clear();
+    this.ctx = null;
+  }
 
   /**
    * The instant every transport-triggered channel's shared generator is
@@ -509,6 +551,7 @@ export class SynthLfoBank {
    * it will build fresh at this origin anyway.
    */
   setTransportOrigin(time: number): void {
+    if (!this.ctx) return;
     this.sweepPendingTeardowns(time);
     this.transportOrigin = time;
     for (const [source, entry] of [...this.channels]) {
@@ -561,6 +604,7 @@ export class SynthLfoBank {
    * Hz-mode generators are untouched, by construction of `resolveRateHz`.
    */
   setBpm(bpm: number, at: number): void {
+    if (!this.ctx) return;
     this.sweepPendingTeardowns(at);
     this.bpm = bpm;
     for (const entry of this.channels.values()) {
@@ -587,6 +631,7 @@ export class SynthLfoBank {
    * connection this voice held are both cleared.
    */
   connectVoice(voice: LfoVoiceHandle, params: LfoParams, at: number): void {
+    if (!this.ctx) return;
     this.sweepPendingTeardowns(at);
 
     if (isSilent(params)) {
@@ -633,9 +678,11 @@ export class SynthLfoBank {
    * way a note-on would have.
    */
   private startNoteVoice(voiceEntry: VoiceEntry, params: LfoParams, at: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
     const rateHz = resolveRateHz(params.rate, this.bpm);
-    const generator = buildGenerator(this.ctx, params.waveform, rateHz, params.phaseDegrees, at, this.random);
-    const scaleGain = this.ctx.createGain();
+    const generator = buildGenerator(ctx, params.waveform, rateHz, params.phaseDegrees, at, this.random);
+    const scaleGain = ctx.createGain();
     generator.node.connect(scaleGain);
     const destination = voiceEntry.voice.lfoDestination(params.route!.target);
     scaleGain.gain.value = scaleValueFor(params, destination);
@@ -675,6 +722,8 @@ export class SynthLfoBank {
    * lifetime it was born with — flipping the mode applies to the next note.
    */
   private updateNoteVoice(voiceEntry: VoiceEntry, next: LfoParams, at: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
     const connection = voiceEntry.connection;
 
     if (isSilent(next)) {
@@ -700,7 +749,7 @@ export class SynthLfoBank {
       // gain NOW would silence it before the `at` its stop is scheduled for.
       // The channel half rebuilds the same way.
       voiceEntry.generator.node.stop(at);
-      const generator = buildGenerator(this.ctx, next.waveform, rateHz, next.phaseDegrees, at, this.random);
+      const generator = buildGenerator(ctx, next.waveform, rateHz, next.phaseDegrees, at, this.random);
       generator.node.connect(connection.scaleGain);
       voiceEntry.generator = generator;
       voiceEntry.voice.lfoSource = generator.node;
@@ -744,6 +793,7 @@ export class SynthLfoBank {
    * was scheduled to reach.
    */
   updateSource(source: string, previous: LfoParams, next: LfoParams, at: number): void {
+    if (!this.ctx) return;
     this.sweepPendingTeardowns(at);
 
     // The note-triggered voices on this bus first, and unconditionally: each
@@ -886,6 +936,7 @@ export class SynthLfoBank {
   }
 
   retireVoiceOffline(voice: LfoVoiceHandle, at: number): void {
+    if (!this.ctx) return;
     const entry = this.forgetVoice(voice);
     if (!entry) return;
     if (entry.triggerMode === 'note' && entry.generator) {
@@ -894,6 +945,7 @@ export class SynthLfoBank {
   }
 
   disconnectVoice(voice: LfoVoiceHandle): void {
+    if (!this.ctx) return;
     const entry = this.forgetVoice(voice);
     if (!entry) return;
     // `severConnection` sets `connection.severed`, on the SAME object a
@@ -1014,9 +1066,11 @@ export class SynthLfoBank {
 
   /** Builds a fresh transport-channel generator + scale gain, phase-locked to the current `transportOrigin`. Connects nothing to any destination — the caller fans that out per attached voice. */
   private buildChannelEntry(params: LfoParams): ChannelEntry {
+    const ctx = this.ctx;
+    if (!ctx) throw new Error('SynthLfoBank is disposed');
     const rateHz = resolveRateHz(params.rate, this.bpm);
-    const generator = buildGenerator(this.ctx, params.waveform, rateHz, params.phaseDegrees, this.transportOrigin, this.random);
-    const scaleGain = this.ctx.createGain();
+    const generator = buildGenerator(ctx, params.waveform, rateHz, params.phaseDegrees, this.transportOrigin, this.random);
+    const scaleGain = ctx.createGain();
     // Silent until a voice has resolved its own destination: the route amount
     // means nothing until it has been converted into the unit of the param it
     // will land on, and only the voice knows that conversion. Every caller

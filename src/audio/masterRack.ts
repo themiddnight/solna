@@ -3,6 +3,10 @@ import { MAX_FADER_GAIN } from '../utils/gainUnits';
 import { random } from './rng';
 import { clampEffects, clampEffectValue } from './effectLimits';
 import { IMPULSE_CACHE_SAMPLE_BUDGET, impulseSampleCount, keysToEvict } from './impulseBudget';
+import {
+  applySourceBusAutomation,
+  type SourceBusApplyMode,
+} from './automation/sourceBusAutomation';
 
 /**
  * The engine services a subsystem may call back into. Handed to every subsystem's
@@ -52,6 +56,11 @@ export interface BeatFilterLane {
   type: FilterType;
   filter: BiquadFilterNode;
   gain: GainNode;
+}
+
+export interface SourceBusState {
+  gain: number;
+  muted: boolean;
 }
 
 /** Every response type a Beat bus filter offers — one lane each. Matches the
@@ -120,6 +129,7 @@ class DebouncedSendGate {
 }
 
 export class MasterRack {
+  private disposed = false;
   // Master bus nodes
   private masterGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
@@ -305,7 +315,72 @@ export class MasterRack {
 
   /** Binds the context this subsystem builds its nodes and schedules against. */
   bind(ctx: BaseAudioContext): void {
+    if (this.disposed) return;
     this.ctx = ctx;
+  }
+
+  /** Disconnects the graph and releases every cache owned by this context. */
+  dispose(at?: number): void {
+    void at;
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.reverbDisconnectTimer) clearTimeout(this.reverbDisconnectTimer);
+    this.reverbDisconnectTimer = null;
+    this.delaySend?.dispose();
+    this.distortionSend?.dispose();
+
+    for (const node of this.sourceBuses.values()) this.release(node);
+    for (const node of this.sourceTaps.values()) this.release(node);
+    for (const node of this.drumTrackGains.values()) this.release(node);
+    for (const node of this.sourceAnalysers.values()) this.release(node);
+    for (const node of this.sourceLevelAnalysers.values()) this.release(node);
+    for (const lane of this.drumBusFilterLanes) this.release(lane.filter, lane.gain);
+    for (const lane of this.drumSendFilterLanes) this.release(lane.filter, lane.gain);
+    this.release(
+      this.masterGain, this.analyser, this.levelAnalyser, this.compressor, this.limiter,
+      this.reverbNode, this.reverbGain, this.delayNode, this.delayFeedbackGain,
+      this.delayGain, this.distortionNode, this.distortionGain, this.reverbSendGate,
+      this.delaySendGate, this.distortionSendGate, this.eqLowNode, this.eqMidNode,
+      this.eqHighNode, this.dryGain, this.drumBusFilter, this.drumSendFilter,
+      this.drumSendGate,
+    );
+
+    this.sourceBuses.clear();
+    this.sourceTaps.clear();
+    this.drumTrackGains.clear();
+    this.sourceAnalysers.clear();
+    this.sourceLevelAnalysers.clear();
+    this.sourceMuted.clear();
+    this.sourceGains.clear();
+    this.impulseCache.clear();
+    this.drumBusFilterLanes = [];
+    this.drumSendFilterLanes = [];
+    this.masterGain = null;
+    this.analyser = null;
+    this.levelAnalyser = null;
+    this.compressor = null;
+    this.limiter = null;
+    this.reverbNode = null;
+    this.reverbGain = null;
+    this.delayNode = null;
+    this.delayFeedbackGain = null;
+    this.delayGain = null;
+    this.distortionNode = null;
+    this.distortionGain = null;
+    this.reverbSendGate = null;
+    this.delaySendGate = null;
+    this.distortionSendGate = null;
+    this.delaySend = null;
+    this.distortionSend = null;
+    this.eqLowNode = null;
+    this.eqMidNode = null;
+    this.eqHighNode = null;
+    this.dryGain = null;
+    this.drumBusFilter = null;
+    this.drumSendFilter = null;
+    this.drumSendGate = null;
+    this.noiseBuffer = null;
+    this.ctx = null;
   }
 
   /**
@@ -578,7 +653,7 @@ export class MasterRack {
    * has an output of its own to put it back. `analyser` is the 128-bin
    * spectrum node AudioVisualizer draws; `levelAnalyser` is the node
    * getMasterLevelAnalyser() hands to useMeterLevel — it IS the meter behind
-   * VuMeter and AmbientBackdrop. Re-making only the first is a silent failure:
+   * VuMeter. Re-making only the first is a silent failure:
    * no throw, no orphan, audio unchanged, every dBFS reading -inf forever.
    *
    * NOTE — switching a stage while it is actively reducing gain can click: the
@@ -614,7 +689,7 @@ export class MasterRack {
     // would report post-squash audio instead of the mix the user made.
     // levelAnalyser is not optional decoration: it is the node
     // getMasterLevelAnalyser() returns, so dropping it silently kills VuMeter
-    // and AmbientBackdrop while leaving the audio path perfect.
+    // while leaving the audio path perfect.
     this.masterGain.connect(this.analyser);
     this.masterGain.connect(this.levelAnalyser);
 
@@ -869,42 +944,58 @@ export class MasterRack {
     return tap;
   }
 
-  /** Apply one click-free source level to every branch that source owns. */
-  private rampSourceLevel(source: string, targetGain: number, now: number): void {
+  /** Apply one source level to every branch that source owns. */
+  private applySourceLevel(
+    source: string,
+    targetGain: number,
+    at: number,
+    mode: SourceBusApplyMode,
+  ): void {
     const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
     const nodes = source === 'sequencer' && this.drumSendGate
       ? [bus, this.drumSendGate]
       : [bus];
     for (const node of nodes) {
-      node.gain.cancelScheduledValues(now);
-      node.gain.setTargetAtTime(targetGain, now, 0.01);
+      applySourceBusAutomation(node.gain, targetGain, at, mode, this.ctx!.currentTime);
     }
+  }
+
+  setSourceState(
+    source: string,
+    state: SourceBusState,
+    time?: number,
+    mode: SourceBusApplyMode = 'transition',
+  ): void {
+    const gain = Math.max(0, Math.min(MAX_FADER_GAIN, state.gain));
+    this.sourceGains.set(source, gain);
+    this.sourceMuted.set(source, state.muted);
+    if (!this.ctx) return;
+    const at = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
+    this.applySourceLevel(source, state.muted ? 0 : gain, at, mode);
   }
 
   // Mute/unmute an entire source layer with a ~10 ms click-free ramp. The
   // source stops feeding every downstream branch; effect tails already inside
   // the shared processors remain free to decay.
   setSourceMuted(source: string, muted: boolean, time?: number): void {
-    this.sourceMuted.set(source, muted);
-    if (!this.ctx) return;
-    const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
-    const targetGain = muted ? 0 : (this.sourceGains.get(source) ?? 1);
-    this.rampSourceLevel(source, targetGain, now);
+    this.setSourceState(
+      source,
+      { gain: this.sourceGains.get(source) ?? 1, muted },
+      time,
+      'transition',
+    );
   }
 
   // Set gain/volume for an entire source layer (e.g. chord, bass, synth)
   setSourceGain(source: string, volume: number, time?: number): void {
-    this.sourceGains.set(source, volume);
-    if (!this.ctx) return;
-    const now = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
-    const isMuted = this.sourceMuted.get(source);
     // Derived from the fader range (MAX_FADER_GAIN is dbToGain(FADER_MAX_DB)),
     // not an independent literal. It used to be 1.5 — +3.5 dB — so a fader
     // that displayed +12 dB stopped responding two-thirds of the way up.
-    this.rampSourceLevel(
+    this.setSourceState(
       source,
-      isMuted ? 0 : Math.max(0, Math.min(MAX_FADER_GAIN, volume)),
-      now,
+      { gain: volume, muted: this.sourceMuted.get(source) ?? false },
+      time,
+      'transition',
     );
   }
 

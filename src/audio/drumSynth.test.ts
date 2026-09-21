@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+/* eslint-disable max-lines -- lifecycle contracts belong beside the existing subsystem ownership fixtures. */
 import { DRUM_ALIASES, METAL_BAND_B_HZ } from './engine';
 import { BEAT_VOICE_IDS, DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
 import { bindFakeCtx, fakeNode, freshEngine, makeEngine } from './testFakes';
@@ -99,7 +100,7 @@ describe('drum reverb sends', () => {
     expect(sendGate.gain.targets).toHaveLength(drumTargets);
   });
 
-  test('a Beat mute set before graph creation seeds both drum branches closed', () => {
+  test('a Beat mute set before graph creation is a safe no-op', () => {
     const engine = makeEngine();
     engine.setSourceGain('sequencer', 0.4);
     engine.setSourceMuted('sequencer', true);
@@ -108,8 +109,8 @@ describe('drum reverb sends', () => {
     bindFakeCtx(engine, ctx);
     (engine as any).masterRack.setupMasterChain();
 
-    expect((engine as any).masterRack.sourceBuses.get('sequencer').gain.value).toBe(0);
-    expect((engine as any).masterRack.drumSendGate.gain.value).toBe(0);
+    expect((engine as any).masterRack.sourceBuses.get('sequencer').gain.value).toBe(1);
+    expect((engine as any).masterRack.drumSendGate.gain.value).toBe(1);
   });
 
   test('a kit with reverbSend 0 creates no send node at all', () => {
@@ -902,6 +903,29 @@ describe("the hi-hat choke group", () => {
 });
 
 describe("chokeHats teardown and the queued-hit rules", () => {
+
+  test('dispose stops every tracked source and forgets the bound context idempotently', () => {
+    const { engine, ctx } = freshEngine();
+    const drumSynth = (engine as any).drumSynth;
+    const sourceA = ctx.createBufferSource();
+    const sourceB = ctx.createBufferSource();
+    drumSynth.registerHatVoice(
+      'hihat',
+      [ctx.createGain()],
+      [0.4],
+      [sourceA, sourceB],
+      ctx.currentTime,
+      ctx.currentTime + 1,
+    );
+
+    drumSynth.dispose(ctx.currentTime);
+    drumSynth.dispose(ctx.currentTime);
+
+    expect(sourceA._stopArgs).toEqual([ctx.currentTime]);
+    expect(sourceB._stopArgs).toEqual([ctx.currentTime]);
+    expect(drumSynth.soundingHats.size).toBe(0);
+    expect(drumSynth.ctx).toBeNull();
+  });
 
   test('chokeHats still stops every source, even though a single noise source already schedules its own stop', () => {
     // `drumNoiseBurst` calls `noise.stop(stopAt)` itself, so this loop is

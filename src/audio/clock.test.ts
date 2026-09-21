@@ -475,6 +475,40 @@ describe('subscribeTransportOrigin', () => {
   });
 });
 
+describe('Clock disposal', () => {
+  test('cancels an outside-dispatch microtask that was queued before disposal', async () => {
+    const { engine } = freshEngine();
+    const clock = (engine as any).clock;
+    let calls = 0;
+    clock.scheduleAfterCurrentStep(() => { calls += 1; });
+
+    clock.dispose();
+    await Promise.resolve();
+
+    expect(calls).toBe(0);
+  });
+
+  test('stops scheduling and clears every callback queue exactly once', () => {
+    const { engine } = freshEngine();
+    const clock = (engine as any).clock;
+    let transportCalls = 0;
+    clock.subscribeClock(() => {});
+    clock.subscribeTransportOrigin(() => { transportCalls += 1; });
+    clock.afterStepTasks.push(() => {});
+
+    clock.dispose();
+    clock.dispose();
+    clock.resetClock(20);
+
+    expect(clock.clockTimer).toBeNull();
+    expect(clock.clockListeners.size).toBe(0);
+    expect(clock.transportOriginListeners.size).toBe(0);
+    expect(clock.afterStepTasks).toEqual([]);
+    expect(clock.ctx).toBeNull();
+    expect(transportCalls).toBe(0);
+  });
+});
+
 describe('song boundary alignment', () => {
   /**
    * Drives the real clock to a loop boundary and re-anchors from inside the

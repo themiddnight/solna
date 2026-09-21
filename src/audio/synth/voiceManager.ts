@@ -1,5 +1,6 @@
 import type { ActiveSynth, EnginePatch, LfoParams, SynthEngineId } from '@/types/synth';
 import type { VoiceOwner } from '../voiceOwner';
+import type { VoiceDiagnosticSnapshot } from '../diagnostics';
 import type { LfoVoiceHandle } from './synthLfo';
 import {
   createSubtractiveVoice,
@@ -281,6 +282,9 @@ interface MonoChannel {
 type Registration = { kind: 'poly'; group: VoiceGroup } | { kind: 'mono'; source: string };
 
 export class SynthVoiceManager {
+  private disposed = false;
+  private ctx: BaseAudioContext | null;
+  private readonly options: Omit<SynthVoiceManagerOptions, 'ctx'>;
   private readonly groups = new Map<string, Set<VoiceGroup>>();
   private readonly mono = new Map<string, MonoChannel>();
   private readonly registered = new Map<VoiceId, Registration>();
@@ -288,9 +292,34 @@ export class SynthVoiceManager {
   private readonly schedule: TeardownSchedule;
   private readonly offline: boolean;
 
-  constructor(private readonly options: SynthVoiceManagerOptions) {
-    this.schedule = options.schedule ?? defaultSchedule;
-    this.offline = isOfflineContext(options.ctx);
+  constructor(options: SynthVoiceManagerOptions) {
+    const { ctx, ...rest } = options;
+    this.ctx = ctx;
+    this.options = rest;
+    this.schedule = rest.schedule ?? defaultSchedule;
+    this.offline = isOfflineContext(ctx);
+  }
+
+  /** Hard-stops and detaches every physical voice owned by this generation. */
+  dispose(at = this.ctx?.currentTime ?? 0): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const sourceGroups of this.groups.values()) {
+      for (const group of sourceGroups) {
+        group.cancelTeardown?.();
+        group.cancelTeardown = null;
+        group.teardownAt = null;
+        for (const voice of group.voices) {
+          voice.stopSources(at);
+          this.options.lfoBank?.disconnectVoice(voice);
+          voice.disconnect();
+        }
+      }
+    }
+    this.mono.clear();
+    this.registered.clear();
+    this.groups.clear();
+    this.ctx = null;
   }
 
   /** Whether this id still names a voice the manager holds. */
@@ -310,6 +339,19 @@ export class SynthVoiceManager {
     return total;
   }
 
+  diagnosticSnapshot(): VoiceDiagnosticSnapshot {
+    const bySource: Record<string, number> = {};
+    let groups = 0;
+    let physicalVoices = 0;
+    for (const [source, sourceGroups] of this.groups) {
+      groups += sourceGroups.size;
+      const sourceVoices = [...sourceGroups].reduce((total, group) => total + group.voices.length, 0);
+      physicalVoices += sourceVoices;
+      if (sourceVoices > 0) bySource[source] = sourceVoices;
+    }
+    return { groups, physicalVoices, registered: this.registered.size, bySource };
+  }
+
   /**
    * Re-books every pending teardown against the audio clock as it reads NOW.
    *
@@ -325,7 +367,7 @@ export class SynthVoiceManager {
    * wall clock and cuts no graph.
    */
   rearmTeardowns(): void {
-    if (this.offline) return;
+    if (this.disposed || this.offline) return;
     for (const groups of this.groups.values()) {
       for (const group of groups) {
         if (!group.cancelTeardown || group.teardownAt === null) continue;
@@ -335,6 +377,7 @@ export class SynthVoiceManager {
   }
 
   noteOn(input: SynthVoiceNoteOn): VoiceId | null {
+    if (this.disposed || !this.ctx) return null;
     const destinations = this.options.destinationsFor(input.source);
     if (!destinations) return null;
     return input.synth.patch.common.voiceMode === 'mono'
@@ -605,6 +648,8 @@ export class SynthVoiceManager {
     input: SynthVoiceNoteOn,
     destinations: SubtractiveVoiceDestinations,
   ): VoiceGroup {
+    const ctx = this.ctx;
+    if (!ctx) throw new Error('SynthVoiceManager is disposed');
     const { patch } = input.synth;
     const create = this.options.createVoice ?? voiceFactoryFor(input.synth.engine);
     const scaleFactor = input.scaleFactor ?? 1;
@@ -620,7 +665,7 @@ export class SynthVoiceManager {
         unisonIndex,
         scaleFactor,
       };
-      const voice = create(this.options.ctx, patch, event, destinations);
+      const voice = create(ctx, patch, event, destinations);
       this.options.lfoBank?.connectVoice(voice, patch.synth.lfo, input.at);
       voices.push(voice);
     }
@@ -733,7 +778,7 @@ export class SynthVoiceManager {
       this.forgetGroup(group);
       return;
     }
-    const delayMs = Math.max(0, (endsAt - this.options.ctx.currentTime) * 1000);
+    const delayMs = Math.max(0, (endsAt - (this.ctx?.currentTime ?? endsAt)) * 1000);
     group.cancelTeardown = this.schedule(() => this.finishTeardown(group), delayMs);
   }
 

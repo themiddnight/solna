@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+/* eslint-disable max-lines -- disposal uses the same strict Web Audio graph fake as the LFO lifecycle suite. */
 import type { LfoParams, ModRoute, ModTarget, NoteDivision } from '@/types/synth';
 import { fakeAutomationParam } from '../engineTestHelpers';
 import { createSampleHoldBuffer, phasePeriodicWave, SynthLfoBank, type LfoDestination, type LfoVoiceHandle } from './synthLfo';
@@ -207,6 +208,28 @@ function oscSource(voice: LfoVoiceHandle): ReturnType<FakeLfoContext['createOsci
 }
 
 describe('SynthLfoBank trigger ownership', () => {
+  test('dispose stops and disconnects every owned generator and pending teardown idempotently', () => {
+    const ctx = fakeLfoContext();
+    const bank = new SynthLfoBank(asCtx(ctx));
+    const transportVoice = fakeVoice('synth');
+    const noteVoice = fakeVoice('lead');
+    bank.connectVoice(transportVoice, lfoParams(), 0);
+    bank.connectVoice(noteVoice, lfoParams({ triggerMode: 'note' }), 0);
+    bank.setTransportOrigin(1);
+
+    bank.dispose(2);
+    bank.dispose(2);
+
+    expect(ctx.oscillators.every((node) => node.stopped)).toBe(true);
+    expect(ctx.oscillators.every((node) => node.connections.length === 0)).toBe(true);
+    expect(ctx.gains.every((node) => node.connections.length === 0)).toBe(true);
+    expect(transportVoice.lfoSource).toBeUndefined();
+    expect(noteVoice.lfoSource).toBeUndefined();
+    const oscillatorCount = ctx.oscillators.length;
+    bank.connectVoice(fakeVoice('synth'), lfoParams(), 3);
+    expect(ctx.oscillators).toHaveLength(oscillatorCount);
+  });
+
   test('transport-triggered voices on the same channel share one generator', () => {
     const ctx = fakeLfoContext();
     const bank = new SynthLfoBank(asCtx(ctx));

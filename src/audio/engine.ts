@@ -1,17 +1,53 @@
 import { type BeatVoices, MasterEffects, FilterType } from '../types';
 import { STEPS_PER_BAR } from '../utils/musicTheory';
-import type { Meter } from '../utils/meter';
+import { DEFAULT_METER_ID, getMeter as resolveMeter, type Meter } from '../utils/meter';
 import { DEFAULT_VELOCITY } from './constants';
 import type { ActiveSynth } from '@/types/synth';
 import type { VoiceOwner } from './voiceOwner';
 import { IDLE_SUSPEND_MS, shouldSuspendWhenIdle } from './idleSuspend';
-import { MasterRack } from './masterRack';
-import { DrumSynth } from './drumSynth';
-import { Clock } from './clock';
-import { SynthVoiceManager } from './synth/voiceManager';
-import { SynthLfoBank } from './synth/synthLfo';
+import type { SourceBusState } from './masterRack';
 import type { VoiceId } from './synth/voiceId';
 import type { EngineHooks } from './masterRack';
+import { audioLatencySnapshot, type AudioDiagnosticSnapshot } from './diagnostics';
+import type { SourceBusApplyMode } from './automation/sourceBusAutomation';
+import { AudioSession } from './runtime/audioSession';
+import { AudioHealthMonitor, type AudioClockEvidence, type AudioHealthSnapshot, type HealthMonitorScheduler } from './runtime/healthMonitor';
+import { detectRuntimeProfile, type RuntimeEnvironment, type RuntimeProfile } from './runtime/profile';
+import { runtimePolicyFor, type AudioRuntimePolicy } from './runtime/policy';
+
+export const SESSION_CLOSE_TIMEOUT_MS = 1000;
+
+export type AudioRecoveryResult =
+  | { ok: true; generation: number }
+  | { ok: false; generation: number; reason: 'construct' | 'resume' | 'build' };
+
+function browserRuntimeEnvironment(): RuntimeEnvironment {
+  const nav = typeof navigator === 'undefined' ? null : navigator;
+  const standalone = typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(display-mode: standalone)').matches;
+  return {
+    userAgent: nav?.userAgent ?? '',
+    platform: nav?.platform ?? '',
+    maxTouchPoints: nav?.maxTouchPoints ?? 0,
+    standalone,
+  };
+}
+
+function defaultRealtimeContext(): AudioContext {
+  const AudioContextClass = window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  return new AudioContextClass();
+}
+
+function closeRealtimeContextBestEffort(context: AudioContext): void {
+  try {
+    void Promise.resolve(context.close()).catch(() => {});
+  } catch {
+    // A replacement that never became a session still must not leak a close
+    // failure outside the recovery result union.
+  }
+}
 
 export class AudioEngine {
   /**
@@ -23,7 +59,52 @@ export class AudioEngine {
    * has. Every realtime-only path narrows back through `realtimeCtx()` below
    * rather than assuming the narrower type.
    */
-  private ctx: BaseAudioContext | null = null;
+  private session: AudioSession | null = null;
+  private nextGeneration = 1;
+  private readonly runtimePolicy: AudioRuntimePolicy;
+  private readonly healthMonitor: AudioHealthMonitor;
+  private readonly createRealtimeContext: () => AudioContext;
+  private readonly delay: ((milliseconds: number) => Promise<void>) | null;
+  private readonly now: () => number;
+  private readonly isVisible: () => boolean;
+  private clockSubscriberCount = 0;
+  private readonly runtimeProfile: RuntimeProfile;
+  private recoveryInFlight: Promise<AudioRecoveryResult> | null = null;
+  private recoveryToken = 0;
+
+  constructor(options: {
+    createRealtimeContext?: () => AudioContext;
+    healthScheduler?: HealthMonitorScheduler;
+    runtimeEnvironment?: RuntimeEnvironment;
+    now?: () => number;
+    isVisible?: () => boolean;
+    delay?: (milliseconds: number) => Promise<void>;
+  } = {}) {
+    this.createRealtimeContext = options.createRealtimeContext ?? defaultRealtimeContext;
+    this.delay = options.delay ?? null;
+    this.now = options.now ?? (() => performance.now());
+    this.isVisible = options.isVisible ??
+      (() => globalThis.document?.visibilityState !== 'hidden');
+    this.runtimeProfile = detectRuntimeProfile(
+      options.runtimeEnvironment ?? browserRuntimeEnvironment(),
+    );
+    this.runtimePolicy = runtimePolicyFor(this.runtimeProfile);
+    this.healthMonitor = new AudioHealthMonitor({
+      policy: this.runtimePolicy,
+      getContext: () => this.realtimeCtx(),
+      now: this.now,
+      isVisible: this.isVisible,
+      scheduler: options.healthScheduler,
+    });
+  }
+
+  // Compatibility aliases for the existing subsystem test harness. These are
+  // views of the current generation, never independently owned objects.
+  private get masterRack() { return this.session?.masterRack ?? null; }
+  private get drumSynth() { return this.session?.drumSynth ?? null; }
+  private get clock() { return this.session?.clock ?? null; }
+  private get synthManager() { return this.session?.synthManager ?? null; }
+  private get lfoBank() { return this.session?.lfoBank ?? null; }
   private isInitialized = false;
 
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,78 +129,90 @@ export class AudioEngine {
     realtimeCtx: () => this.realtimeCtx(),
   };
 
-  /**
-   * The composed subsystems, built in dependency order: the master rack owns the
-   * context-bound node graph the other three connect into, so it is constructed
-   * first and handed to each of them.
-   */
-  private readonly masterRack = new MasterRack();
-  private readonly drumSynth = new DrumSynth(this.masterRack, this.hooks);
-  private readonly clock = new Clock(this.masterRack, this.hooks);
-
-  /**
-   * The synth, and the LFO bank its voices join. Both are context-bound and
-   * therefore null until `init()` or `bindContext()` — the same "setters
-   * no-op before the first user click" contract every other engine method
-   * follows, which is why `triggerSynthNoteOn` returns `null` rather than
-   * throwing.
-   */
-  private synthManager: SynthVoiceManager | null = null;
-  private lfoBank: SynthLfoBank | null = null;
-  /** The clock subscription that phase-locks transport LFOs; dropped on rebind. */
-  private stopTransportOriginSync: (() => void) | null = null;
-
   // --- delegates to the composed subsystems --------------------------------
 
   // MasterRack
-  setMasterVolume(vol: number): void { this.masterRack.setMasterVolume(vol); }
+  setMasterVolume(vol: number): void { this.session?.masterRack.setMasterVolume(vol); }
 
-  setReverbDecay(decay: number): void { this.masterRack.setReverbDecay(decay); }
+  setReverbDecay(decay: number): void { this.session?.masterRack.setReverbDecay(decay); }
 
   setSourceGain(source: string, volume: number, time?: number): void {
-    this.masterRack.setSourceGain(source, volume, time);
+    this.session?.masterRack.setSourceGain(source, volume, time);
   }
 
   setSourceMuted(source: string, muted: boolean, time?: number): void {
-    this.masterRack.setSourceMuted(source, muted, time);
+    this.session?.masterRack.setSourceMuted(source, muted, time);
   }
 
-  updateEffects(raw: Omit<MasterEffects, 'reverbDecay'>): void { this.masterRack.updateEffects(raw); }
+  setSourceState(
+    source: string,
+    state: SourceBusState,
+    time?: number,
+    mode?: SourceBusApplyMode,
+  ): void {
+    this.session?.masterRack.setSourceState(source, state, time, mode);
+  }
 
-  getAnalyser(): AnalyserNode | null { return this.masterRack.getAnalyser(); }
+  updateEffects(raw: Omit<MasterEffects, 'reverbDecay'>): void { this.session?.masterRack.updateEffects(raw); }
 
-  getMasterLevelAnalyser(): AnalyserNode | null { return this.masterRack.getMasterLevelAnalyser(); }
+  getAnalyser(): AnalyserNode | null { return this.session?.masterRack.getAnalyser() ?? null; }
+
+  getMasterLevelAnalyser(): AnalyserNode | null { return this.session?.masterRack.getMasterLevelAnalyser() ?? null; }
 
   getSourceAnalyser(source: string): AnalyserNode | null {
-    return this.masterRack.getSourceAnalyser(source);
+    return this.session?.masterRack.getSourceAnalyser(source) ?? null;
   }
 
   getSourceLevelAnalyser(source: string): AnalyserNode | null {
-    return this.masterRack.getSourceLevelAnalyser(source);
+    return this.session?.masterRack.getSourceLevelAnalyser(source) ?? null;
   }
 
   getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {
-    this.masterRack.getByteFrequencyData(array);
+    this.session?.masterRack.getByteFrequencyData(array);
   }
 
   getByteTimeDomainData(array: Uint8Array<ArrayBuffer>): void {
-    this.masterRack.getByteTimeDomainData(array);
+    this.session?.masterRack.getByteTimeDomainData(array);
   }
 
-  getCompressorReduction(): number { return this.masterRack.getCompressorReduction(); }
+  getCompressorReduction(): number { return this.session?.masterRack.getCompressorReduction() ?? 0; }
 
-  getLimiterReduction(): number { return this.masterRack.getLimiterReduction(); }
+  getLimiterReduction(): number { return this.session?.masterRack.getLimiterReduction() ?? 0; }
 
   // Clock
-  setMetronomeEnabled(enabled: boolean): void { this.clock.setMetronomeEnabled(enabled); }
+  setMetronomeEnabled(enabled: boolean): void { this.session?.clock.setMetronomeEnabled(enabled); }
 
-  isMetronomeEnabled(): boolean { return this.clock.isMetronomeEnabled(); }
+  isMetronomeEnabled(): boolean { return this.session?.clock.isMetronomeEnabled() ?? false; }
 
   subscribeClock(listener: (step: number, beat: number, time: number) => void): () => void {
-    return this.clock.subscribeClock(listener);
+    const session = this.session;
+    if (!session) return () => {};
+    const unsubscribeClock = session.clock.subscribeClock(listener);
+    const monitorsRealtime = session.realtimeCtx() !== null;
+    if (monitorsRealtime) {
+      this.clockSubscriberCount += 1;
+      if (this.clockSubscriberCount === 1) this.healthMonitor.start();
+    }
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      unsubscribeClock();
+      if (!monitorsRealtime) return;
+      this.clockSubscriberCount = Math.max(0, this.clockSubscriberCount - 1);
+      if (this.clockSubscriberCount === 0) this.healthMonitor.stop();
+    };
   }
 
-  scheduleAfterClockStep(task: () => void): void { this.clock.scheduleAfterCurrentStep(task); }
+  subscribeHealth(listener: (snapshot: AudioHealthSnapshot) => void): () => void {
+    return this.healthMonitor.subscribe(listener);
+  }
+
+  getRecentAudioHealthSamples(): readonly AudioClockEvidence[] {
+    return this.healthMonitor.recentSamples();
+  }
+
+  scheduleAfterClockStep(task: () => void): void { this.session?.clock.scheduleAfterCurrentStep(task); }
 
   /**
    * Tempo reaches TWO subsystems: the 16th grid, and every sync-rated LFO
@@ -127,23 +220,24 @@ export class AudioEngine {
    * rather than on the next note, so a tempo change is heard on a held pad.
    */
   setClockBpm(bpm: number): void {
-    this.clock.setClockBpm(bpm);
-    if (this.ctx) this.lfoBank?.setBpm(bpm, this.ctx.currentTime);
+    const session = this.session;
+    session?.clock.setClockBpm(bpm);
+    if (session) session.lfoBank.setBpm(bpm, session.context.currentTime);
   }
 
-  setMeter(meter: Meter): void { this.clock.setMeter(meter); }
+  setMeter(meter: Meter): void { this.session?.clock.setMeter(meter); }
 
-  getMeter(): Meter { return this.clock.getMeter(); }
+  getMeter(): Meter { return this.session?.clock.getMeter() ?? resolveMeter(DEFAULT_METER_ID); }
 
-  resetClock(atTime?: number): void { this.clock.resetClock(atTime); }
+  resetClock(atTime?: number): void { this.session?.clock.resetClock(atTime); }
 
   playMetronomeClick(isDownbeat = false, time?: number): void {
-    this.clock.playMetronomeClick(isDownbeat, time);
+    this.session?.clock.playMetronomeClick(isDownbeat, time);
   }
 
   // DrumSynth
   triggerDrum(type: string, velocity = DEFAULT_VELOCITY, time?: number): void {
-    this.drumSynth.triggerDrum(type, velocity, time);
+    this.session?.drumSynth.triggerDrum(type, velocity, time);
   }
 
   /**
@@ -154,22 +248,22 @@ export class AudioEngine {
    * it somebody else's trim — or none.
    */
   setDrumKit(voices: BeatVoices, outputTrimDb: number): void {
-    this.drumSynth.setDrumKit(voices, outputTrimDb);
+    this.session?.drumSynth.setDrumKit(voices, outputTrimDb);
   }
 
   setBeatFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
-    this.drumSynth.setBeatFilter(cutoff, resonance, type, time);
+    this.session?.drumSynth.setBeatFilter(cutoff, resonance, type, time);
   }
 
   setDrumTrackGain(instrument: string, gain: number, time?: number): void {
-    this.drumSynth.setDrumTrackGain(instrument, gain, time);
+    this.session?.drumSynth.setDrumTrackGain(instrument, gain, time);
   }
 
   __drumTrackGainValueForTests(instrument: string): number | undefined {
-    return this.drumSynth.__drumTrackGainValueForTests(instrument);
+    return this.session?.drumSynth.__drumTrackGainValueForTests(instrument);
   }
 
-  __drumTrackGainCountForTests(): number { return this.drumSynth.__drumTrackGainCountForTests(); }
+  __drumTrackGainCountForTests(): number { return this.session?.drumSynth.__drumTrackGainCountForTests() ?? 0; }
 
   // SynthVoiceManager
   /**
@@ -201,13 +295,14 @@ export class AudioEngine {
     scaleFactor: number,
     owner: VoiceOwner,
   ): VoiceId | null {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return null;
+    const session = this.session;
+    if (!session) return null;
+    const ctx = session.context;
     // wakeIfIdle() re-arms the idle countdown itself on every reachable path,
     // so there is no second markActivity() here. Every caller reaches this
     // choke point, MIDI input included, which has no gesture path of its own.
     this.hooks.wakeIfIdle();
-    return this.synthManager.noteOn({
+    return session.synthManager.noteOn({
       source,
       owner,
       frequency,
@@ -220,9 +315,9 @@ export class AudioEngine {
 
   /** Releases exactly the voice `voiceId` names. Unknown or already-released ids are a no-op. */
   triggerSynthNoteOff(voiceId: VoiceId, releaseSeconds = 0.3, time?: number): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return;
-    this.synthManager.noteOff(voiceId, time ?? ctx.currentTime, releaseSeconds);
+    const session = this.session;
+    if (!session) return;
+    session.synthManager.noteOff(voiceId, time ?? session.context.currentTime, releaseSeconds);
   }
 
   /**
@@ -232,9 +327,9 @@ export class AudioEngine {
    * clock has planned.
    */
   releaseSoundingVoices(source: string, releaseTime: number, owner: VoiceOwner): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return;
-    this.synthManager.releaseOwner(source, owner, ctx.currentTime, releaseTime);
+    const session = this.session;
+    if (!session) return;
+    session.synthManager.releaseOwner(source, owner, session.context.currentTime, releaseTime);
   }
 
   /**
@@ -243,9 +338,9 @@ export class AudioEngine {
    * name and can never be reached by omitting an argument to a narrower one.
    */
   stopSource(source: string, releaseTime = 0.1, time?: number): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return;
-    this.synthManager.stopSource(source, time ?? ctx.currentTime, releaseTime);
+    const session = this.session;
+    if (!session) return;
+    session.synthManager.stopSource(source, time ?? session.context.currentTime, releaseTime);
   }
 
   /**
@@ -259,9 +354,9 @@ export class AudioEngine {
     releaseTime = 0.1,
     time?: number,
   ): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return;
-    this.synthManager.stopOwner(source, owner, time ?? ctx.currentTime, releaseTime);
+    const session = this.session;
+    if (!session) return;
+    session.synthManager.stopOwner(source, owner, time ?? session.context.currentTime, releaseTime);
   }
 
   /**
@@ -276,13 +371,13 @@ export class AudioEngine {
    * sequenced material is never ducked by a key-down.
    */
   applySynthVelocityScale(scale: number, source: string): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return;
-    this.synthManager.setPolyphonyScale(source, scale, ctx.currentTime);
+    const session = this.session;
+    if (!session) return;
+    session.synthManager.setPolyphonyScale(source, scale, session.context.currentTime);
   }
 
   dropVoicesScheduledFrom(source: string, time: number): void {
-    this.synthManager?.dropScheduledFrom(source, time);
+    this.session?.synthManager.dropScheduledFrom(source, time);
   }
 
   /**
@@ -291,9 +386,9 @@ export class AudioEngine {
    * the next note, and a change of voice MODE releases the bus instead.
    */
   updateSynthPatch(previous: ActiveSynth, next: ActiveSynth, source: string): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.synthManager) return;
-    this.synthManager.updatePatch(source, previous, next, ctx.currentTime);
+    const session = this.session;
+    if (!session) return;
+    session.synthManager.updatePatch(source, previous, next, session.context.currentTime);
   }
 
   /**
@@ -316,25 +411,25 @@ export class AudioEngine {
    * the engine suite's idle-suspend tests drive resume()/suspend() through it.
    */
   private realtimeCtx(): AudioContext | null {
-    const ctx = this.ctx;
-    if (!ctx || 'startRendering' in ctx) return null;
-    return ctx as AudioContext;
+    return this.session?.realtimeCtx() ?? null;
   }
 
   async init(): Promise<void> {
-    if (!this.ctx) {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioContextClass();
-      this.bindSubsystems();
-      this.masterRack.setupMasterChain();
-      this.clock.createClickBuffers();
+    if (!this.session) {
+      this.invalidatePendingRecovery();
+      const ctx = this.createRealtimeContext();
+      this.session = AudioSession.create(ctx, {
+        ...this.hooks,
+        generation: this.nextGeneration++,
+      });
+      this.healthMonitor.resetGeneration(this.session.generation);
     }
 
     const ctx = this.realtimeCtx();
     if (ctx?.state === 'suspended') {
       try {
         await ctx.resume();
-        this.synthManager?.rearmTeardowns();
+        this.session?.synthManager.rearmTeardowns();
         // This resume already happened, whoever it was for — a stale true
         // here would make the next wakeIfIdle() redundantly resume() and
         // sweep every voice's teardown again for nothing.
@@ -360,55 +455,131 @@ export class AudioEngine {
    * engineSync.ts, and never outlives its `startRendering()` call.
    */
   bindContext(ctx: BaseAudioContext): void {
-    this.ctx = ctx;
-    this.bindSubsystems();
-    this.masterRack.setupMasterChain();
+    this.invalidatePendingRecovery();
+    const previous = this.session;
+    this.session = AudioSession.create(ctx, {
+      ...this.hooks,
+      generation: this.nextGeneration++,
+    });
+    this.healthMonitor.resetGeneration(this.session.generation);
+    if (previous) void previous.dispose();
   }
 
-  /**
-   * Hands the engine's context to every subsystem at once. Each subsystem keeps
-   * its OWN reference and may not read the engine's, so they are bound together —
-   * from `init()` and from `bindContext()` — never one at a time.
-   */
-  private bindSubsystems(): void {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    this.masterRack.bind(ctx);
-    this.drumSynth.bind(ctx);
-    this.clock.bind(ctx);
-    this.bindSynth(ctx);
+  private invalidatePendingRecovery(): void {
+    this.recoveryToken += 1;
+    this.recoveryInFlight = null;
   }
 
-  /**
-   * Builds the synth and its LFO bank on `ctx`, and wires the one edge Task 5
-   * deliberately left open: the clock's transport origin.
-   *
-   * A transport-triggered LFO is ONE phase-locked generator per bus, and the
-   * instant it locks to has to be the instant the grid anchors step 0 to —
-   * `Clock.resetClock` publishes exactly that resolved time, never a separate
-   * read of `currentTime`, so the LFO and the grid cannot drift apart by the
-   * width of a re-anchor.
-   *
-   * Idempotent across a rebind: the previous subscription is dropped first, or
-   * a re-bound engine would hold a listener writing into a bank whose context
-   * is gone.
-   */
-  private bindSynth(ctx: BaseAudioContext): void {
-    this.stopTransportOriginSync?.();
-    const lfoBank = new SynthLfoBank(ctx);
-    this.lfoBank = lfoBank;
-    this.synthManager = new SynthVoiceManager({
-      ctx,
-      // Null until the master chain exists, which is what makes a note-on
-      // before the first user click a no-op rather than a throw:
-      // getSourceTap() raises without dryGain.
-      destinationsFor: (source) =>
-        this.masterRack.dryGain ? { output: this.masterRack.getSourceTap(source) } : null,
-      lfoBank,
+  getRuntimeProfile(): RuntimeProfile {
+    return { ...this.runtimeProfile };
+  }
+
+  recreateRealtimeSession(): Promise<AudioRecoveryResult> {
+    if (this.recoveryInFlight) return this.recoveryInFlight;
+    const token = ++this.recoveryToken;
+    const recovery = this.performRealtimeRecreation(token);
+    this.recoveryInFlight = recovery;
+    void recovery.finally(() => {
+      if (this.recoveryToken === token) this.recoveryInFlight = null;
     });
-    this.stopTransportOriginSync = this.clock.subscribeTransportOrigin((time) => {
-      lfoBank.setTransportOrigin(time);
+    return recovery;
+  }
+
+  private async performRealtimeRecreation(token: number): Promise<AudioRecoveryResult> {
+    const oldSession = this.session;
+    const generation = this.nextGeneration++;
+
+    // All three calls below happen in the initiating gesture turn, before the
+    // first await: close old, construct replacement, then request resume.
+    let oldDisposal: Promise<void>;
+    try {
+      oldDisposal = (oldSession?.dispose() ?? Promise.resolve()).catch(() => {});
+    } catch {
+      oldDisposal = Promise.resolve();
+    }
+    let replacementContext: AudioContext;
+    try {
+      replacementContext = this.createRealtimeContext();
+    } catch {
+      return { ok: false, generation, reason: 'construct' };
+    }
+
+    let resumed: Promise<void>;
+    try {
+      resumed = Promise.resolve(replacementContext.resume());
+    } catch {
+      closeRealtimeContextBestEffort(replacementContext);
+      return { ok: false, generation, reason: 'resume' };
+    }
+
+    try {
+      await resumed;
+    } catch {
+      closeRealtimeContextBestEffort(replacementContext);
+      return { ok: false, generation, reason: 'resume' };
+    }
+    if (this.recoveryToken !== token) {
+      closeRealtimeContextBestEffort(replacementContext);
+      return { ok: false, generation, reason: 'build' };
+    }
+
+    let replacement: AudioSession;
+    try {
+      replacement = AudioSession.create(replacementContext, {
+        ...this.hooks,
+        generation,
+      });
+    } catch {
+      closeRealtimeContextBestEffort(replacementContext);
+      return { ok: false, generation, reason: 'build' };
+    }
+    if (this.recoveryToken !== token) {
+      void replacement.dispose();
+      return { ok: false, generation, reason: 'build' };
+    }
+
+    this.session = replacement;
+    this.suspendedForIdle = false;
+    this.healthMonitor.resetGeneration(generation);
+    await this.waitForOldDisposal(oldDisposal);
+    return { ok: true, generation };
+  }
+
+  private async waitForOldDisposal(disposal: Promise<void>): Promise<void> {
+    if (this.delay) {
+      await Promise.race([disposal, this.delay(SESSION_CLOSE_TIMEOUT_MS)]).catch(() => {});
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, SESSION_CLOSE_TIMEOUT_MS);
+      void disposal.finally(() => {
+        clearTimeout(timeout);
+        resolve();
+      });
     });
+  }
+
+  async validateRealtimeClock(): Promise<boolean> {
+    const session = this.session;
+    const ctx = session?.realtimeCtx() ?? null;
+    if (!session || !ctx || ctx.state !== 'running' || !this.isVisible()) return false;
+    const wallStart = this.now();
+    const audioStart = ctx.currentTime;
+    try {
+      if (this.delay) await this.delay(this.runtimePolicy.sampleIntervalMs);
+      else await new Promise<void>((resolve) => setTimeout(resolve, this.runtimePolicy.sampleIntervalMs));
+    } catch {
+      return false;
+    }
+    if (this.session?.generation !== session.generation) return false;
+    if (ctx.state !== 'running' || !this.isVisible()) return false;
+    const wallElapsedMs = this.now() - wallStart;
+    const audioElapsedSec = ctx.currentTime - audioStart;
+    if (wallElapsedMs <= 0 || wallElapsedMs > this.runtimePolicy.maxWallGapMs) return false;
+    const ratio = audioElapsedSec / (wallElapsedMs / 1000);
+    return Number.isFinite(ratio) &&
+      ratio >= this.runtimePolicy.minClockRatio &&
+      ratio <= this.runtimePolicy.maxClockRatio;
   }
 
   /**
@@ -419,7 +590,32 @@ export class AudioEngine {
    * freezes that tail rather than finishing it.
    */
   liveVoiceCount(): number {
-    return this.synthManager?.liveVoiceCount() ?? 0;
+    return this.session?.synthManager.liveVoiceCount() ?? 0;
+  }
+
+  /** A read-only view of audio health for the opt-in local diagnostics recorder. */
+  getDiagnosticSnapshot(): AudioDiagnosticSnapshot {
+    const session = this.session;
+    const ctx = session?.context ?? null;
+    const latency = audioLatencySnapshot(ctx);
+    return {
+      contextState: ctx?.state ?? 'uninitialized',
+      currentTimeSec: ctx?.currentTime ?? null,
+      ...latency,
+      clock: session?.clock.diagnosticSnapshot() ?? {
+        listeners: 0,
+        dispatches: 0,
+        stalls: 0,
+        maxStallMs: 0,
+      },
+      voices: session?.synthManager.diagnosticSnapshot() ?? {
+        groups: 0,
+        physicalVoices: 0,
+        registered: 0,
+        bySource: {},
+      },
+      health: this.healthMonitor.snapshot(),
+    };
   }
 
   /**
@@ -429,7 +625,7 @@ export class AudioEngine {
    */
   private markActivity(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer);
-    if (!this.ctx) return;
+    if (!this.session) return;
     this.idleTimer = setTimeout(() => this.maybeSuspendNow(), IDLE_SUSPEND_MS);
   }
 
@@ -438,7 +634,7 @@ export class AudioEngine {
     const ctx = this.realtimeCtx();
     if (!ctx) return;
     const ok = shouldSuspendWhenIdle({
-      clockListenerCount: this.clock.listenerCount(),
+      clockListenerCount: this.session?.clock.listenerCount() ?? 0,
       liveVoiceCount: this.liveVoiceCount(),
       contextState: ctx.state,
     });
@@ -502,12 +698,12 @@ export class AudioEngine {
     // .then() above. It protects a fake context that resolves resume() on a
     // microtask, and a real one that may take a frame, from either letting a
     // stale wall-clock timer fire first.
-    this.synthManager?.rearmTeardowns();
+    this.session?.synthManager.rearmTeardowns();
     this.markActivity();
   }
 
   getAudioContext(): BaseAudioContext | null {
-    return this.ctx;
+    return this.session?.context ?? null;
   }
 
 }
