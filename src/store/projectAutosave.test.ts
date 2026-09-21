@@ -98,7 +98,7 @@ describe('createProjectAutosave', () => {
     const { api, setState, saves } = fakeApi({ bpm: 120 });
     const autosave = createProjectAutosave(api, { scheduler });
     autosave.arm();
-    setState({ focusTrack: 'bass', activeTab: 'arrange', playheadBeat: 3 });
+    setState({ focusTrack: 'bass', activeTab: 'arrange', playheadChordIndex: 3 });
     drain();
     expect(saves).toHaveLength(0);
   });

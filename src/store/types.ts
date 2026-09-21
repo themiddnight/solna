@@ -49,14 +49,11 @@ export interface TransportSlice {
   chordsPlayer: PlayerState;
   leadPlayer: PlayerState;
   fxPlayer: PlayerState;
-  // Transient playhead (not persisted): `playheadBeat` is the absolute beat
-  // index since the shared clock was reset, so every consumer measures from the
-  // same origin; the chord fields say which chord the Chords player is sounding
-  // and the beat it began on.
-  playheadBeat: number | null;
+  // Transient playhead (not persisted): which chord the Chords player is
+  // sounding and the beat it began on. The beat itself is high-frequency and
+  // lives outside the store, in a local pub/sub under `components/`.
   playheadChordIndex: number | null;
   playheadChordStartBeat: number;
-  setPlayheadBeat: (beat: number | null) => void;
   setPlayheadChord: (chordIndex: number | null, startBeat?: number) => void;
   /** Transient song-mode cursor: index into loops[] currently sounding, null = loop mode. */
   songLoopIndex: number | null;

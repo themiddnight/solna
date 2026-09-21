@@ -268,7 +268,6 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
     chordsPlayer: 'stopped',
     leadPlayer: 'stopped',
     fxPlayer: 'stopped',
-    playheadBeat: null,
     playheadChordIndex: null,
     playheadChordStartBeat: 0,
     songLoopIndex: null,
@@ -276,7 +275,6 @@ export function createTransportSlice(set: Set, _get: Get): TransportSlice {
 
     playbackScope: SCOPE_NONE,
 
-    setPlayheadBeat: (playheadBeat) => set({ playheadBeat }),
     setPlayheadChord: (playheadChordIndex, startBeat = 0) =>
       set({ playheadChordIndex, playheadChordStartBeat: playheadChordIndex === null ? 0 : startBeat }),
 

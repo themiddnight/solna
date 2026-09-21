@@ -8,6 +8,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useAppStore } from '@/store/store';
+import { usePlayheadBeat } from '@/components/playheadBeat';
 import { useChordPlayback } from './useChordPlayback';
 import {
   resolvePlaybackBassCycle,
@@ -56,7 +57,7 @@ import type { ChordItem, CustomChordProgressionItem } from '@/types';
 export function useChordViewState() {
   const chords = useAppStore((s) => s.chords);
   const setChords = useAppStore((s) => s.setChords);
-  const playheadBeat = useAppStore((s) => s.playheadBeat);
+  const playheadBeat = usePlayheadBeat();
   const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);
   const playheadChordStartBeat = useAppStore((s) => s.playheadChordStartBeat);
   const meterId = useAppStore((s) => s.meterId);
@@ -543,7 +544,7 @@ export type PatternPreviews = ReturnType<typeof usePatternPreviews>;
 /**
  * The quick-add palette's two rows and the library counter. Both memos call
  * into tonal, and ChordView re-renders twice a second at 120 BPM
- * (playheadBeat), so they must stay memoized.
+ * (the local playhead-beat publisher), so they must stay memoized.
  */
 export function useChordPalette(
   scaleRoot: string,

@@ -1,4 +1,5 @@
 import { audioEngine } from '@/audio/engine';
+import { playheadBeat } from '@/components/playheadBeat';
 import { useAppStore } from '@/store/store';
 import { createDiagnosticRecorder } from './recorder';
 import { diagnosticSessionStore } from './storage';
@@ -84,7 +85,7 @@ export const diagnosticRecorder = createDiagnosticRecorder({
   captureBase,
   scheduleEverySecond,
   subscribeStore: (listener) => useAppStore.subscribe(listener),
-  subscribePlayhead: (listener) => useAppStore.subscribe((state) => state.playheadBeat, listener),
+  subscribePlayhead: (listener) => playheadBeat.subscribe(() => listener()),
   observeFrameGaps,
   observeLongTasks,
   onPageHide,

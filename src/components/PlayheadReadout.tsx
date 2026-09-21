@@ -4,6 +4,7 @@ import { beatsPerBarFor, resolveBeatCounter, resolveNowNext } from '../utils/pla
 import { BeatDots } from './ui/BeatDots';
 import { NowNextChord } from './ui/NowNextChord';
 import { markDiagnosticRender } from '@/diagnostics/renderCounts';
+import { usePlayheadBeat } from './playheadBeat';
 
 /**
  * Header readout: which chord is sounding, which one is queued, and where the
@@ -12,7 +13,7 @@ import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 export function PlayheadReadout({ className = '' }: { className?: string }) {
   markDiagnosticRender('PlayheadReadout');
   const chords = useAppStore((s) => s.chords);
-  const playheadBeat = useAppStore((s) => s.playheadBeat);
+  const playheadBeat = usePlayheadBeat();
   const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);
   const playheadChordStartBeat = useAppStore((s) => s.playheadChordStartBeat);
   const meterId = useAppStore((s) => s.meterId);
