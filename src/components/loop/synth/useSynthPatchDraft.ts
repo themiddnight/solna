@@ -163,16 +163,16 @@ export function useSynthPatchDraft(channel: SynthChannel, source: SynthControlTa
       machine.onPatch(next);
       forceRender();
     },
-    [machine],
+    [machine, forceRender],
   );
   const onCommit = useCallback(() => {
     machine.commit((synth) => channelRef.current.setActiveSynth(synth));
     forceRender();
-  }, [machine]);
+  }, [machine, forceRender]);
   const onCancel = useCallback(() => {
     machine.cancel();
     forceRender();
-  }, [machine]);
+  }, [machine, forceRender]);
 
   return {
     patch: machine.getDraft(),

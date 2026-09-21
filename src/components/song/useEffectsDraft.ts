@@ -122,16 +122,16 @@ export function useEffectsDraft(
       machine.onPatch(updates);
       forceRender();
     },
-    [machine],
+    [machine, forceRender],
   );
   const onCommit = useCallback(() => {
     machine.commit((effects) => setEffectsRef.current(effects));
     forceRender();
-  }, [machine]);
+  }, [machine, forceRender]);
   const onCancel = useCallback(() => {
     machine.cancel();
     forceRender();
-  }, [machine]);
+  }, [machine, forceRender]);
 
   return {
     effects: machine.getDraft(),

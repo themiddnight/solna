@@ -170,16 +170,16 @@ export function useBeatParamDraft(
       machine.update(updater);
       forceRender();
     },
-    [machine],
+    [machine, forceRender],
   );
   const commit = useCallback(() => {
     machine.commit((params) => commitParamsRef.current(params));
     forceRender();
-  }, [machine]);
+  }, [machine, forceRender]);
   const cancel = useCallback(() => {
     machine.cancel();
     forceRender();
-  }, [machine]);
+  }, [machine, forceRender]);
 
   return {
     draft: machine.getDraft(),
