@@ -30,7 +30,7 @@ afterEach(() => {
 describe('the vibe chip highlight is cleared by an activeLoopId change', () => {
   test('changing the active loop clears it', () => {
     useAppStore.setState({ selectedVibeId: 'lofi-chill' });
-    useAppStore.getState().setActiveLoop('some-other-loop-id');
+    useAppStore.setState({ activeLoopId: 'some-other-loop-id' });
     expect(useAppStore.getState().selectedVibeId).toBe(null);
   });
 

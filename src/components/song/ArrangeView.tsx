@@ -15,19 +15,21 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { loadLoop } from '@/store/loadLoop';
+import { deleteLoopLive, loadLoop, undoLoopDelete } from '@/store/loadLoop';
 import { loopPlayButton, scopedLoopId, type PlaybackScope } from '@/store/playbackScope';
 import { loopLabel } from '@/store/loop';
 import { loopBars, loopDwellSteps } from '@/utils/songStructure';
 import type { LoopCopyGroupId } from '@/store/loopCopy';
-import type { Loop } from '@/store/types';
+import type { DeletedLoop, Loop } from '@/store/types';
 import { aggregateAllPlayers } from '@/store/transportSlice';
 import { useAppStore } from '@/store/store';
 import { buildRouteUrl } from '@/routing/tabRouting';
 import { getMeter } from '@/utils/meter';
 import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
+import { useTimedToast } from '../ui/useTimedToast';
 import { LoopCopyDialog } from './LoopCopyDialog';
+import { LoopUndoToast } from './LoopUndoToast';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
@@ -221,6 +223,46 @@ function useArrangeDrag(loops: Loop[]) {
   return { sensors, handleDragEnd };
 }
 
+/** How long a loop delete stays undoable. */
+const LOOP_UNDO_MS = 5000;
+
+/**
+ * Delete with Undo. `deleteLoopLive` never stops a running transport: deleting
+ * the loop it is playing loads the fallback in `deleteLoop`'s own single write,
+ * wrapped in the same seam a song advance crosses (the deleted loop's voices
+ * cut, the clock reset). `undoLoopDelete` re-inserts the snapshot and, when it
+ * was the active loop, switches back the same way — or through `loadLoop` when
+ * nothing plays. A project install dismisses a pending Undo.
+ */
+function useLoopDeleteUndo() {
+  const { toast, show, dismiss } = useTimedToast<DeletedLoop>();
+
+  // ArrangeView stays mounted across a project install, and an Undo after one
+  // would re-insert the OLD project's loop into the new one. Dismissed off a
+  // store subscription rather than a selector, so the view never re-renders
+  // for it.
+  useEffect(
+    () => useAppStore.subscribe((s) => s.projectInstallCount, dismiss),
+    [dismiss]
+  );
+
+  const onDelete = useCallback(
+    (id: string) => {
+      const deleted = deleteLoopLive(id);
+      if (deleted) show(deleted, LOOP_UNDO_MS);
+    },
+    [show]
+  );
+
+  const onUndoDelete = useCallback(() => {
+    if (!toast) return;
+    undoLoopDelete(toast);
+    dismiss();
+  }, [toast, dismiss]);
+
+  return { deletedLoop: toast, onDelete, onUndoDelete };
+}
+
 /**
  * Every per-card callback the list needs, plus the copy dialog's target. One
  * hook rather than a dozen `useCallback`s threaded through the view body: the
@@ -228,7 +270,7 @@ function useArrangeDrag(loops: Loop[]) {
  */
 function useLoopCardActions() {
   const duplicateLoop = useAppStore((s) => s.duplicateLoop);
-  const deleteLoop = useAppStore((s) => s.deleteLoop);
+  const { deletedLoop, onDelete, onUndoDelete } = useLoopDeleteUndo();
   const reorderLoops = useAppStore((s) => s.reorderLoops);
   const setLoopName = useAppStore((s) => s.setLoopName);
   const setLoopRepeatCount = useAppStore((s) => s.setLoopRepeatCount);
@@ -278,14 +320,6 @@ function useLoopCardActions() {
     [duplicateLoop]
   );
 
-  const onDelete = useCallback(
-    (id: string) => {
-      const fallback = deleteLoop(id);
-      if (fallback !== null) loadLoop(fallback);
-    },
-    [deleteLoop]
-  );
-
   const onCopyInto = useCallback((id: string) => setCopyTargetId(id), []);
 
   const onApplyCopy = useCallback(
@@ -305,6 +339,8 @@ function useLoopCardActions() {
     onDuplicate,
     onCopyInto,
     onDelete,
+    deletedLoop,
+    onUndoDelete,
     onReorder: reorderLoops,
     onRename: setLoopName,
     onSetRepeat: setLoopRepeatCount,
@@ -511,6 +547,10 @@ export const ArrangeView = React.memo(function ArrangeView() {
         playbackScope={playbackScope}
         actions={actions}
       />
+
+      {actions.deletedLoop && (
+        <LoopUndoToast label={loopLabel(actions.deletedLoop.loop)} onUndo={actions.onUndoDelete} />
+      )}
 
       {actions.copyTargetId !== null && (
         <LoopCopyDialog

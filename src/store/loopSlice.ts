@@ -9,11 +9,18 @@ import {
   INITIAL_CHORDS,
 } from './initialState';
 import { defaultBeatState } from './beatPresets';
-import { cloneLoop, fallbackActiveLoopId, newLoopId, nextDuplicateLabel, nextUntitledName } from './loop';
+import {
+  cloneLoop,
+  fallbackActiveLoopId,
+  loopStatePatch,
+  newLoopId,
+  nextDuplicateLabel,
+  nextUntitledName,
+} from './loop';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import { rescopeToLoop, scopedLoopId, SCOPE_NONE } from './playbackScope';
 import { stopAllPlayersPatch } from './transportSlice';
-import type { AppStore, Loop, LoopSlice } from './types';
+import type { AppStore, DeletedLoop, Loop, LoopSlice } from './types';
 import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
@@ -154,10 +161,25 @@ function insertLoopClone(set: Set, get: Get, id: string): string | null {
 }
 
 /**
- * A project always has ≥ 1 loop. Deleting the active loop returns the fallback
- * id so the caller can loadLoop it; deleting any other loop returns null.
+ * A project always has ≥ 1 loop, so deleting the last one (or an unknown id)
+ * returns null and writes nothing. Otherwise the removed loop comes back as a
+ * `DeletedLoop` — the snapshot, its index and whether it was active — which is
+ * everything `restoreLoop` needs to undo the delete.
+ *
+ * Deleting the ACTIVE loop is atomic on its own: the removal, the new
+ * `activeLoopId` and the fallback loop's per-loop fields land in ONE set(),
+ * the same shape `projectSlice.reconcileActiveLoop` writes, so no subscriber
+ * ever sees `activeLoopId` naming a loop whose content the flat slices do not
+ * hold, and no caller has to follow up with `loadLoop`. `loopMirrorPartial`
+ * skips its mirror when `activeLoopId` changes, so the fallback's fields are
+ * never written back into the wrong loop. Nothing here hard-stops, and this
+ * pure-state write touches no audio: `deleteLoopLive` (loadLoop.ts) is what the
+ * UI calls, and it wraps this write in the seam a song advance crosses — the
+ * deleted loop's voices cut, the clock reset — so a running song keeps running
+ * on the fallback from its step 0. Only a loop audition scoped to the deleted
+ * loop stops, through `stopPatch` below.
  */
-function removeLoop(set: Set, get: Get, id: string): string | null {
+function removeLoop(set: Set, get: Get, id: string): DeletedLoop | null {
   const state = get();
   if (state.loops.length <= 1) return null;
   const index = state.loops.findIndex((r) => r.id === id);
@@ -176,22 +198,43 @@ function removeLoop(set: Set, get: Get, id: string): string | null {
     scopedLoopId(state.playbackScope) === id
       ? { playbackScope: SCOPE_NONE, ...stopAllPlayersPatch(state) }
       : {};
+  const deleted: DeletedLoop = { loop: state.loops[index], index, wasActive };
   if (!wasActive) {
     set({
       loops,
       songLoopIndex: songCursor(loops, state.activeLoopId, state.songLoopIndex),
       ...stopPatch,
     });
-    return null;
+    return deleted;
   }
   const fallback = fallbackActiveLoopId(state.loops, id) ?? loops[0].id;
+  const fallbackLoop = loops.find((l) => l.id === fallback) ?? loops[0];
   set({
     loops,
-    activeLoopId: fallback,
-    songLoopIndex: songCursor(loops, fallback, state.songLoopIndex),
+    activeLoopId: fallbackLoop.id,
+    ...loopStatePatch(fallbackLoop),
+    songLoopIndex: songCursor(loops, fallbackLoop.id, state.songLoopIndex),
     ...stopPatch,
   });
-  return fallback;
+  return deleted;
+}
+
+/**
+ * Undo for `removeLoop`: re-inserts the snapshot at its old index (clamped to
+ * the list as it is now) and NEVER activates it — the flat slices keep
+ * describing the active loop, so the state is consistent with no follow-up.
+ * A caller that wants the restored loop active again goes through
+ * `undoLoopDelete` (loadLoop.ts), which re-activates it without stopping a
+ * running transport. Restoring a loop that is already present is a
+ * no-op, so a double Undo cannot duplicate an id.
+ */
+function reinsertLoop(set: Set, deleted: DeletedLoop): void {
+  set((s) => {
+    if (s.loops.some((l) => l.id === deleted.loop.id)) return {};
+    const i = Math.max(0, Math.min(deleted.index, s.loops.length));
+    const loops = [...s.loops.slice(0, i), deleted.loop, ...s.loops.slice(i)];
+    return { loops, songLoopIndex: songCursor(loops, s.activeLoopId, s.songLoopIndex) };
+  });
 }
 
 export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopCopy'> {
@@ -207,6 +250,8 @@ export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopC
     duplicateLoop: (id) => insertLoopClone(set, get, id),
 
     deleteLoop: (id) => removeLoop(set, get, id),
+
+    restoreLoop: (deleted) => reinsertLoop(set, deleted),
 
     reorderLoops: (id, direction) =>
       set((state) => {
@@ -267,7 +312,5 @@ export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopC
         if (id !== state.activeLoopId) return { loops };
         return { loops, ...patch };
       }),
-
-    setActiveLoop: (id) => set({ activeLoopId: id }),
   };
 }

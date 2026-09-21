@@ -720,6 +720,18 @@ export type LoopMixPatch = Pick<
   | 'beatMix'
 >;
 
+/**
+ * What `deleteLoop` removed: the loop as it stood in `loops[]` (which the
+ * flat->loops mirror keeps current, so edits made just before the delete are
+ * in it), its index, and whether it was the active loop. `restoreLoop` takes
+ * it back verbatim.
+ */
+export interface DeletedLoop {
+  loop: Loop;
+  index: number;
+  wasActive: boolean;
+}
+
 export interface LoopSlice {
   /** The arrangement, in list (playback) order. Always ≥ 1 element. */
   loops: Loop[];
@@ -727,7 +739,13 @@ export interface LoopSlice {
   activeLoopId: string;
   addLoop: () => string;
   duplicateLoop: (id: string) => string | null;
-  deleteLoop: (id: string) => string | null;
+  /**
+   * Null means nothing was deleted (the last loop, or an unknown id). Deleting
+   * the active loop loads the fallback loop's fields in the same write.
+   */
+  deleteLoop: (id: string) => DeletedLoop | null;
+  /** Re-inserts a deleted loop at (clamped) `index`; never activates it. */
+  restoreLoop: (deleted: DeletedLoop) => void;
   reorderLoops: (id: string, direction: -1 | 1) => void;
   reorderLoopsArray: (loops: Loop[]) => void;
   setLoopName: (id: string, name: string) => void;
@@ -739,7 +757,6 @@ export interface LoopSlice {
    */
   setLoopTempName: (id: string, tempName: string) => void;
   setLoopRepeatCount: (id: string, repeatCount: number) => void;
-  setActiveLoop: (id: string) => void;
   /** Edit a loop's 12 mixer fields in place; mirrors to the flat slices when active. */
   setLoopMix: (id: string, patch: Partial<LoopMixPatch>) => void;
   /**

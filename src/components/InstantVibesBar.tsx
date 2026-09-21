@@ -3,6 +3,7 @@ import { Sparkles, Check, Dices } from 'lucide-react';
 import { VIBES, type VibeSpec } from '../data/vibes';
 import { useAppStore } from '../store/store';
 import { formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
+import { scheduleTimeout, useTimedToast } from './ui/useTimedToast';
 
 /**
  * The two vibe actions, loaded on demand.
@@ -22,16 +23,6 @@ function loadVibeActions() {
     vibeActionsPromise = import('./vibeActions');
   }
   return vibeActionsPromise;
-}
-
-/** Cancels whatever this ref has pending, then schedules `fn` to replace it. */
-function scheduleTimeout(
-  ref: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
-  fn: () => void,
-  ms: number,
-): void {
-  if (ref.current) clearTimeout(ref.current);
-  ref.current = setTimeout(fn, ms);
 }
 
 type VibeToast =
@@ -77,25 +68,18 @@ function useVibePrefetch(): () => void {
  * running past unmount would call setState on an unmounted component.
  */
 function useVibeFeedback() {
-  const [toast, setToast] = useState<VibeToast | null>(null);
+  const { toast, show: showToast } = useTimedToast<VibeToast>();
   const [rollingVibeId, setRollingVibeId] = useState<string | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       // A pending timer id is written by a later click, never by this effect,
       // so only the ref read at cleanup time can name the timer still armed.
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      // (The toast's own timer is cleared by useTimedToast.)
       // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
     };
-  }, []);
-
-  const showToast = useCallback((next: VibeToast, ms: number) => {
-    setToast(next);
-    scheduleTimeout(toastTimerRef, () => setToast(null), ms);
   }, []);
 
   const setSpin = useCallback((vibeId: string) => setRollingVibeId(vibeId), []);

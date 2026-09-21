@@ -28,8 +28,8 @@ import { createNavSignature } from './navSignature';
  * the clear has to be a decision.
  *
  * ONE subscription over these fields, rather than a clear inside each writer.
- * activeLoopId alone has six writers today (loadLoop's two setState calls,
- * addLoop, duplicateLoop, deleteLoop, setActiveLoop) plus applyProjectContent's
+ * activeLoopId alone has five writers today (loadLoop's two setState calls,
+ * addLoop, duplicateLoop, deleteLoop) plus applyProjectContent's
  * open patch, and song advance reaches it through loadLoop; a per-writer clear
  * would have to be remembered by every one of those and by every writer added
  * later, and a missed one is silent — the solo just keeps silencing tracks.

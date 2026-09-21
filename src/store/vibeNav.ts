@@ -5,8 +5,8 @@ import { useAppStore } from './store';
  * The vibe chip highlight means "the loop this vibe was applied to is in
  * focus", so it must clear the moment `activeLoopId` moves to any OTHER
  * loop — whoever the writer is. Mirrors soloNav.ts's design for the same
- * reason: `activeLoopId` has six writers today (loadLoop's two setState
- * calls, addLoop, duplicateLoop, deleteLoop, setActiveLoop) plus
+ * reason: `activeLoopId` has five writers today (loadLoop's two setState
+ * calls, addLoop, duplicateLoop, deleteLoop) plus
  * applyProjectContent's open patch and the song advance, which reaches it
  * through loadLoop. A clear hand-copied into every one of those writers has
  * to be remembered by each of them and by every writer added later, and a

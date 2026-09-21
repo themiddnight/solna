@@ -66,6 +66,13 @@ export interface ProjectSlice {
    */
   projectSource: ProjectSource;
   projectStoreStatus: ProjectStoreStatus;
+  /**
+   * Bumped by every project install. Session-only (never persisted, never in
+   * a body): the one answer to "was the project replaced since X", which a
+   * pending loop-delete Undo needs — loop ids collide across projects, so an
+   * id cannot answer it.
+   */
+  projectInstallCount: number;
   /** A non-blocking toast surface: unknown references, quota, unavailable. */
   projectNotice: string | null;
   setProjectNotice: (notice: string | null) => void;
@@ -199,6 +206,7 @@ function installProject(
     // came from Drive must not leave the previous project's handle behind, or
     // the first Save would overwrite a file the user never opened.
     projectSource: source,
+    projectInstallCount: ctx.get().projectInstallCount + 1,
   });
 }
 
@@ -439,6 +447,7 @@ export function createProjectSlice(
   return {
     projectName: null,
     projectSource: UNTITLED_SOURCE,
+    projectInstallCount: 0,
     projectStoreStatus: 'unknown',
     projectNotice: null,
 

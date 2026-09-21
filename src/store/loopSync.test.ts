@@ -122,7 +122,7 @@ describe('loop live-write sync (now folded into set)', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B', scaleRoot: 'C' };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
     loadLoop('loop-b');
-    useAppStore.getState().setActiveLoop('loop-default-1');
+    useAppStore.setState({ activeLoopId: 'loop-default-1' });
     const found = useAppStore.getState().loops.find((r) => r.id === 'loop-b')!;
     expect(found.scaleRoot).toBe('C');
   });

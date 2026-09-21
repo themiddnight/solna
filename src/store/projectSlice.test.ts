@@ -284,6 +284,22 @@ describe('newProject', () => {
   });
 });
 
+describe('projectInstallCount', () => {
+  // A session-only identity for "the project was replaced", which is what a
+  // pending loop-delete Undo must be dismissed on: loop ids collide across
+  // projects (every fresh project's first loop is `loop-default-1`), so the
+  // id check restoreLoop makes cannot tell two projects apart.
+  test('every install bumps it, whatever the content', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    const before = useAppStore.getState().projectInstallCount;
+    useAppStore.getState().newProject();
+    useAppStore.getState().newProject();
+    expect(useAppStore.getState().projectInstallCount).toBe(before + 2);
+    await slice.openProjectFile(stored('From Disk', 99));
+    expect(useAppStore.getState().projectInstallCount).toBe(before + 3);
+  });
+});
+
 describe('openProjectFile', () => {
   test('adopts the file’s envelope, installs its content and becomes the autosaved project', async () => {
     const { useAppStore, store, slice } = await sliceWithBackend();

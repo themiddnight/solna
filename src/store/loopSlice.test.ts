@@ -68,6 +68,10 @@ function makeSlice(initial?: Partial<AppStore>) {
     get state() {
       return state;
     },
+    /** A bare write, standing in for the real store's `setState`. */
+    patch(p: Partial<AppStore>) {
+      set(p);
+    },
   };
 }
 
@@ -261,15 +265,18 @@ describe('the custom pattern fixture survives a duplicate', () => {
 });
 
 describe('loopSlice: delete and reorder', () => {
-  test('deleteLoop of the active loop returns a fallback id and activates it', () => {
+  test('deleteLoop of the active loop loads the fallback loop’s fields in the same write', () => {
     const h = makeSlice();
     const first = h.state.loops[0];
     h.state.addLoop(); // loop 2 active
-    const secondId = h.state.loops[1].id;
-    const fallback = h.state.deleteLoop(secondId);
-    expect(fallback).toBe(first.id);
+    const second = h.state.loops[1];
+    const deleted = h.state.deleteLoop(second.id);
+    expect(deleted).toEqual({ loop: second, index: 1, wasActive: true });
     expect(h.state.loops).toHaveLength(1);
     expect(h.state.activeLoopId).toBe(first.id);
+    expect(h.state.scaleRoot).toBe(first.scaleRoot);
+    expect(h.state.chords).toEqual(first.chords);
+    expect(h.state.leadMelodySteps).toEqual(first.leadMelodySteps);
   });
 
   test('deleteLoop of a non-active loop leaves the active loop alone', () => {
@@ -278,7 +285,9 @@ describe('loopSlice: delete and reorder', () => {
     const firstId = h.state.loops[0].id;
     const activeId = h.state.activeLoopId;
     const result = h.state.deleteLoop(firstId);
-    expect(result).toBe(null);
+    expect(result?.wasActive).toBe(false);
+    expect(result?.loop.id).toBe(firstId);
+    expect(result?.index).toBe(0);
     expect(h.state.loops).toHaveLength(1);
     expect(h.state.activeLoopId).toBe(activeId);
   });
@@ -312,7 +321,7 @@ describe('loopSlice: delete and reorder', () => {
     expect(h.state.songLoopIndex).toBe(1);
 
     const result = h.state.deleteLoop(firstId);
-    expect(result).toBe(null);
+    expect(result?.wasActive).toBe(false);
     expect(h.state.loops).toHaveLength(1);
     expect(h.state.activeLoopId).toBe(secondId);
     expect(h.state.songLoopIndex).toBe(0);
@@ -326,8 +335,9 @@ describe('loopSlice: delete and reorder', () => {
     expect(h.state.activeLoopId).toBe(ids[2]);
     expect(h.state.songLoopIndex).toBe(2);
 
-    const fallback = h.state.deleteLoop(ids[2]); // delete active (last)
-    expect(fallback).toBe(ids[1]);
+    const deleted = h.state.deleteLoop(ids[2]); // delete active (last)
+    expect(deleted?.wasActive).toBe(true);
+    expect(deleted?.loop.id).toBe(ids[2]);
     expect(h.state.loops).toHaveLength(2);
     expect(h.state.activeLoopId).toBe(ids[1]);
     expect(h.state.songLoopIndex).toBe(1);
@@ -364,14 +374,64 @@ describe('loopSlice: delete and reorder', () => {
 
 });
 
-describe('loopSlice: the flat setters', () => {
-  test('setActiveLoop updates the active id without touching the list', () => {
+describe('loopSlice: restoreLoop undoes a delete', () => {
+  test('restoreLoop puts the loop back at its index and does not activate it', () => {
     const h = makeSlice();
     h.state.addLoop();
-    const secondId = h.state.loops[1].id;
-    h.state.setActiveLoop(secondId);
-    expect(h.state.activeLoopId).toBe(secondId);
-    expect(h.state.loops).toHaveLength(2);
+    h.state.addLoop();
+    const ids = h.state.loops.map((l) => l.id);
+    const active = h.state.activeLoopId;
+    const deleted = h.state.deleteLoop(ids[0])!;
+    h.state.restoreLoop(deleted);
+    expect(h.state.loops.map((l) => l.id)).toEqual(ids);
+    expect(h.state.activeLoopId).toBe(active);
+  });
+
+  test('restoreLoop of the loop that was active leaves the fallback active', () => {
+    const h = makeSlice();
+    h.state.addLoop(); // loop 2 active
+    const ids = h.state.loops.map((l) => l.id);
+    const deleted = h.state.deleteLoop(ids[1])!;
+    h.state.restoreLoop(deleted);
+    expect(h.state.loops.map((l) => l.id)).toEqual(ids);
+    expect(h.state.activeLoopId).toBe(ids[0]);
+  });
+
+  test('restoreLoop is a no-op when the loop is already present', () => {
+    const h = makeSlice();
+    h.state.addLoop();
+    const ids = h.state.loops.map((l) => l.id);
+    const deleted = h.state.deleteLoop(ids[0])!;
+    h.state.restoreLoop(deleted);
+    h.state.restoreLoop(deleted);
+    expect(h.state.loops.map((l) => l.id)).toEqual(ids);
+  });
+
+  test('restoreLoop clamps an index past the end of a list that shrank', () => {
+    const h = makeSlice();
+    h.state.addLoop();
+    h.state.addLoop();
+    const ids = h.state.loops.map((l) => l.id);
+    const deleted = h.state.deleteLoop(ids[2])!;
+    h.state.deleteLoop(ids[1]);
+    h.state.restoreLoop(deleted);
+    expect(h.state.loops.map((l) => l.id)).toEqual([ids[0], ids[2]]);
+  });
+
+  test('restoreLoop re-derives songLoopIndex onto the active loop', () => {
+    const h = makeSlice({ songLoopIndex: 1 });
+    h.state.addLoop(); // active = loops[1]
+    const ids = h.state.loops.map((l) => l.id);
+    const deleted = h.state.deleteLoop(ids[0])!;
+    expect(h.state.songLoopIndex).toBe(0);
+    h.state.restoreLoop(deleted);
+    expect(h.state.songLoopIndex).toBe(1);
+  });
+});
+
+describe('loopSlice: the flat setters', () => {
+  test('setActiveLoop is gone — no bare activeLoopId writer remains', () => {
+    expect('setActiveLoop' in makeSlice().state).toBe(false);
   });
 
   test('setLoopMix on the active loop mirrors onto the flat slices', () => {
@@ -414,7 +474,7 @@ describe('loopSlice: the flat setters', () => {
     const h = makeSlice({ songLoopIndex: 0 });
     h.state.addLoop(); // loop 1 (idx 0), loop 2 (idx 1, active)
     const [l1, l2] = h.state.loops;
-    h.state.setActiveLoop(l1.id);
+    h.patch({ activeLoopId: l1.id });
     h.state.reorderLoopsArray([l2, l1]);
     expect(h.state.loops.map((r) => r.id)).toEqual([l2.id, l1.id]);
     expect(h.state.songLoopIndex).toBe(1); // l1 is now at index 1
@@ -526,10 +586,10 @@ describe('deleteLoop never leaves the scope naming a loop that is gone', () => {
     useAppStore.getState().soloLoop('loop-default-1');
     expect(useAppStore.getState().sequencerPlayer).toBe('playing');
 
-    const fallback = useAppStore.getState().deleteLoop('loop-default-1');
+    const deleted = useAppStore.getState().deleteLoop('loop-default-1');
 
     const s = useAppStore.getState();
-    expect(fallback).toBe('loop-b');
+    expect(deleted?.wasActive).toBe(true);
     expect(s.activeLoopId).toBe('loop-b');
     expect(s.sequencerPlayer).toBe('stopped');
     expect(s.chordsPlayer).toBe('stopped');
@@ -552,6 +612,41 @@ describe('deleteLoop never leaves the scope naming a loop that is gone', () => {
     const s = useAppStore.getState();
     expect(s.sequencerPlayer).toBe('playing');
     expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
+  });
+
+  test('deleting the active loop notifies subscribers once, already on the fallback', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B', scaleRoot: 'D' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      scaleRoot: 'A',
+      songLoopIndex: null,
+    });
+    const seen: Array<{ activeLoopId: string; scaleRoot: string }> = [];
+    const off = useAppStore.subscribe((s) => {
+      seen.push({ activeLoopId: s.activeLoopId, scaleRoot: s.scaleRoot });
+    });
+    useAppStore.getState().deleteLoop('loop-default-1');
+    off();
+    expect(seen).toEqual([{ activeLoopId: 'loop-b', scaleRoot: 'D' }]);
+  });
+
+  test('deleting the active loop while the song plays keeps the song running on the fallback', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({
+      loops: [createDefaultLoop(), loopB],
+      activeLoopId: 'loop-default-1',
+      songLoopIndex: 0,
+    });
+    useAppStore.getState().playAll();
+
+    useAppStore.getState().deleteLoop('loop-default-1');
+
+    const s = useAppStore.getState();
+    expect(s.activeLoopId).toBe('loop-b');
+    expect(s.sequencerPlayer).toBe('playing');
+    expect(s.playbackScope).toEqual({ kind: 'song' });
+    expect(s.songLoopIndex).toBe(0);
   });
 
   test('deleting a loop while the song plays leaves the arrangement running', () => {

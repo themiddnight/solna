@@ -4,7 +4,7 @@ import type { SourceBusState } from '../audio/masterRack';
 import type { SourceBusApplyMode } from '../audio/automation/sourceBusAutomation';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
-import { loadLoop, LOAD_LOOP_RELEASE } from './loadLoop';
+import { deleteLoopLive, loadLoop, LOAD_LOOP_RELEASE, undoLoopDelete } from './loadLoop';
 import { SCOPE_NONE } from './playbackScope';
 import { startEngineSync, stopEngineSync } from './engineSync';
 import { useAppStore } from './store';
@@ -425,3 +425,150 @@ describe('loadLoop leaves a scope that matches what is sounding', () => {
 // every writer of activeLoopId, loadLoop's two setState calls included — so
 // the "clears on a real switch, survives a re-select" guarantee is asserted
 // once in vibeNav.test.ts rather than per call site here.
+
+// The transport must NOT stop, and the switch must be as clean as a song
+// seam: the deleted loop's voices are cut (a full-hold chord is booked to
+// end at a chord change that will now never come) and the clock is reset,
+// so the fallback enters at step 0 and songAdvanceDecision counts a whole
+// pass of it.
+const twoLoopsPlaying = (padMode: Loop['padMode'] = 'pad') => {
+  const a: Loop = { ...createDefaultLoop(), padMode };
+  const b: Loop = { ...createDefaultLoop(), id: 'loop-b', name: 'B', scaleRoot: 'C' };
+  useAppStore.setState({
+    loops: [a, b],
+    activeLoopId: a.id,
+    ...loopStatePatch(a),
+    songLoopIndex: 0,
+    sequencerPlayer: 'playing',
+    chordsPlayer: 'playing',
+    leadPlayer: 'playing',
+    playbackScope: { kind: 'song' },
+  });
+  return { a, b };
+};
+
+describe('deleting the active loop while the transport runs', () => {
+
+  test('keeps every player running, cuts the deleted loop voices and resets the clock', () => {
+    const { a } = twoLoopsPlaying();
+    const stopSource = spyOn(audioEngine, 'stopSource');
+    const stopOwned = spyOn(audioEngine, 'stopOwnedVoices');
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    const seen: string[] = [];
+    const unsubscribe = useAppStore.subscribe((st) => seen.push(st.chordsPlayer));
+    try {
+      const deleted = deleteLoopLive(a.id);
+      const s = useAppStore.getState();
+      expect(seen.every((player) => player === 'playing')).toBe(true);
+      expect(deleted?.wasActive).toBe(true);
+      expect(s.activeLoopId).toBe('loop-b');
+      expect(s.scaleRoot).toBe('C');
+      expect([s.sequencerPlayer, s.chordsPlayer, s.leadPlayer]).toEqual([
+        'playing', 'playing', 'playing',
+      ]);
+      expect(s.playbackScope).toEqual({ kind: 'song' });
+      for (const source of ['chord', 'bass', 'pad']) {
+        expect(stopSource).toHaveBeenCalledWith(source, LOAD_LOOP_RELEASE);
+      }
+      // The lead and FX grids' own notes go; a key held on the same bus stays.
+      expect(stopOwned).toHaveBeenCalledWith('synth', 'sequencer', LOAD_LOOP_RELEASE);
+      expect(stopOwned).toHaveBeenCalledWith('fx', 'sequencer', LOAD_LOOP_RELEASE);
+      expect(stopSource.mock.calls.some((call) => call[0] === 'synth')).toBe(false);
+      expect(resetClock).toHaveBeenCalledTimes(1);
+    } finally {
+      stopSource.mockRestore();
+      stopOwned.mockRestore();
+      resetClock.mockRestore();
+      unsubscribe();
+    }
+  });
+
+  test('with nothing playing it is a plain state delete: no cut, no clock reset', () => {
+    const { a } = twoLoopsPlaying();
+    useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped', leadPlayer: 'stopped' });
+    const stopSource = spyOn(audioEngine, 'stopSource');
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    try {
+      expect(deleteLoopLive(a.id)?.wasActive).toBe(true);
+      expect(useAppStore.getState().activeLoopId).toBe('loop-b');
+      expect(stopSource).not.toHaveBeenCalled();
+      expect(resetClock).not.toHaveBeenCalled();
+    } finally {
+      stopSource.mockRestore();
+      resetClock.mockRestore();
+    }
+  });
+
+  test('deleting a loop that is not the active one touches no audio', () => {
+    twoLoopsPlaying();
+    const stopSource = spyOn(audioEngine, 'stopSource');
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    try {
+      expect(deleteLoopLive('loop-b')?.wasActive).toBe(false);
+      expect(stopSource).not.toHaveBeenCalled();
+      expect(resetClock).not.toHaveBeenCalled();
+    } finally {
+      stopSource.mockRestore();
+      resetClock.mockRestore();
+    }
+  });
+
+});
+
+describe('undoing a delete while the transport runs', () => {
+  test('Undo while the transport runs re-activates the loop the same clean way, never stopping', () => {
+    const { a } = twoLoopsPlaying();
+    const deleted = deleteLoopLive(a.id);
+    if (!deleted) throw new Error('expected a delete');
+    const stopSource = spyOn(audioEngine, 'stopSource');
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    // A hard stop followed by a restart would also END on 'playing', so watch
+    // every write: no player may pass through a stopped state at all.
+    const seen: string[] = [];
+    const unsubscribe = useAppStore.subscribe((st) => seen.push(st.chordsPlayer));
+    try {
+      undoLoopDelete(deleted);
+      const s = useAppStore.getState();
+      expect(s.loops.map((l) => l.id)).toEqual([a.id, 'loop-b']);
+      expect(s.activeLoopId).toBe(a.id);
+      expect(s.scaleRoot).toBe(a.scaleRoot);
+      expect(s.songLoopIndex).toBe(0);
+      expect([s.sequencerPlayer, s.chordsPlayer, s.leadPlayer]).toEqual([
+        'playing', 'playing', 'playing',
+      ]);
+      expect(seen.every((player) => player === 'playing')).toBe(true);
+      expect(stopSource).toHaveBeenCalledWith('chord', LOAD_LOOP_RELEASE);
+      expect(resetClock).toHaveBeenCalledTimes(1);
+    } finally {
+      stopSource.mockRestore();
+      resetClock.mockRestore();
+      unsubscribe();
+    }
+  });
+
+  test('Undo of a loop that was not active only re-inserts it', () => {
+    twoLoopsPlaying();
+    const deleted = deleteLoopLive('loop-b');
+    if (!deleted) throw new Error('expected a delete');
+    const resetClock = spyOn(audioEngine, 'resetClock');
+    try {
+      undoLoopDelete(deleted);
+      const s = useAppStore.getState();
+      expect(s.loops.map((l) => l.id)).toEqual(['loop-default-1', 'loop-b']);
+      expect(s.activeLoopId).toBe('loop-default-1');
+      expect(resetClock).not.toHaveBeenCalled();
+    } finally {
+      resetClock.mockRestore();
+    }
+  });
+
+  test('Undo with nothing playing re-activates through the ordinary loadLoop switch', () => {
+    const { a } = twoLoopsPlaying();
+    useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped', leadPlayer: 'stopped' });
+    const deleted = deleteLoopLive(a.id);
+    if (!deleted) throw new Error('expected a delete');
+    undoLoopDelete(deleted);
+    expect(useAppStore.getState().activeLoopId).toBe(a.id);
+    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
+  });
+});

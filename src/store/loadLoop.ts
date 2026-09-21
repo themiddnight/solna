@@ -5,7 +5,10 @@ import { loopStatePatch } from './loop';
 import { useAppStore } from './store';
 import { commitRestartAfterStop } from './stopAndRestart';
 import { withSourceTransitionTime } from './sourceTransition';
-import { captureActivePlayers } from './transportSlice';
+import { anyPlayerActive, captureActivePlayers } from './transportSlice';
+import { MELODY_TRACKS } from './melodyTracks';
+import { rescopeToLoop, scopedLoopId } from './playbackScope';
+import type { AppStore, DeletedLoop } from './types';
 
 /** Same instant-but-clickless release the vibe swap and hard stop use. */
 export const LOAD_LOOP_RELEASE = 0.02;
@@ -20,8 +23,12 @@ const LOOP_VOICE_SOURCES = [...ACCOMPANIMENT_SOURCES, 'synth'] as const;
 
 /**
  * Atomic loop switch. Every switch (selector pick, Arrange click,
- * duplicate/delete fallback, song advance) MUST pass through here, so the flat
- * slices and activeLoopId can never disagree with loops[].
+ * duplicate, delete-Undo, song advance) MUST pass through here, so the flat
+ * slices and activeLoopId can never disagree with loops[]. The one exception is
+ * deleting the active loop: `deleteLoop` writes the fallback's fields in its own
+ * set(), because a deleted loop has no content left to keep sounding — and
+ * `deleteLoopLive` below wraps that write in the same seam a song advance
+ * crosses when the transport is running.
  *
  * Two paths, and the difference between them is the difference between a
  * switch the user asked for and a seam the arrangement crosses on its own.
@@ -74,46 +81,11 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
       : null;
 
   if (opts.atBoundary !== undefined) {
-    for (const source of LOOP_VOICE_SOURCES) {
-      audioEngine.dropVoicesScheduledFrom(source, opts.atBoundary);
-    }
-    // A drone's startTime is the start of its pass, strictly BEFORE the
-    // boundary, so dropVoicesScheduledFrom above never touches it even with
-    // 'pad' in LOOP_VOICE_SOURCES — it holds until its own note-off at pass
-    // end while resetClock rewinds the grid and the incoming loop's armPad
-    // strikes a second drone on top: two drones, in two keys, for up to a
-    // full pass. Cut it here, but ONLY when the OUTGOING loop (read from the
-    // store snapshot above, before it is replaced) was droning: this path's
-    // whole premise is that a voice rings across the seam "with the envelope
-    // its preset asked for", and a drone's length is set by the loop pass
-    // rather than by that envelope, so a drone falls outside the premise. A
-    // pad-mode tail does not, and cutting it too would make this path sound
-    // worse than the hard-stop path for no reason.
-    // Anchored at the boundary, not at `now`: the boundary sits up to one
-    // scheduler lookahead (0.1 s) in the future, and releasing from `now`
-    // would open an audible hole at the END of the outgoing pass — the exact
-    // seam this path exists to keep closed.
-    if (padHoldsAcrossLoop(store.padMode)) {
-      audioEngine.stopSource('pad', LOAD_LOOP_RELEASE, opts.atBoundary);
-    }
-    withSourceTransitionTime(opts.atBoundary, () => {
-      useAppStore.setState({
-        ...loopStatePatch(loop),
-        activeLoopId: id,
-        songLoopIndex,
-      });
-    });
-    // The vibe chip highlight clears itself here: vibeNav.ts watches
-    // activeLoopId and clears selectedVibeId on any change, including this
-    // one, and leaves it alone when the id written above is the one already
-    // active (a re-select, an audition toggle on the same card) — a bare
-    // `Object.is` selector already IS that "did we actually leave" check, so
-    // there is nothing left for this call site to gate.
-    // Rewinding the grid is what re-arms every scheduler onto the new loop:
-    // useChordPlayback's rewindChordOnClockReset sees the step go backwards and
-    // restarts the progression at chord 0, while the lead and drum steppers arm
-    // bar-relative and so enter on step 0. No player transition is involved.
-    audioEngine.resetClock(opts.atBoundary);
+    crossLoopSeam(
+      store.padMode,
+      () => useAppStore.setState({ ...loopStatePatch(loop), activeLoopId: id, songLoopIndex }),
+      opts.atBoundary,
+    );
     return;
   }
 
@@ -151,4 +123,139 @@ export function loadLoop(id: string, opts: { atBoundary?: number } = {}): void {
   // clock. Folding the two together would leave that ordering to subscriber
   // registration order.
   commitRestartAfterStop(scopeBefore, id, wasActive);
+}
+
+/**
+ * The seam a running transport crosses from one loop to another WITHOUT
+ * stopping — the one implementation both kinds of seam go through.
+ *
+ * `atBoundary` given — the arrangement advanced (see `loadLoop`): the outgoing
+ * loop's voices ring across the seam with their own envelopes, and only what
+ * it queued PAST the boundary (plus a drone) is dropped.
+ *
+ * `atBoundary` omitted — the loop the transport is playing stops existing
+ * MID-PASS (deleting it, or undoing that delete). There is no boundary to
+ * ring across: a full-hold chord, bass or pad was booked to end at a chord
+ * change that will now never come, so every accompaniment voice is cut now
+ * at LOAD_LOOP_RELEASE, and the melody grids' own notes with it (their owner
+ * only, so a key held on the same bus keeps sounding). The clock reset then
+ * starts the incoming loop at step 0, exactly as a song advance does.
+ *
+ * `write` is the store write that installs the incoming loop; it runs between
+ * the cut and the clock reset, which is what re-arms every scheduler.
+ */
+function crossLoopSeam(
+  outgoingPadMode: AppStore['padMode'],
+  write: () => void,
+  atBoundary?: number,
+): void {
+  if (atBoundary === undefined) {
+    for (const source of ACCOMPANIMENT_SOURCES) {
+      audioEngine.stopSource(source, LOAD_LOOP_RELEASE);
+    }
+    for (const track of MELODY_TRACKS) {
+      audioEngine.stopOwnedVoices(track.engineSource, 'sequencer', LOAD_LOOP_RELEASE);
+    }
+    write();
+    audioEngine.resetClock();
+    return;
+  }
+  for (const source of LOOP_VOICE_SOURCES) {
+    audioEngine.dropVoicesScheduledFrom(source, atBoundary);
+  }
+  // A drone's startTime is the start of its pass, strictly BEFORE the
+  // boundary, so dropVoicesScheduledFrom above never touches it even with
+  // 'pad' in LOOP_VOICE_SOURCES — it holds until its own note-off at pass
+  // end while resetClock rewinds the grid and the incoming loop's armPad
+  // strikes a second drone on top: two drones, in two keys, for up to a
+  // full pass. Cut it here, but ONLY when the OUTGOING loop (read from the
+  // store snapshot `loadLoop` read, before it is replaced) was droning: this path's
+  // whole premise is that a voice rings across the seam "with the envelope
+  // its preset asked for", and a drone's length is set by the loop pass
+  // rather than by that envelope, so a drone falls outside the premise. A
+  // pad-mode tail does not, and cutting it too would make this path sound
+  // worse than the hard-stop path for no reason.
+  // Anchored at the boundary, not at `now`: the boundary sits up to one
+  // scheduler lookahead (0.1 s) in the future, and releasing from `now`
+  // would open an audible hole at the END of the outgoing pass — the exact
+  // seam this path exists to keep closed.
+  if (padHoldsAcrossLoop(outgoingPadMode)) {
+    audioEngine.stopSource('pad', LOAD_LOOP_RELEASE, atBoundary);
+  }
+  withSourceTransitionTime(atBoundary, write);
+  // The vibe chip highlight clears itself here: vibeNav.ts watches
+  // activeLoopId and clears selectedVibeId on any change, including this
+  // one, and leaves it alone when the id written above is the one already
+  // active (a re-select, an audition toggle on the same card) — a bare
+  // `Object.is` selector already IS that "did we actually leave" check, so
+  // there is nothing left for this call site to gate.
+  // Rewinding the grid is what re-arms every scheduler onto the new loop:
+  // useChordPlayback's rewindChordOnClockReset sees the step go backwards and
+  // restarts the progression at chord 0, while the lead and drum steppers arm
+  // bar-relative and so enter on step 0. No player transition is involved.
+  audioEngine.resetClock(atBoundary);
+}
+
+/**
+ * Whether deleting (or restoring) `id` changes the loop a RUNNING transport
+ * is playing without stopping it. A loop audition scoped to the deleted loop
+ * is not such a case: `deleteLoop` stops it in its own write.
+ */
+function switchesRunningLoop(store: AppStore, id: string): boolean {
+  return (
+    id === store.activeLoopId &&
+    anyPlayerActive(captureActivePlayers(store)) &&
+    scopedLoopId(store.playbackScope) !== id
+  );
+}
+
+/**
+ * `deleteLoop` for the UI. Deleting the ACTIVE loop while the transport runs
+ * never stops it: the fallback enters through `crossLoopSeam`'s mid-pass
+ * branch — the deleted loop's voices are cut and the clock is reset, so the
+ * fallback starts at step 0 and song advance counts a whole pass of it.
+ * `deleteLoop`'s own single write is the `write` the seam wraps. Every other
+ * delete (a non-active loop, nothing playing) is the plain state delete.
+ */
+export function deleteLoopLive(id: string): DeletedLoop | null {
+  const store = useAppStore.getState();
+  if (store.loops.length <= 1 || !switchesRunningLoop(store, id)) {
+    return store.deleteLoop(id);
+  }
+  let deleted: DeletedLoop | null = null;
+  crossLoopSeam(store.padMode, () => {
+    deleted = store.deleteLoop(id);
+  });
+  return deleted;
+}
+
+/**
+ * Undo for `deleteLoopLive`. Re-inserts the loop, and when it was the active
+ * one, re-activates it: through the same mid-pass seam when the transport is
+ * running (so Undo never stops it either), through `loadLoop`'s ordinary
+ * switch when nothing plays.
+ */
+export function undoLoopDelete(deleted: DeletedLoop): void {
+  const before = useAppStore.getState();
+  before.restoreLoop(deleted);
+  if (!deleted.wasActive) return;
+  const store = useAppStore.getState();
+  const loop = store.loops.find((r) => r.id === deleted.loop.id);
+  if (!loop) return;
+  if (!anyPlayerActive(captureActivePlayers(store))) {
+    loadLoop(loop.id);
+    return;
+  }
+  const songLoopIndex =
+    store.songLoopIndex !== null ? Math.max(0, store.loops.indexOf(loop)) : null;
+  // A loop audition started on the fallback after the delete follows the
+  // cursor back, the way addLoop/duplicateLoop move it; a song scope stays.
+  crossLoopSeam(store.padMode, () =>
+    useAppStore.setState({
+      ...loopStatePatch(loop),
+      activeLoopId: loop.id,
+      songLoopIndex,
+      playbackScope: rescopeToLoop(store.playbackScope, loop.id),
+    }),
+  );
 }

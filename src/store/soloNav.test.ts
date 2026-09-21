@@ -173,7 +173,7 @@ describe('solo is cleared by navigation', () => {
   test('changing the active loop clears it', () => {
     useAppStore.getState().toggleSoloTrack('pad');
     expect(useAppStore.getState().soloTracks).toEqual(['pad']);
-    useAppStore.getState().setActiveLoop('some-other-loop-id');
+    useAppStore.setState({ activeLoopId: 'some-other-loop-id' });
     expect(useAppStore.getState().soloTracks).toEqual([]);
   });
 
