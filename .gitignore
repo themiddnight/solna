@@ -7,3 +7,6 @@ dist
 # Local secrets. `.env.example` is the tracked invitation; the filled-in file is not.
 .env
 .env.local
+
+# Local agent working notes (checkpoints, logs)
+work/
