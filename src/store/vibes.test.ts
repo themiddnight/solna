@@ -993,17 +993,37 @@ describe('applyVibeToStore — the FX track', () => {
   test('never writes fxMelodySteps', () => {
     const steps = Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]);
     steps[0] = [{ note: 'C4', len: 6 }];
-    useAppStore.setState({ fxMelodySteps: steps });
-    applyVibeToStore(resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!));
+    const vibe = resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!);
+    // Already in the vibe's key, so no key change moves the notes: this pins
+    // that the vibe writes no notes of its own, not what a key change does.
+    useAppStore.setState({ fxMelodySteps: steps, scaleRoot: vibe.scaleRoot, scaleType: vibe.scaleType });
+    applyVibeToStore(vibe);
     expect(useAppStore.getState().fxMelodySteps[0]).toEqual([{ note: 'C4', len: 6 }]);
   });
 
   test('never writes leadMelodySteps either — the rule is the same for both', () => {
     const steps = Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]);
     steps[0] = [{ note: 'E4', len: 6 }];
-    useAppStore.setState({ leadMelodySteps: steps });
-    applyVibeToStore(resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!));
+    const vibe = resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!);
+    useAppStore.setState({ leadMelodySteps: steps, scaleRoot: vibe.scaleRoot, scaleType: vibe.scaleType });
+    applyVibeToStore(vibe);
     expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'E4', len: 6 }]);
+  });
+
+  test('a vibe that changes the key moves FX exactly as it moves Lead', () => {
+    const steps = Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]);
+    steps[0] = [{ note: 'E4', len: 6 }];
+    const vibe = resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!);
+    useAppStore.setState({
+      leadMelodySteps: steps,
+      fxMelodySteps: steps.map((cell) => [...cell]),
+      scaleRoot: 'A',
+      scaleType: 'Natural Minor',
+    });
+    applyVibeToStore(vibe);
+    const s = useAppStore.getState();
+    expect(s.fxMelodySteps[0]).toEqual(s.leadMelodySteps[0]);
+    expect(s.leadMelodySteps[0]).not.toEqual([{ note: 'E4', len: 6 }]);
   });
 });
 
