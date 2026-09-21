@@ -16,6 +16,9 @@ import { sliderPosTodB } from '../utils/gainUnits';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth } from '../types/synth';
 import { noteFrequency } from '@/utils/musicTheory';
+import { startMelodyRecordBridges } from './leadRecord';
+import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
+import type { LeadNote } from '../audio/leadMelody';
 
 /** The NEXT patch of one `updateSynthPatch` call — argument 1, not argument 0.
  *  Argument 0 is what the engine is told the patch WAS; the pair is what the
@@ -575,5 +578,47 @@ describe('MIDI CC coalesces repeated messages to the same target', () => {
     expect(synthCalls.length).toBe(2);
 
     updateSynthPatch.mockRestore();
+  });
+});
+
+describe('a MIDI-recorded black key is stored sharp-spelled (ROOTS identity)', () => {
+  test('MIDI 61 records as C#4 in leadMelodySteps, never Db4', () => {
+    const prev = useAppStore.getState();
+    useAppStore.setState({
+      meterId: '4/4',
+      leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
+      leadLoopLength: 1,
+      leadMelodyView: 'chromatic',
+      leadMelodyOctave: 3,
+      leadCursor: 0,
+      recordingTrack: 'lead',
+      leadPlayer: 'stopped', chordsPlayer: 'stopped', sequencerPlayer: 'stopped', fxPlayer: 'stopped',
+      metronomeActive: false,
+    });
+    const stop = startMelodyRecordBridges({ inputStep: () => null, startClock: () => () => {} });
+    const input = connect('dev-record-sharp');
+
+    noteOn(input, 61);
+    input.onmidimessage?.({ data: [0x80, 61, 0], target: input });
+
+    const stored = useAppStore.getState().leadMelodySteps.flat().map((n) => n.note);
+    expect(stored).toEqual(['C#4']);
+    stop();
+    resetNoteInputListeners();
+    useAppStore.setState({
+      recordingTrack: null,
+      leadMelodySteps: prev.leadMelodySteps,
+      leadMelodyOctave: prev.leadMelodyOctave,
+      leadCursor: prev.leadCursor,
+    });
+  });
+
+  test('the note-input bus announces the sharp name too', () => {
+    const events: NoteInputEvent[] = [];
+    subscribeNoteInput((e) => events.push(e));
+    const input = connect('dev-bus-sharp');
+    noteOn(input, 70); // A#4 / Bb4
+    expect(events[0]?.note).toBe('A#4');
+    resetNoteInputListeners();
   });
 });

@@ -1,4 +1,4 @@
-import { midiToFlatName } from '@/musicCore';
+import { midiToSharpName } from '@/musicCore';
 import { createFrameCoalescer } from '@/utils/frameCoalescer';
 import { audioEngine } from '../audio/engine';
 import type { VoiceId } from '../audio/synth/voiceId';
@@ -260,10 +260,11 @@ export function startMidiInputBridge(): void {
 
         const mappings = s.midiMappings;
 
+        // Sharp-spelled: this name becomes a stored lead note when Rec is armed, and persisted names are ROOTS-spelled.
         if (command === 0x90 || command === 0x80) {
           const noteMapping = mappings.find((m) => m.enabled && m.type === 'note');
           if (noteMapping) {
-            const noteName = midiToFlatName(data1);
+            const noteName = midiToSharpName(data1);
             if (!noteName) return;
             const synth = s.synthParams;
             const velocity = data2;
