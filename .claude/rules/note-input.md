@@ -106,3 +106,14 @@ The bus's `time` is likewise not what the recorder quantises against. It is
 whatever the source scheduled at, and only some sources name one; the
 recorder reads `ctx.currentTime` itself, through
 `audio/playback/leadLiveClock.ts`, and subtracts the output latency there.
+
+## Prohibited
+
+- Playing the keyboard, on-screen keyboard or arp on anything but `focusTrack`'s bus and patch <!-- R163 -->
+- Recomputing a note's bus at release <!-- R164 -->
+- A global (cross-bus) polyphony count <!-- R165 --> <!-- R184 -->
+- An arp cleanup releasing only the currently focused bus <!-- R166 -->
+- Sounding or announcing a melodic note under `drum` focus <!-- R167 -->
+- Routing external MIDI by focus <!-- R168 -->
+- Dropping the blur/`visibilitychange` release in `useInputDeck.ts` <!-- R202 -->
+- Persisting `midiActivityTimestamp` <!-- R018 -->

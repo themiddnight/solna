@@ -54,3 +54,17 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 - The sole inversion: `utils/localFileSave.ts` and `utils/driveBrowser.ts` import types and constants (the `.solna` MIME type, the Drive MIME type) from `src/store/`; no `utils/` file reads store state, subscribes or names a slice. <!-- R060 -->
 
 ([ADR-0004](../../docs/decisions/0004-utils-placement-and-store-constant-inversion.md))
+
+## Prohibited
+
+- Finishing with any ESLint warning, or dismissing one as pre-existing <!-- R005 --> <!-- R264 -->
+- A rule other than `react-hooks/exhaustive-deps` or `complexity` configured `warn` after the change that empties it <!-- R005 --> <!-- R008 -->
+- Relaxing `exhaustive-deps` or `complexity` for everybody instead of a reasoned line disable <!-- R010 -->
+- Downgrading the `React.FC`, `../../` or `consistent-type-definitions` bans <!-- R009 -->
+- Changing the analyser allowlist in `eslint.config.js` without `metering.md`, or the reverse <!-- R043 -->
+- A merged (not replaced) `no-restricted-imports` block for the tonal ban <!-- R045 -->
+- A regex literal in the five `NOTE_REGEX_BAN` files <!-- R085 -->
+- A pitch export from `utils/musicTheory.ts` imported by the engine <!-- R179 -->
+- `src/incidents/` importing `store/`, `components/` or the audio engine <!-- R056 -->
+- An open-ended bag in `IncidentReportV1`, or accepting unknown keys <!-- R057 -->
+- A second `utils/` → `store/` import, or a `utils/` file reading store state <!-- R060 -->

@@ -35,3 +35,13 @@ How meters read level, where the analysers tap, and the analyser-consumer exempt
 - Meter constants (`-24`/`-6`/`-1` zones, the `0/5/30/100` scale, 14 dB/s decay, −60 dBFS floor) are the murva interop contract in `docs/superpowers/plans/2026-09-07-dev-383-gain-staging-contract.md`; never re-derive them. <!-- R243 -->
 
 ([ADR-0028](../../docs/decisions/0028-sample-based-metering.md))
+
+## Prohibited
+
+- Adding a file to the analyser exemption without editing both lists <!-- R041 --> <!-- R043 -->
+- Tonal or taper imports in the four exempt analyser files <!-- R042 -->
+- `getByteFrequencyData` for a level meter <!-- R238 -->
+- Tapping a master analyser after the compressor or limiter <!-- R239 -->
+- A meter with its own rAF loop or no visibility gate <!-- R241 -->
+- A meter value in a zustand slice <!-- R242 -->
+- Re-deriving the murva meter constants <!-- R243 -->

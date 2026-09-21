@@ -24,3 +24,13 @@ What may live in `src/data/` and what a file there may do.
 - `src/utils/` sits outside the layer chain, above `data/`: it may read `data/` at runtime (`musicTheory.ts` imports `SCALES`); `data/` reads `utils/` only through `import type` (e.g. `MeterId`). <!-- R058 -->
 
 ([ADR-0004](../../docs/decisions/0004-utils-placement-and-store-constant-inversion.md))
+
+## Prohibited
+
+- A runtime import in `src/data/`, sibling included <!-- R020 -->
+- Non-factory content in `src/data/` <!-- R021 -->
+- `Math`/`Date`/`crypto`, a function declaration, `new`, or module-scope `let`/`var` in a data file <!-- R022 -->
+- A literal-shorthand helper in a different file from its table <!-- R024 -->
+- Deleting or weakening `dataLayerPurity.test.ts` <!-- R026 -->
+- A registry (`METERS`, `THEME_TOKENS`, `VIEW_META`) moved into `src/data/` <!-- R027 -->
+- A runtime import of `utils/` from `src/data/` <!-- R058 -->

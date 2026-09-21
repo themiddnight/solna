@@ -79,9 +79,9 @@ Enforced by eslint `no-restricted-imports` (plus `no-restricted-globals` and
 | `src/data/` | Imports nothing at runtime, not even a sibling; factory content only. <!-- R020 --> | `data-layer.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
 | `src/audio/` | Never imports `store/` or `components/`; may import `data/`. <!-- R028 --> Raw Web Audio API, no Tone.js; music theory only via `@/musicCore`, never `tonal`. <!-- R029 --> | `synth-voices.md`, `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
 | `src/store/` | Never imports `components/`. <!-- R032 --> | `persistence.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
-| `src/components/` | Views + live playback controllers; must not import `audio/engine`. <!-- R038 --> | `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
+| `src/components/` | Views + live playback controllers; must not import `audio/engine`. <!-- R038 --> | `components.md`, `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
 | `src/musicCore/` | Only `tonalAdapter.ts` imports `tonal`. <!-- R044 --> Imports nothing from `store/`, `components/`, `audio/`, `utils/`. <!-- R050 --> | `music-domain.md` | [0005](docs/decisions/0005-music-core-and-tonal-confinement.md) |
-| `src/utils/` | Outside the chain, above `data/`; `data/` reads it only via `import type`. <!-- R058 --> May import `@/musicCore`, never the reverse. <!-- R059 --> | `data-layer.md`, `boundaries-and-gates.md` | [0004](docs/decisions/0004-utils-placement-and-store-constant-inversion.md) |
+| `src/utils/` | Outside the chain, above `data/`; `data/` reads it only via `import type`. <!-- R058 --> May import `@/musicCore`, never the reverse. <!-- R059 --> | `utils.md`, `data-layer.md`, `boundaries-and-gates.md` | [0004](docs/decisions/0004-utils-placement-and-store-constant-inversion.md) |
 | `src/incidents/` | Privacy boundary: no `store/`, `components/` or audio engine import (type-only `@/audio/runtime/*` allowed). <!-- R056 --> | `boundaries-and-gates.md` | [0003](docs/decisions/0003-incidents-privacy-boundary.md) |
 
 ### Cross-cutting invariants
@@ -103,6 +103,8 @@ Enforced by eslint `no-restricted-imports` (plus `no-restricted-globals` and
 - Never call engine setters from a component — add the state to a slice and wire it in
   `src/store/engineSync.ts`. <!-- R224 --> → `playback.md`, [0026](docs/decisions/0026-clock-and-engine-bridge.md)
 - Effective track audibility is computed only in `engineSync.ts`. <!-- R160 --> → `loops-and-solo.md`, [0015](docs/decisions/0015-session-only-track-solo.md)
+- **Placement, for every new file:** code used by one feature or area stays with it; code used by
+  two or more lifts to its layer's shared location. <!-- R276 --> → `components.md`, `utils.md`, [0031](docs/decisions/0031-component-hook-store-selector-and-placement-conventions.md)
 
 ## Traps — don't "fix" these
 
@@ -128,7 +130,8 @@ lifecycle, voices, Beat, clock, store→engine), `music-theory` (notes, scales, 
 bass/rhythm patterns, arp, keyboard map, drum-pad keys), `instant-vibes` (the vibe chips and the
 dice). `squash-by-logical-change` is a **global** skill in `~/.claude/skills/`, not part of this repo.
 
-**Rules** (`.claude/rules/`, path-scoped — each loads when you open a file its `paths:` covers):
+**Rules** (`.claude/rules/`, path-scoped — each loads when you open a file its `paths:` covers; each ends
+in a `## Prohibited` checklist derived from its own rules):
 
 | File | Covers |
 |---|---|
@@ -148,5 +151,7 @@ dice). `squash-by-logical-change` is a **global** skill in `~/.claude/skills/`, 
 | `theming.md` | Theme tokens and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |
 | `note-input.md` | The note-input dispatcher and focus-routed input |
+| `components.md` | Component logic in a colocated hook, narrow store selectors, placement |
+| `utils.md` | One theme per `utils/` file, utils layering, placement |
 
 **Decisions:** the ADR index and template are in [`docs/decisions/README.md`](docs/decisions/README.md).

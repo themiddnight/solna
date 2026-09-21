@@ -28,3 +28,18 @@ Instant Vibes as data, the one drum-grid library, and the dice. The `instant-vib
 - Do not reintroduce the density catalogue or the kick-collision filter; authored grids are curated. <!-- R119 -->
 
 ([ADR-0009](../../docs/decisions/0009-vibes-as-data-and-single-drum-grid-library.md))
+
+## Prohibited
+
+- Anything but ids in a `VibeSpec` <!-- R086 -->
+- A second drum-grid library <!-- R087 -->
+- A grid apply that merges into the existing pattern <!-- R088 -->
+- Clearing outside `writeStepWindow` <!-- R089 -->
+- Applying a grid's `beatPresetId` <!-- R090 -->
+- A grid row naming a voice the Beat instrument cannot play <!-- R091 -->
+- An unsourced grid outside the `'authored'` allowlist <!-- R093 -->
+- Re-transcribing a URL-sourced grid <!-- R094 -->
+- A resolver call at module scope or in `InstantVibesBar` <!-- R095 -->
+- A dice pool computed by filtering the shared library <!-- R096 -->
+- `pickDistinct` on `progressions`/`drumGrids` <!-- R117 -->
+- Reintroducing the density catalogue or kick-collision filter <!-- R119 -->

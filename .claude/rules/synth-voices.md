@@ -64,3 +64,22 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 ## Deferred
 
 - The FX synth voice has no pitch riser (the filter envelope ramps `filter.frequency` only) and its LFO restarts per note — deferred, not bugs. <!-- R142 --> ([ADR-0013](../../docs/decisions/0013-melody-tracks-table-and-record-arm.md))
+
+## Prohibited
+
+- Addressing a voice by source + note name <!-- R169 -->
+- A default `VoiceOwner` <!-- R170 -->
+- One release method with an owner-vs-tails flag <!-- R171 -->
+- Whole-bus reach by omitting an argument <!-- R173 -->
+- A file in `src/components/` naming a `VoiceOwner` <!-- R174 -->
+- A mono-bus decision keyed on `group.owner` <!-- R175 -->
+- A note name passed to the engine, even for logging <!-- R176 --> <!-- R178 -->
+- `noteFrequency` in a file not on the allowlist <!-- R177 -->
+- A guarded engine file importing `src/audio/playback/**`, type-only included <!-- R181 -->
+- Polyphony folded into the amp envelope or `tremoloGain` <!-- R183 -->
+- A per-note velocity scale for polyphony <!-- R185 -->
+- A wall-clock lifetime timer in `SynthVoiceManager` <!-- R201 --> <!-- R203 -->
+- Holding a `VoiceId` across an await, render or user event without a backstop <!-- R204 -->
+- Treating `maxVoicesPerSource` as a leak guard <!-- R205 -->
+- `ctx.currentTime` read in the voice module <!-- R207 -->
+- A render-only copy of shared audio code <!-- R209 -->

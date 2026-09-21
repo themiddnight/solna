@@ -43,3 +43,20 @@ Engine-tagged complete patches, the arp stored beside the patch, and units in fi
 - `src/utils/synthPatch.ts` is the only place patch-level conversion math lives; it does not import `utils/gainUnits.ts`. <!-- R200 -->
 
 ([ADR-0020](../../docs/decisions/0020-synth-patch-model.md))
+
+## Prohibited
+
+- `sourcePresetId` used as a DSP input <!-- R186 -->
+- A placeholder `SynthEngineId` member <!-- R187 -->
+- Repairing an unknown stored `engine` <!-- R189 -->
+- A `Partial` preset merged over the current patch <!-- R190 -->
+- A preset that states less than a whole `EnginePatch` <!-- R191 -->
+- A preset-id trim table <!-- R192 -->
+- Handing out the library preset object uncloned <!-- R193 -->
+- Arp settings inside the patch, or a preset overwriting the arp <!-- R194 -->
+- Reusing the scheduler's `ArpMode`/`ArpRate` in `ArpSettings` <!-- R195 -->
+- A second `FilterType` <!-- R196 -->
+- A patch field without its unit in the name <!-- R197 -->
+- A stored linear gain or `-Infinity` <!-- R198 -->
+- A `ModRoute` without its target-discriminated `unit` <!-- R199 -->
+- Patch conversion math outside `utils/synthPatch.ts`, or importing `gainUnits.ts` there <!-- R200 -->

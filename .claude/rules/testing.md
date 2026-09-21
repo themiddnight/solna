@@ -70,3 +70,8 @@ Two scripts import straight from source and must keep passing:
   non-overlapping, and well-formed.
 - `check-drum-kit-separation.ts` — every Beat preset voices every one of the eleven voices away
   from the default, and parameters spread far enough apart to stay audibly distinct.
+
+## Prohibited
+
+- Expecting `useAppStore.setState(...)` before a `renderToString` render to take effect in a plain selector <!-- R257 -->
+- Asserting on `localStorage` without `flushPersistedWrites()` <!-- R213 -->

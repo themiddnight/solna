@@ -65,3 +65,24 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - `planChordStep`'s arp branch uses `feelToHoldScale`, not `cycleHoldScale`. <!-- R237 -->
 
 ([ADR-0027](../../docs/decisions/0027-planned-then-performed-playback.md))
+
+## Prohibited
+
+- The playback step or playhead beat in a slice <!-- R017 -->
+- A controller importing `audio/engine` <!-- R039 -->
+- `renderMixdown.ts` touching `audioEngine` <!-- R031 -->
+- A realtime-only concern in the offline path <!-- R208 -->
+- A render-only copy of shared audio code <!-- R209 -->
+- A custom pattern using the full-hold fast path <!-- R130 -->
+- A producer folding the published Chord step <!-- R131 -->
+- Starting or holding the clock without a player subscription <!-- R220 -->
+- A metronome that starts the clock or blocks idle suspend <!-- R221 -->
+- A direct `audioEngine` call from `src/store/` without a cut/preview/lifecycle docblock reason <!-- R225 -->
+- A persistent value reaching the engine other than through `engineSync` <!-- R226 -->
+- A store read, engine call, `AudioContext`, wall clock or timer in a planner <!-- R227 -->
+- A planner calling `chordPlayback`'s engine-touching exports <!-- R229 -->
+- One unified `PlaybackSnapshot` <!-- R231 -->
+- `useAppStore.getState()` inside `playbackPlanSnapshots.ts` <!-- R233 -->
+- A lane field in only one snapshot builder <!-- R234 -->
+- Positional scalars after a planner's snapshot <!-- R235 -->
+- Exporting a planner type no second file names <!-- R236 -->

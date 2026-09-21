@@ -53,3 +53,9 @@ Run `bun run check:theme` to check this suite alone.
 
 Check the daisyUI major in `package.json` before reaching for a class — class names differ
 across majors, so confirm against the docs for the version actually installed.
+
+## Prohibited
+
+- A palette below AA 4.5:1, or treating `check:contrast` as a report <!-- R011 -->
+- The contrast CLI importing a React component for its roster <!-- R012 -->
+- A module colour declared in one theme only <!-- R013 -->

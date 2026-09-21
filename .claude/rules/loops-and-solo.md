@@ -36,3 +36,19 @@ Atomic loop delete with Undo, and the session-only track solo set.
 - Solo moves the Beat bus only; per-voice mute (`beatMix.voices`) is independent and both must pass. <!-- R161 -->
 
 ([ADR-0015](../../docs/decisions/0015-session-only-track-solo.md))
+
+## Prohibited
+
+- Following `deleteLoop` with `loadLoop` <!-- R149 -->
+- Audio calls inside `deleteLoop`, or a UI calling it instead of `deleteLoopLive` <!-- R150 -->
+- Stopping the transport on delete or on Undo <!-- R151 --> <!-- R154 -->
+- Stopping an audition not scoped to the deleted loop <!-- R152 -->
+- `restoreLoop` activating the loop it restores <!-- R153 -->
+- A confirm dialog in place of the Undo toast <!-- R154 -->
+- Keeping a pending Undo across a project install <!-- R155 -->
+- Persisting `soloTracks`, or solo touching `LoopMixPatch` <!-- R156 -->
+- Solo as a radio, or mute beating solo <!-- R157 -->
+- A solo clear inside each writer instead of `soloNav.ts` <!-- R158 -->
+- Clearing solo on a `focusTrack` change <!-- R159 -->
+- Computing audibility outside `engineSync.ts` <!-- R160 -->
+- Solo overriding per-voice Beat mute <!-- R161 -->

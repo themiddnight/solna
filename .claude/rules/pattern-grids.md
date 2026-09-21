@@ -34,3 +34,18 @@ Step storage width, the three step layouts, span-resize mechanics and custom Cho
 - The Chord publisher emits a progression-relative absolute step; each reader folds it by its own cycle width; a producer never folds. <!-- R131 -->
 
 ([ADR-0012](../../docs/decisions/0012-pattern-storage-and-step-layouts.md))
+
+## Prohibited
+
+- Storing a sequencer, chord-rhythm or bass bar at the active width <!-- R120 -->
+- Storing Lead/FX at the active resolution instead of ticks <!-- R121 -->
+- A dormancy test outside `leadActivePosAt` <!-- R122 -->
+- A meter or resolution change that writes <!-- R123 -->
+- Moving a lane to another step layout as a "refactor" <!-- R124 -->
+- A span resize that writes before `pointerup` or on cancel, or a shared span renderer <!-- R125 -->
+- A custom Chord/Bass pattern stored at the active meter's width <!-- R126 -->
+- A lane length that does not divide the progression's bars <!-- R127 -->
+- Deleting or cutting a dormant bar <!-- R128 -->
+- A custom span crossing a folded chord boundary or its cycle end <!-- R129 -->
+- A custom pattern using the full-hold fast path <!-- R130 -->
+- A producer folding the published Chord step <!-- R131 -->

@@ -71,3 +71,28 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - Autosave starts disarmed; `store.ts` arms it in a `finally` after `loadProject()` resolves (an earlier write could overwrite the loaded project). <!-- R256 -->
 
 ([ADR-0024](../../docs/decisions/0024-storage-zones-project-slot-autosave.md))
+
+## Prohibited
+
+- A token getter, or the Drive token in a slice or `partialize` <!-- R036 --> <!-- R037 -->
+- Mutating a persisted value in place <!-- R210 -->
+- Writing `localStorage` outside `coalescedStorage.ts` <!-- R211 -->
+- Pointer-, clock- or frame-driven writes to persisted state <!-- R212 -->
+- Asserting on `localStorage` without `flushPersistedWrites()` <!-- R213 -->
+- Unguarded storage access, or a storage read in a default-parameter expression <!-- R244 -->
+- A version bump or migration step for a persisted shape change <!-- R035 --> <!-- R219 -->
+- Letting an invalid persisted key through `sanitizePersistedState`/`sanitizeContent` <!-- R214 -->
+- Logic in `migrate` beyond identity plus legacy-key adoption <!-- R215 -->
+- A second non-test caller of `sanitizeLoops` <!-- R217 -->
+- Casting raw input through `toChordItem` <!-- R072 -->
+- "Fixing" the blank read of a pre-DEV-369 `string[][]` melody <!-- R259 -->
+- Touching IndexedDB outside `store/projectStore.ts` <!-- R245 -->
+- A storage failure thrown instead of returned as a typed result <!-- R246 -->
+- `source` inside the project body or `serializeProject` <!-- R248 -->
+- `projectSource` as a localStorage persist key <!-- R249 -->
+- A version gate in `sanitizeSlotRecord` <!-- R250 -->
+- View, session or library state in a project body <!-- R251 -->
+- Reading a `.solna` body as a persist payload or the reverse <!-- R252 -->
+- A read-time repair of an over-long user library <!-- R253 -->
+- Dirty tracking, or an autosave subscription per key <!-- R254 -->
+- Arming autosave before `loadProject()` settles <!-- R256 -->

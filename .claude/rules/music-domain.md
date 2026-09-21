@@ -71,3 +71,22 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - `CHORD_PROGRESSIONS` `roman` summaries are validated (numeral, case, accidental) by `src/audio/chordProgressions.test.ts`; the quality suffix stays unvalidated on purpose. <!-- R081 -->
 
 ([ADR-0008](../../docs/decisions/0008-reharmonization-category-and-roman-numerals.md))
+
+## Prohibited
+
+- Importing `tonal` outside `src/musicCore/tonalAdapter.ts` <!-- R044 -->
+- Pitch, interval or chord-quality operations not routed through `src/musicCore/index.ts` <!-- R046 -->
+- A second chord-quality table, or a silent `maj` for an unregistered quality <!-- R048 --> <!-- R049 -->
+- `src/musicCore/**` importing `store/`, `components/`, `audio/` or `utils/` <!-- R050 -->
+- Mixing musical intent, derived representation and playable event in one value <!-- R051 -->
+- A hand-rolled note-name regex outside `src/musicCore/` <!-- R082 -->
+- A core function substituting a default instead of returning `null`/`NaN` <!-- R084 -->
+- Chord qualities or override fields in `SCALES` <!-- R061 --> <!-- R063 -->
+- Indexing `degree % 7` into a parent scale <!-- R062 -->
+- Persisting, comparing or keying on a spelled note name <!-- R064 --> <!-- R066 -->
+- Spelling the progression quick-save name <!-- R067 -->
+- A `notes` field on `ChordItem`, or reading stored chord notes <!-- R069 --> <!-- R070 -->
+- `setChordOctave` writing anything besides the octave <!-- R071 -->
+- Casting raw input through `toChordItem` <!-- R072 -->
+- Reading a substring of a quality token in `snapProgressionToScale` <!-- R076 -->
+- `bIII` on the mediant, or an accidental on a scale under seven degrees <!-- R079 --> <!-- R080 -->

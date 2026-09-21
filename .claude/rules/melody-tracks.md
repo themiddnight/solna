@@ -44,3 +44,23 @@ The `MELODY_TRACKS` table, the record arm, key changes and borrowed out-of-scale
 - `asLeadNoteMatrix` (`sanitize.ts`) returns `undefined` for the pre-DEV-369 `string[][]` shape, so such a payload comes back blank with no throw or warning; do not "fix" it. <!-- R259 -->
 
 ([ADR-0023](../../docs/decisions/0023-validation-instead-of-migration.md))
+
+## Prohibited
+
+- A `` `${id}MelodySteps` `` naming convention in place of `MELODY_TRACKS` data <!-- R132 -->
+- A second hand-written melody slice <!-- R133 -->
+- A default for `LeadMelodyGrid`'s `trackId` <!-- R134 -->
+- A melody grid starting a clock timer <!-- R135 -->
+- One step-publisher slot shared by Lead and FX <!-- R136 -->
+- Two armed tracks at once <!-- R137 -->
+- A recorder bridge writing while `recordingTrack` names another row <!-- R138 -->
+- A Rec button on chord, bass, pad or drum focus <!-- R139 -->
+- Disarming on a Sound ↔ Pattern hop, or keeping the arm across a layer, loop or focus change <!-- R140 -->
+- Coupling the arm back to the audition target <!-- R141 -->
+- "Fixing" the FX pitch-riser or LFO limits outside their own spec <!-- R142 -->
+- A key change that writes the key without transposing every melody row <!-- R143 -->
+- Transposing a melody on a loop-copy `key` group <!-- R144 -->
+- Hiding or deleting an out-of-key note on a view change <!-- R145 -->
+- Storing a borrowed row, or conjuring one for an unreachable note <!-- R146 -->
+- Bounding borrowed rows by octave suffix <!-- R147 -->
+- "Fixing" the blank read of a pre-DEV-369 `string[][]` melody <!-- R259 -->

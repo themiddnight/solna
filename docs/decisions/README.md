@@ -45,6 +45,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0028](0028-sample-based-metering.md) | Meters read samples before the dynamics | Peak/RMS dBFS from time-domain data, tapped pre-dynamics, scheduled with visibility gating, never in a slice (DEV-383). |
 | [0029](0029-verify-gate-and-lint-severity.md) | `verify` gate, Knip baselines, D5 severity policy | `bun run verify` defines done; zero ESLint errors, only two rules may warn; zero Knip findings; D5 warn-then-error. |
 | [0030](0030-palette-contrast-gate.md) | Palette contrast is a non-vacuous gate | `check:contrast` holds both palettes above AA in both themes and fails on a one-theme-only module colour. |
+| [0031](0031-component-hook-store-selector-and-placement-conventions.md) | Component hooks, narrow store selectors, topic-grouped utils, placement | Component logic in a colocated `useXxx` hook; one value per `useAppStore` selector or `useShallow`; one theme per `utils/` file; one-area code stays with the area; every rules file ends in a `## Prohibited` checklist. |
 
 ## Adding or changing a decision
 

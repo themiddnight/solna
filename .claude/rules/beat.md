@@ -58,3 +58,27 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 - A `spread()` factor chosen after measurement is commented as calibration and is a floor, never lowered. <!-- R116 -->
 
 ([ADR-0011](../../docs/decisions/0011-check-drums-non-vacuous.md))
+
+## Prohibited
+
+- A Beat action writing more than one of `beatParams`/`beatPattern`/`beatMix`, or a fourth Beat field <!-- R097 -->
+- The legacy names (`soundKit`, `drumFilter*`, `masterSequencerVolume`, `drumMuted`, `sequencerTracks`) outside the three allowlisted files <!-- R098 -->
+- A second reader of the old Beat shape, or a new write containing old fields <!-- R099 -->
+- A runtime trim table, or `src/audio/trims.ts` <!-- R100 -->
+- A per-drag-frame patch write from a Beat knob <!-- R101 -->
+- A second patch → DSP path beside `applyBeatParams` <!-- R102 -->
+- A voice list in any order other than `BEAT_VOICE_IDS`' <!-- R103 -->
+- A pad for `bell` <!-- R104 -->
+- Writing `drumPadVelocities` per drag frame <!-- R105 -->
+- A `reference` field on `BeatVoices` <!-- R106 -->
+- Any `DRUM_ALIASES` entry beyond `closedhat`, or a subset assertion on it <!-- R107 -->
+- A `Partial` Beat patch merged over a default, or `mergeDrumKit` <!-- R108 -->
+- A copy of the default preset's voices as `DEFAULT_BEAT_VOICES` <!-- R109 -->
+- Merging a Beat preset instead of installing a clone <!-- R110 -->
+- A grid apply that merges into the existing pattern <!-- R088 -->
+- Letting solo reach per-voice mute, or dropping either mute applier <!-- R161 --> <!-- R162 -->
+- A new `check:drums` parameter added to `PAIRWISE_PARAMS` <!-- R111 -->
+- A zero counted by `spreadDefined`, or a check without its counted minimum <!-- R113 --> <!-- R114 -->
+- A non-finite `withinKit` ratio treated as passing <!-- R114 -->
+- Growing the default-preset exclusion beyond one entry <!-- R115 -->
+- Lowering a calibrated `spread()` factor <!-- R116 -->
