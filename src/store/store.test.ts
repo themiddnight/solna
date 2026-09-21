@@ -447,7 +447,11 @@ describe('persist partialize', () => {
 
   test('the content keys are not persisted at all — IndexedDB owns them now', async () => {
     const { useAppStore, flushPersistedWrites } = await getStore();
-    useAppStore.setState({ bpm: 199, masterVolume: -3 });
+    // metronomeActive flips so the write is real: a set() touching only
+    // non-persisted keys is deduped and writes nothing at all.
+    useAppStore.setState({
+      bpm: 199, masterVolume: -3, metronomeActive: !useAppStore.getState().metronomeActive,
+    });
     flushPersistedWrites();
     const stored = JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}');
     expect('bpm' in stored.state).toBe(false);
@@ -491,6 +495,87 @@ describe('persist partialize', () => {
     expect(merged.customBassPattern).toBe(initial.customBassPattern);
     expect(merged.customBassLoopLength).toBe(initial.customBassLoopLength);
     expect(merged.customBassHoldSteps).toBe(initial.customBassHoldSteps);
+  });
+});
+
+/**
+ * persist hands storage a fresh `{ state, version }` wrapper on EVERY set(),
+ * whether or not the set touched a persisted key. The deduped storage skips
+ * serialising it when nothing persisted changed, so a per-MIDI-message or
+ * per-playhead write does no JSON work at all.
+ */
+describe('persist serialisation is skipped when no persisted key changed', () => {
+  const isPersistPayload = (v: unknown): boolean =>
+    typeof v === 'object' && v !== null && 'state' in v && 'version' in v;
+
+  test('a set() that touches no persisted key does no persist serialisation', async () => {
+    const { useAppStore } = await getStore();
+    useAppStore.setState({ metronomeActive: !useAppStore.getState().metronomeActive }); // prime: one real write
+    const spy = spyOn(JSON, 'stringify');
+    try {
+      useAppStore.setState({ playheadChordIndex: 2 }); // non-persisted
+      useAppStore.getState().triggerMidiActivity(); // non-persisted, per-MIDI-message
+      const persistCalls = spy.mock.calls.filter(([v]) => isPersistPayload(v));
+      expect(persistCalls).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('a persisted-key change still reaches storage after flushPersistedWrites()', async () => {
+    const { useAppStore, flushPersistedWrites } = await getStore();
+    const next = !useAppStore.getState().metronomeActive;
+    useAppStore.setState({ metronomeActive: next });
+    flushPersistedWrites();
+    const stored = JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}');
+    expect(stored.state.metronomeActive).toBe(next);
+  });
+
+  // The dedupe compares top-level values by reference, so it is only correct
+  // while every writer of a persisted value replaces it rather than mutating.
+  // The table names EVERY persisted key: an object-valued key lists a probe
+  // per writer, and a primitive-valued key lists none because a primitive
+  // cannot be mutated in place. A key added to partializeAppState without a
+  // row here fails the key-set assertion.
+  test('every persisted-value writer replaces its value, never mutates it', async () => {
+    const { useAppStore, partializeAppState } = await getStore();
+    const s = () => useAppStore.getState();
+    const writers: Record<keyof ReturnType<typeof partializeAppState>, (() => void)[]> = {
+      metronomeActive: [],
+      selectedVibeId: [],
+      focusTrack: [],
+      activeLoopId: [],
+      customSynthPresets: [
+        () => s().saveCustomPreset('Probe', s().synthParams),
+        () => s().deleteCustomPreset(s().customSynthPresets[0].id),
+      ],
+      customChordProgressions: [
+        () => s().saveCustomChordProgression('Probe', s().chords),
+        () => s().deleteCustomChordProgression(s().customChordProgressions[0].id),
+      ],
+      customBeatPresets: [
+        () => s().saveCustomBeatPreset('Probe', s().beatParams),
+        () => s().deleteCustomBeatPreset(s().customBeatPresets[0].id),
+      ],
+      drumPadVelocities: [
+        () => s().setDrumPadVelocity('kick', 0.5),
+        () => s().setDrumPadVelocity('kick', 0.25),
+      ],
+    };
+    const persisted = partializeAppState(s());
+    expect(Object.keys(writers).sort()).toEqual(Object.keys(persisted).sort());
+    for (const [key, probes] of Object.entries(writers) as [keyof typeof writers, (() => void)[]][]) {
+      if (probes.length === 0) {
+        const value: unknown = persisted[key];
+        expect(value === null || typeof value !== 'object').toBe(true);
+        continue;
+      }
+      for (const write of probes) {
+        const before = s()[key];
+        write();
+        expect(s()[key]).not.toBe(before);
+      }
+    }
   });
 });
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
-import { persist, subscribeWithSelector, createJSONStorage } from 'zustand/middleware';
+import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { createDedupedJsonStorage } from './persistStorage';
 import type { StateStorage } from 'zustand/middleware';
 import { createTransportSlice } from './transportSlice';
 import { createMusicContextSlice } from './musicContextSlice';
@@ -139,11 +140,19 @@ function resolveStorage(): StateStorage | null {
 }
 
 /**
- * The persist storage. `resolveStorage()` may legitimately return null (no
+ * The raw persist storage. `resolveStorage()` may legitimately return null (no
  * localStorage at all) and its setItem already swallows throws; the in-memory
- * fallback keeps persist functional either way. The coalescer sits BELOW
- * partialize and createJSONStorage, so it only ever sees an already-serialised
- * string and cannot change WHAT is persisted — only how often it is written.
+ * fallback keeps persist functional either way.
+ *
+ * persist writes through three layers, top to bottom:
+ * 1. dedupe (`createDedupedJsonStorage`) — receives zustand's `{ state,
+ *    version }` object on every set() and drops it unserialised when every
+ *    partialized value is reference-equal to the last write, so a set() that
+ *    touches no persisted key costs no JSON work;
+ * 2. stringify — only what survived the dedupe;
+ * 3. coalesce (this object) — buffers the string to an idle callback. It only
+ *    ever sees an already-serialised string and cannot change WHAT is
+ *    persisted — only how often it reaches localStorage.
  */
 const persistStorage = createCoalescedStorage(resolveStorage() ?? memoryStorage);
 
@@ -184,16 +193,6 @@ export function partializeAppState(state: AppStore): PersistedState {
 }
 
 /**
- * Picks and validates only session preferences and user libraries. Old content
- * and unknown keys must never override the factory state or store actions.
- *
- * Musical content is deliberately absent: it no longer travels through
- * localStorage, so `sanitizeContent` (projectFile.ts) is the one reader that
- * validates it, on the `.solna` import and IndexedDB load paths where the
- * content actually enters the store. Repeating the rules here would be a second
- * copy of a rule that now has exactly one entry point.
- */
-/**
  * The drum-pad velocity overrides, VALIDATED rather than migrated (the "no
  * migration chains" rule): a plain object keeps only the entries whose key is
  * a Beat voice id and whose value is a finite number in 0..1; anything else
@@ -213,6 +212,16 @@ function sanitizeDrumPadVelocities(
   return out;
 }
 
+/**
+ * Picks and validates only session preferences and user libraries. Old content
+ * and unknown keys must never override the factory state or store actions.
+ *
+ * Musical content is deliberately absent: it no longer travels through
+ * localStorage, so `sanitizeContent` (projectFile.ts) is the one reader that
+ * validates it, on the `.solna` import and IndexedDB load paths where the
+ * content actually enters the store. Repeating the rules here would be a second
+ * copy of a rule that now has exactly one entry point.
+ */
 export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   if (typeof persisted !== 'object' || persisted === null) return {};
   const input = persisted as Record<string, unknown>;
@@ -344,7 +353,7 @@ export const useAppStore = create<AppStore>()(
     {
       name: PERSIST_KEY,
       version: PERSIST_VERSION,
-      storage: createJSONStorage<PersistedState>(() => persistStorage),
+      storage: createDedupedJsonStorage<PersistedState>(persistStorage),
       partialize: partializeAppState,
       // The only remaining transform: adopt the legacy localStorage presets
       // (still live, still called from HERE rather than from a chain — see
