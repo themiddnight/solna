@@ -9,9 +9,12 @@ Theory *functions* live in **`src/utils/musicTheory.ts`** (pure, no store/engine
 `SCALES` table lives in `src/data/scales.ts`.
 `src/audio/` and `src/components/` both import from `musicTheory.ts`; it imports neither.
 
-## Rule: use `tonal`, never hand-rolled math
+## Rule: use Music Core, never hand-rolled math
 
-`tonal` is the only theory dependency (no Tone.js). Reach for it for **note/interval/chord math**:
+`tonal` is the only theory dependency (no Tone.js), and it is imported **only** by
+`src/musicCore/tonalAdapter.ts` (ESLint-enforced; `src/audio/` never imports it). Everywhere else,
+reach for **note/interval/chord math** through Music Core's public API (`@/musicCore`) or the
+`musicTheory.ts` wrappers named below — the `tonal` calls in this table are what the adapter wraps:
 
 | Need | Use | Don't |
 |---|---|---|
@@ -85,8 +88,8 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
 - `snapProgressionToScale(chords, root, scaleType)` snaps each chord to the nearest degree of
   the given scale; `shouldPreserveQualityOnSnap` (driven by each quality's registry-declared
   `reharmonizationCategory` in `src/musicCore/chordQuality.ts`) decides whether a chord keeps its
-  user-chosen quality or regenerates the landing degree's own diatonic quality — see CLAUDE.md's
-  "A chord's reharmonization behavior is named on the registry" section for the full rule. This is
+  user-chosen quality or regenerates the landing degree's own diatonic quality — see `.claude/rules/music-domain.md`
+  (R073) and `docs/decisions/0008-reharmonization-category-and-roman-numerals.md` for the full rule. This is
   what a **scale** change needs, and it is only correct on chords already in `root` — feeding it
   chords from another key collapses distinct chords onto one degree. `reharmonizeProgressionToScale`
   was the two operations conflated and is gone.
@@ -98,8 +101,9 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
   `notes` field back to a chord object by hand; that reintroduces exactly the "stored notes silently
   disagree with root/quality" bug this shape removed. `setChordOctave` writes only `{chordOctave}` —
   it has nothing else to re-derive.
-- `TONAL_CHORD_ALIASES` maps app quality tokens to `tonal` types (`min9→m9`, `min6→m6`, `minmaj7→mMaj7`).
-  New quality tokens that `tonal` spells differently must be added there or they silently fall back to `maj`.
+- The chord-quality registry in `src/musicCore/chordQuality.ts` maps app quality tokens to `tonal` types
+  (`min9→m9`, `min6→m6`, `minmaj7→mMaj7`). A new quality token is added there; an unregistered token is a
+  compile error as a literal and a thrown error at `resolveChordNotes` at runtime — never a silent `maj`.
 - Display only: `formatChordQuality` / `formatChordLabel` (`'maj'` → `''`, `'min7'` → `'m7'`). Stored
   `ChordItem.quality` tokens stay untouched.
 

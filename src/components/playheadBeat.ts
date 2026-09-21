@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 /**
  * The shared clock's beat position, published OUTSIDE the store.
  *
- * `CLAUDE.md`'s rule: every tab view and Pattern segment stays mounted, so
+ * The always-mounted rule (docs/decisions/0001-always-mounted-views.md): every tab view and Pattern segment stays mounted, so
  * high-frequency state (the current playback step, a knob mid-drag) must stay
  * local to the subtree that shows it, never in a slice — a slice write
  * re-renders every mounted subscriber and re-runs every store listener.

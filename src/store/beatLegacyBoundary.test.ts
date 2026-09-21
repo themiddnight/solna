@@ -24,7 +24,8 @@ import { LOOP_FLAT_KEYS } from './loop';
  * a comment naming `sequencerTracks` as though it still existed is stale
  * documentation about state the reader cannot find, and the cheapest moment to
  * fix it is the moment the field goes. The history of the rename is recorded
- * once, in `sanitizeBeat.ts` and in `CLAUDE.md` — neither of which this scans
+ * once, in `sanitizeBeat.ts` and in `.claude/rules/beat.md` +
+ * docs/decisions/0010-beat-instrument-three-fields.md — neither of which this scans
  * for the first reason and the second respectively.
  *
  * MATCHING IS CASE-INSENSITIVE, because the derived names are where a survivor

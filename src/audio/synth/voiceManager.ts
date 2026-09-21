@@ -21,7 +21,7 @@ import { createVoiceIdAllocator, type VoiceId } from './voiceId';
  *    legacy engine keyed `activeVoices` by `` `${source}:${noteName}` ``, so
  *    the arp, the live keyboard and the melody sequencer cut each other's
  *    notes short whenever two of them sounded the same note on one bus —
- *    recorded in CLAUDE.md as a known deferred defect, and this module is the
+ *    recorded as a known deferred defect (ADR-0019), and this module is the
  *    fix. `noteOn` returns a `VoiceId`; `noteOff` takes one.
  * 2. **Whole-bus reach requires calling a method whose name says so.**
  *    `noteOff` reaches one voice, `releaseOwner` reaches one player's voices

@@ -98,7 +98,7 @@ function loop(now: number): void {
       // rather than being retried at full rAF rate.
       entry.lastTickAt = now;
       try {
-        // Time domain only, always. A meter reads SAMPLES, not a spectrum (CLAUDE.md):
+        // Time domain only, always. A meter reads SAMPLES, not a spectrum (ADR-0028):
         // averaging frequency bins measures brightness, not loudness, and yields a number
         // with no dB meaning. There is deliberately no per-registration domain option —
         // the one that existed was never set by any caller and neither `attachMeter` nor

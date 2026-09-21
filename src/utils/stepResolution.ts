@@ -91,7 +91,8 @@ export function columnsPerBar(stepsPerBar: number, stride: number): number {
  * exactly the invisible state silent dormancy was chosen to avoid.
  *
  * It lives HERE and not in melodyGrid.ts because audio/ may never import
- * components/ (CLAUDE.md, three-layer rule), and three prose comments
+ * components/ (the four-layer rule, docs/decisions/0002-four-layer-import-architecture.md),
+ * and three prose comments
  * claiming to hold three copies of `Math.max(1, Math.ceil(len / stride))`
  * together is not a mechanism.
  *

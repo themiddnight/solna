@@ -9,7 +9,7 @@ type Get = StoreApi<AppStore>['getState'];
 
 /**
  * Soft cap on each user library array. A cap is a validation-time guard, not
- * a persisted-shape migration (CLAUDE.md: "no migration chains") — it simply
+ * a persisted-shape migration (ADR-0023: "no migration chains") — it simply
  * bounds what a save action writes going forward; it never reads or repairs
  * an existing over-cap array on load.
  */

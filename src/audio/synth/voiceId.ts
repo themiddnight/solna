@@ -5,7 +5,7 @@
  * every melodic bus (live input, the arp, the melody-track sequencer), so
  * `${source}:${noteName}` names as many voices as happen to be sounding that
  * note — which is exactly how an arp key-up came to cut a melody track's note
- * short (recorded in CLAUDE.md at `activeVoices`). A `VoiceId` names ONE
+ * short (docs/decisions/0017-voice-identity-and-ownership.md). A `VoiceId` names ONE
  * note-on, and nothing else can be mistaken for it.
  *
  * Branded rather than a bare `string` so a caller cannot pass a note name, a

@@ -13,7 +13,8 @@
  * `useSegmentGatedStep`/`shouldSubscribeToStep`: any of those would make a
  * segment's audio audible only while that segment happens to be the one on
  * screen, which is exactly the "every Pattern segment plays simultaneously"
- * invariant this app is built on (see CLAUDE.md's Architecture section).
+ * invariant this app is built on (see docs/decisions/0001-always-mounted-views.md and
+ * 0016-focus-routed-note-input.md).
  *
  * A source scan, not a runtime test, for the same reason as
  * `src/store/beatLegacyBoundary.test.ts` and

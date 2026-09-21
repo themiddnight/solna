@@ -80,7 +80,7 @@ export const DRUM_SOUND_DEPTH_KEY = 'musibox_drum_sound_depth';
 /**
  * Keys an older build wrote, newest first, read-only.
  *
- * This is NOT a migration chain in the sense CLAUDE.md forbids: there is no
+ * This is NOT a migration chain in the sense ADR-0023 forbids: there is no
  * version gate and no read-time transform, only one more rung on the
  * legacy-key adoption ladder this read already climbed. It exists because the
  * value's MEANING widened — it is no longer the synth's view mode, it is the

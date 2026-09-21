@@ -1,7 +1,7 @@
 # Solna — Feature & Module Overview
 
 A high-level map of what the app does and how the code is organised. For the rules behind each
-boundary, `CLAUDE.md` is authoritative; this page is the bird's-eye view. The code-verified,
+boundary, `CLAUDE.md`, `.claude/rules/` and `docs/decisions/` are authoritative; this page is the bird's-eye view. The code-verified,
 file-cited map (component tree, every slice, node graph, real import graph, findings) is in
 [`structure/`](structure/README.md).
 

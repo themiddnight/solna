@@ -829,8 +829,7 @@ export class MasterRack {
   /**
    * The delay's feedback loop keeps ringing after its send goes idle.
    * `delayTime` is the fixed 0.25s seeded in setupMasterChain (there is no
-   * user-facing delay-time control — see CLAUDE.md's "delayTime is GONE from
-   * MasterEffects" legacy-trap note), so the tail length is a function of
+   * user-facing delay-time control), so the tail length is a function of
    * feedback alone: n repeats to decay to -60dB is
    * log(0.001) / log(feedback), clamped so a pathological feedback near 1
    * cannot book an absurd timer.

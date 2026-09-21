@@ -67,6 +67,34 @@ transport played is not a step the user performed.
 that needs store state — the melody recorder, for one — subscribes from
 `store/`, started once beside the engine bridge in `useEngineSync`.
 
+### Focus routing
+
+- The computer keyboard, the on-screen keyboard and the arp play the track `focusTrack` names —
+  bus and patch. <!-- R163 -->
+- A note's bus is captured at note-on and never recomputed at release, so a mid-hold focus change
+  cannot send a note-off to the wrong bus. <!-- R164 -->
+- Equal-power polyphony counts held notes per bus, never globally. <!-- R165 -->
+- The arp releases every bus it actually triggered a voice on, not just the one focused at
+  cleanup. <!-- R166 -->
+- A `drum` focus makes the melodic keyboard a complete no-op: nothing sounds and nothing is
+  announced on the note-input bus; the QWERTY drum-pad keys are a separate listener. <!-- R167 -->
+- An external MIDI device always plays Lead whatever the focus (`store/midiInput.ts` names
+  `'synth'`). <!-- R168 -->
+
+([ADR-0016](../../docs/decisions/0016-focus-routed-note-input.md))
+
+- The polyphony count is the caller's: `useInputDeck` counts held notes per bus, excluding the
+  arp and the sequencer; the voice manager skips releasing groups. <!-- R184 -->
+- Live keyboard backstop: `useInputDeck.ts` releases every held note on `window` blur and on
+  `visibilitychange`. <!-- R202 -->
+
+([ADR-0019](../../docs/decisions/0019-polyphony-gain-and-voice-lifetime.md))
+
+- `midiActivityTimestamp` is an accepted exception to "high-frequency state stays out of slices":
+  a ui-slice key written per MIDI message; it must stay unpersisted. <!-- R018 -->
+
+([ADR-0001](../../docs/decisions/0001-always-mounted-views.md))
+
 ## What is not carried
 
 Velocity reaches the bus but never the stored note: `LeadNote` is

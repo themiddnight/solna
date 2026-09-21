@@ -36,7 +36,7 @@ export interface SpanResizeStart<TIdentity> {
  * testable; what is left here cannot be decided without a DOM.
  *
  * The preview length lives in LOCAL state and reaches a store exactly ONCE,
- * through onCommit. That is required by CLAUDE.md, not a preference: every
+ * through onCommit. That is required by ADR-0012, not a preference: every
  * tab view stays mounted, so a store write per pointermove would re-render
  * every view and re-serialise the persisted slice on every frame.
  */

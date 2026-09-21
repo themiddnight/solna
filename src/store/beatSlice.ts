@@ -25,7 +25,7 @@ type Set = StoreApi<AppStore>['setState'];
  * IMMUTABLE AT THE NARROWEST OBJECT. A voice edit rebuilds that voice, the
  * `voices` map and `beatParams` — and nothing else. Rebuilding the siblings
  * too would make every mounted view re-render on every knob tick, which is the
- * cost CLAUDE.md's "every view stays mounted" note is about.
+ * cost ADR-0001's "every view stays mounted" rule is about.
  *
  * NEVER SHARE A REFERENCE. `paramsFromPreset` and `defaultBeatState` hand
  * back fresh deep copies, and every row this file writes is a new array, so no

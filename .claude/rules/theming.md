@@ -4,6 +4,7 @@ paths:
   - "src/utils/themeColor.ts"
   - "src/**/*.css"
   - "scripts/themeTokenGuard.ts"
+  - "scripts/check-contrast.ts"
 ---
 
 # Theming — the hard rule
@@ -25,10 +26,20 @@ Canvas code (which cannot use classes) resolves live theme colours at runtime th
 
 Run `bun run check:theme` to check this suite alone.
 
-`--drum-*` and `--module-*` carry their own namespaces and their own gate: `bun run check:contrast`
-measures every fill against its own `-content` in both themes and fails below 4.5:1. A new module
-or drum colour must be declared in **both** themes — the script fails on a set the two themes
-disagree about, rather than silently skipping the half that is missing.
+## Palette contrast gate
+
+`--drum-*` and `--module-*` carry their own namespaces and their own gate.
+
+- `bun run check:contrast` measures every `--drum-*` and `--module-*` fill against its own
+  `-content` in both themes and fails below AA 4.5:1; it is a gate a palette can fail, not a
+  report. <!-- R011 -->
+- Rosters: Beat voices come from `BEAT_VOICE_IDS` (the CSS tokens stay `--drum-*`, with the same
+  id strings); module names are parsed from `index.css`, because the CLI gate must not import a
+  React component (`Knob`'s `KnobColor`). <!-- R012 -->
+- The script asserts both themes declare the same, non-empty module set, so a module colour
+  declared in one theme only fails rather than being skipped. <!-- R013 -->
+
+([ADR-0030](../../docs/decisions/0030-palette-contrast-gate.md))
 
 ## Where the answers live
 

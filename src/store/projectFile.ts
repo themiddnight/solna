@@ -200,8 +200,8 @@ export function parseProjectFile(text: string): ProjectParseResult {
 
 /**
  * The OTHER reader of a stored project body: one read back out of the
- * IndexedDB library (projectStore.ts). CLAUDE.md calls IndexedDB the saved
- * project library and `.solna` the secondary path, so this is the reader that
+ * IndexedDB slot (projectStore.ts). ADR-0024 makes IndexedDB the one saved
+ * project slot and `.solna` the secondary path, so this is the reader that
  * sees an old body FIRST — every project saved before a format bump sits in
  * there at its original version.
  *

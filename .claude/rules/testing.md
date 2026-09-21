@@ -29,12 +29,18 @@ zustand wires `useStore`'s `getServerSnapshot` to `selector(api.getInitialState(
 `renderToString`, a plain `useAppStore((s) => ...)` therefore always renders creation-time
 values — `useAppStore.setState(...)` before the render has **no effect**, silently.
 
-Nothing in `bun run verify` catches this; the test just asserts against the wrong state.
+Nothing in `bun run verify` catches this; the test just asserts against the wrong state. <!-- R257 -->
 
 If a component must reflect state set by a test, it has to serve `getState()` for *both*
 snapshots — see the `useLiveStore` helper and its comment in `src/components/ui/BottomInputDock.tsx`,
 and the note at the top of `src/components/TransportBar.test.tsx` explaining which cases cannot
 be exercised through a rendered component at all.
+
+## Persisted writes lag the store
+
+The `localStorage` write is coalesced to an idle callback, so storage lags the store by up to one
+idle window: call `flushPersistedWrites()` before asserting on `localStorage`, in a test or a live
+page. <!-- R213 --> ([ADR-0022](../../docs/decisions/0022-persist-write-path-and-guarded-storage.md))
 
 ## The audio engine harness
 

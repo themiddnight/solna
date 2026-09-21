@@ -5,8 +5,8 @@ description: Use when touching anything under src/audio/ in solna — the audioE
 
 # Solna DSP & Audio Routing
 
-Solna's audio is **raw Web Audio API**. There is no Tone.js — `tonal` is a music-theory
-dependency only, never used for audio.
+Solna's audio is **raw Web Audio API**. There is no Tone.js, and `src/audio/` never
+imports `tonal` — music theory reaches audio only through Music Core (`@/musicCore`).
 
 Everything lives in one singleton: `src/audio/engine.ts` → `export const audioEngine = new AudioEngine()`.
 
@@ -254,7 +254,7 @@ Follow how distortion is wired — it is the smallest complete example.
 5. Do NOT bump the persist `version` for it. There are no migration chains any more: a persisted
    shape change is handled by validating the new key on every read
    (`sanitizePersistedState`/`sanitizeLoops` in `store.ts`), not by a version-gated branch. See
-   CLAUDE.md's "no migration chains" note for the precondition under which that stops being true.
+   `docs/decisions/0023-validation-instead-of-migration.md` for the precondition under which that stops being true.
 
 **Legacy trap:** `chorusWet`/`chorusRate`/`chorusDepth`/`delayTime` are GONE from `MasterEffects`,
 and `sanitize.ts` deletes them from any old payload so they cannot resurrect. Don't wire UI to
@@ -352,7 +352,7 @@ for the rest of the session.
 | Scheduled pattern notes vanish | Something called `updateSynthPatch`/`stopSource` on future voices and cancelled their ramps |
 | Clicks on mute | Bypassed the `setTargetAtTime(…, 0.01)` ramp in `setSourceMuted` |
 
-Gate: `bun run verify` — see CLAUDE.md for what it runs; `bun run eslint` is part of it and must
+Gate: `bun run verify` — see CLAUDE.md's "Completion gate" for what it runs; `bun run eslint` is part of it and must
 report nothing at all. Engine tests live in `src/audio/engine.test.ts`, and what the synth voice
 SOUNDS like is measured off rendered samples in `src/audio/synth/subtractiveSignal.test.ts`. A
 graph assertion proves a param was scheduled; only a render proves what came out, and every ratio

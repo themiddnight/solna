@@ -207,7 +207,7 @@ export function shouldSubscribeToStep(focus: MixLayerId, segment: PatternSegment
  * `useCurrentStep`, but gated on SEGMENT FOCUS — not on whether this segment
  * is actually visible. The gate is exactly `segmentForFocus(focusTrack) ===
  * segment`; it has no idea whether `activeTab` even shows a Pattern segment
- * at all. Every Pattern segment stays mounted (see CLAUDE.md), so the case
+ * at all. Every Pattern segment stays mounted (see ADR-0001), so the case
  * this was built for is the ~4x reduction across Pattern's own four segments
  * (Lead, FX, Accompaniment, Beat): a playhead whose segment focus does not
  * currently match otherwise re-renders at the clock's 8-16Hz for nothing

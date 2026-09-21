@@ -35,7 +35,7 @@ export interface LeadTrigger {
  *
  * Defined here, next to the functions that consume it, so store/ and
  * components/ import it downward and audio/ never has to import either
- * (CLAUDE.md, three-layer rule).
+ * (the four-layer rule, docs/decisions/0002-four-layer-import-architecture.md).
  */
 export interface LeadNote {
   note: string;

@@ -6,8 +6,8 @@ import type { PatternSegment } from '@/types';
 import { leadMarkerColumn } from './melodyGrid';
 
 /**
- * Lead and FX are different Pattern segments (CLAUDE.md: "Pattern's own four
- * segments (Lead, FX, Accompaniment, Beat)"), so the gate below needs a
+ * Lead and FX are different Pattern segments (ADR-0001: Pattern has four
+ * segments — Lead, FX, Accompaniment, Beat), so the gate below needs a
  * per-track segment, not one hardcoded literal. `MELODY_TRACKS` carries no
  * `segment` column — its `id`s happen to spell the same two literals
  * (`'lead'`, `'fx'`) as their segments, but that is a coincidence of two

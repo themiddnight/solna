@@ -30,7 +30,7 @@ export type SaveTarget =
  *
  * The route carries its payload (the id, the handle) rather than being a bare
  * string, so the caller that switches on it needs no cast to recover what it
- * already narrowed — see `releaseSoundingVoices` in CLAUDE.md for the scar that rule
+ * already narrowed — see `releaseSoundingVoices` in ADR-0017 for the scar that rule
  * comes from.
  */
 export function saveTarget(source: ProjectSource): SaveTarget {
@@ -114,7 +114,7 @@ export function sanitizeProjectSource(raw: unknown): ProjectSource {
  * value itself. Both come back as a record — a slot written before sources
  * existed reads as `{ body, source: untitled }`. There is no version gate here
  * and none may be added: PERSIST_VERSION drives no read-time transform (see the
- * "no migration chains" note in CLAUDE.md), and validation on read is what
+ * "no migration chains" decision, ADR-0023), and validation on read is what
  * replaces a chain.
  *
  * `looksLikeBody` is applied to BOTH branches on purpose. Recognising a record

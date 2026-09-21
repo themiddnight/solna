@@ -1,0 +1,73 @@
+---
+paths:
+  - "src/musicCore/**"
+  - "src/utils/musicTheory.ts"
+  - "src/utils/noteSpelling.ts"
+  - "src/data/scales.ts"
+  - "src/data/chordProgressions.ts"
+  - "src/store/chordsSlice.ts"
+  - "src/store/sanitize.ts"
+  - "src/audio/leadStepRecord.ts"
+  - "src/audio/bassPatterns.ts"
+  - "src/audio/arpeggiator.ts"
+  - "src/audio/playback/padPlayback.ts"
+  - "src/components/loop/lead/melodyGrid.ts"
+  - "src/components/ui/Keyboard.tsx"
+  - "src/components/loop/chord/**"
+---
+
+# Music domain
+
+Music Core, chord qualities, scale-degree derivation, note spelling, chord notes, reharmonization and Roman numerals.
+
+## Music Core and Tonal
+
+- `tonal` is imported only from `src/musicCore/tonalAdapter.ts`; `src/audio/` never imports it. <!-- R044 -->
+- Every other file needing pitch, interval or chord-quality operations imports `src/musicCore/index.ts`. <!-- R046 -->
+- `utils/noteSpelling.ts`, `utils/musicTheory.ts`, `audio/arpeggiator.ts`, `audio/bassPatterns.ts`, `audio/playback/padPlayback.ts`, `store/midiInput.ts` import no `tonal` and keep their public exports. <!-- R047 -->
+- `src/musicCore/chordQuality.ts` owns the one chord-quality registry (token, Tonal alias, display suffix, picker label/group, reharmonization category); `ChordItem['quality']`, the picker options, `formatChordQuality`/`formatChordLabel` and `resolveChordNotes` derive from it. <!-- R048 -->
+- An unregistered quality literal is a compile error; an unregistered runtime string throws at `resolveChordNotes`, never a silent `maj`. <!-- R049 -->
+- `src/musicCore/**` imports nothing from `store/`, `components/`, `audio/` or `utils/`; dependencies run audio → Music Core and utils → Music Core only. <!-- R050 -->
+- Keep three kinds apart: musical intent (persisted user decision), derived representation (pure function of intent), playable event (resolved, timestamped, owner assigned — the engine's sole input, DEV-399). Contract: `docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md`. <!-- R051 -->
+- Music Core owns pitch parsing, octave extraction and scale fallback; nothing outside `src/musicCore/` hand-rolls a note-name regex. <!-- R082 -->
+- Primitives: `octaveOfNote`, `noteMidi`, `pitchClassOfNote`, `chromaOfNote`, `midiToSharpName` (`tonalAdapter.ts`); `transposePitchClassPreservingOctave` (`pitch.ts`); `scale.ts` is the one place an unknown scale type resolves to Major. <!-- R083 -->
+- Core functions fail explicitly (`null`/`NaN`), never substitute; a consumer's defensive default stays in the consumer's file. <!-- R084 -->
+- `NOTE_REGEX_BAN` bans any regex literal in `leadStepRecord.ts`, `bassPatterns.ts`, `melodyGrid.ts`, `Keyboard.tsx`, `musicTheory.ts`. <!-- R085 -->
+
+([ADR-0005](../../docs/decisions/0005-music-core-and-tonal-confinement.md))
+
+## Degree qualities and spelling
+
+- `SCALES` states `intervals` (pinned by `src/data/scales.test.ts`), `tonal`, `tonality` and, for scales under seven degrees, a 7-note `parent`; it states no chord qualities. <!-- R061 -->
+- `resolveDegreeQuality` maps a degree onto the parent by semitone offset, stacks thirds over spelled names and measures with `Interval.distance`; never index `degree % 7` (wrong quality, right shape). <!-- R062 -->
+- An unmapped interval tuple throws (no `maj` fallback); `SCALES` gets no override fields. <!-- R063 -->
+- A sharp name is an identity: everything generated, computed or persisted is `ROOTS`-spelled. <!-- R064 -->
+- `src/utils/noteSpelling.ts` spells for display only, at `formatChordLabel`'s third parameter, `leadRowLabel`, the keyboard `label`, `KEY_OPTIONS`, and `getTonicSpelling(scaleRoot, scaleType)` for a purely rendered key name. <!-- R065 -->
+- Decide by what the value becomes next: a stored, compared or lookup-key value stays `ROOTS`-spelled. <!-- R066 -->
+- The progression quick-save name is built from the raw root and is not spelled (it is persisted). <!-- R067 -->
+- Nothing spelled is persisted, so spelling never moves the persist `version` or `.solna` `formatVersion`. <!-- R068 -->
+
+([ADR-0006](../../docs/decisions/0006-derived-degree-qualities-and-display-spelling.md))
+
+## Chord notes are derived
+
+- `ChordItem` is `id`, `root`, `quality`, `bars`, optional `bassNote` — never `notes`. <!-- R069 -->
+- Every pitch consumer calls `generateBlockChordNotes(quality, root, octave)` with the octave its surface owns (`chordOctave`, `bassOctave`, `padOctave`, or a fixed audition octave). <!-- R070 -->
+- `setChordOctave` (`store/chordsSlice.ts`) writes only the octave. <!-- R071 -->
+- `toChordItem` (`store/sanitize.ts`) rebuilds a fresh `{id, root, quality, bars, bassNote?}` literal, never casts raw input through. <!-- R072 -->
+
+([ADR-0007](../../docs/decisions/0007-chord-notes-derived-not-stored.md))
+
+## Reharmonization and Roman numerals
+
+- `ChordQualityEntry.reharmonizationCategory` names the family; `shouldPreserveQualityOnSnap`: `sixth`, `added-tone`, `extension`, `suspended` PRESERVE; `triad`, `seventh`, `diminished-half-diminished`, `altered` REGENERATE the landing degree's diatonic quality. <!-- R073 -->
+- The split tracks `resolveDegreeQuality`'s output set: a family regenerates iff some degree of some scale can emit it. <!-- R074 -->
+- `dim`, `aug`, `dim7`, `minMaj7`, `maj7#5` regenerate. <!-- R075 -->
+- `snapProgressionToScale` reads no substring of a quality token (no `includes('7')`/`includes('9')`); a source-scan test in `musicTheory.test.ts` pins it. <!-- R076 -->
+- Root snap is nearest degree, tie to the lower-indexed degree (`nearestDegrees(...)[0]`). <!-- R077 -->
+- `degreeToRoman` = position + case (lowercase iff the RESOLVED quality — the explicit override if present — has a minor third) + an accidental, for 7-degree scales only, comparing the scale's interval against Major's at that position. <!-- R078 -->
+- The third degree never carries an accidental (`III`, never `bIII`). <!-- R079 -->
+- Scales under seven degrees never get an accidental. <!-- R080 -->
+- `CHORD_PROGRESSIONS` `roman` summaries are validated (numeral, case, accidental) by `src/audio/chordProgressions.test.ts`; the quality suffix stays unvalidated on purpose. <!-- R081 -->
+
+([ADR-0008](../../docs/decisions/0008-reharmonization-category-and-roman-numerals.md))

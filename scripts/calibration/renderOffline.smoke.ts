@@ -103,7 +103,7 @@ const otherKit = await renderBeatPreset('808-vintage');
 // The reference pattern is the same notes for both kits, so the only thing that
 // can move the peak is the kit itself. Calibrated once, with headroom below the
 // currently measured gap (Retro Drive 0.388 vs 808 Vintage 0.232, a gap of
-// 0.156), and a floor from the commit that sets it — see CLAUDE.md's `spread()`
+// 0.156), and a floor from the commit that sets it — see ADR-0011's `spread()`
 // convention. A future retune that narrows the two kits' levels has real room to
 // move before this flaps.
 const KIT_PEAK_DELTA_FLOOR = 0.01;

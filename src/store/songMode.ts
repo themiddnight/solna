@@ -264,7 +264,7 @@ export function startSongModeSync(deps: SongModeDeps = {}): () => void {
       // subscription survived with nothing playing. subscribeClock only stops
       // the timer when its LAST listener goes, so one retained listener keeps
       // the shared 16th clock running and blocks idle suspend, against
-      // CLAUDE.md's "the clock runs if and only if a player holds a
+      // ADR-0026's "the clock runs if and only if a player holds a
       // subscription". The same gap swallowed a user-initiated Stop on the
       // Song layer. The only state this newly catches is "song layer, nothing
       // playing", which wants exactly this: no cursor, no advance listener.

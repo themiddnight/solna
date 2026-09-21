@@ -148,7 +148,7 @@ describe('load normalises the body it hands out', () => {
 
 /**
  * The slot VALUE widened from a bare ProjectBody to { body, source }. There is
- * no version gate for it (see the "no migration chains" note in CLAUDE.md) —
+ * no version gate for it (see ADR-0023, validation instead of migration) —
  * `sanitizeSlotRecord` recognises both shapes on every read, whatever wrote it.
  */
 describe('the slot record', () => {

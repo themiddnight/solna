@@ -270,7 +270,7 @@ export function releaseScheduledParam(
  * argument: `releaseScheduledParam` means "release to silence", which is a
  * claim about the amp envelope that must stay true and must stay readable at
  * its call site. Reaching silence by leaving an argument off is how the
- * whole-bus-release defect recorded in CLAUDE.md came to exist.
+ * whole-bus-release defect recorded in ADR-0017 came to exist.
  */
 export function releaseScheduledParamTo(
   param: AutomationParam,

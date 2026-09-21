@@ -44,7 +44,7 @@ export const PERSIST_KEY = 'musibox_project_state_v1';
  * The current persist `version`, stamped on every write.
  *
  * DEV-388 deleted the 15-step `if (version < N)` migration chain that used to
- * live in `migrate:` below (see CLAUDE.md: solna has no real users yet, so a
+ * live in `migrate:` below (see ADR-0023: solna has no real users yet, so a
  * per-version upgrade chain was machinery maintained for nobody). What
  * replaced it is VALIDATION, not migration: `merge` below runs every
  * hydrated payload through `sanitizePersistedState` regardless of what
