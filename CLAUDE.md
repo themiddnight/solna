@@ -29,8 +29,9 @@ bun run verify         # all tests, static/domain checks, both dead-code scans, 
 ```
 
 `bun run verify` is the completion gate — run it before claiming work is done. It runs
-`bun run eslint`, which currently reports **nothing at all** — no errors and no warnings — and
-both Knip scans, which likewise have a zero-finding baseline. The default Knip graph includes
+`bun run eslint`, which reports **no errors**; the only warnings it prints are
+`react-hooks/exhaustive-deps` sites (see below), and no other rule may warn. Both Knip scans have a
+zero-finding baseline. The default Knip graph includes
 tests and manually invoked tooling; the production graph excludes tests and narrowly named
 test-support fixtures, so code kept alive only by tests still appears as an unused production
 file while intentional test infrastructure does not. Per decision D5 a new rule lands as `warn` and flips to
@@ -61,8 +62,11 @@ simultaneously**, gated `block`/`hidden` at three levels: `App.tsx` on the layer
 `segmentForFocus(focusTrack)`.
 Audio therefore never stops when switching tabs. **Consequence:** state that lives in a store slice or high in the tree
 re-renders *every* mounted view, not just the visible one. High-frequency state — the current
-playback step, a value being dragged on a knob — must therefore stay local to the subtree that
-shows it, never in a slice.
+playback step, the playhead beat, a value being dragged on a knob — must therefore stay local to
+the subtree that shows it, never in a slice; the step and the playhead beat each travel through a
+module-level pub/sub in `src/components/` (`playbackStep.ts`, `playheadBeat.ts`). One known,
+accepted exception: `midiActivityTimestamp` is still a ui-slice key written per MIDI message,
+kept cheap because it is not persisted (see the `persist` note below).
 
 **Four layers, enforced by eslint (`no-restricted-imports`, plus `no-restricted-globals` and
 `no-restricted-syntax` for the first):**
@@ -87,9 +91,11 @@ shows it, never in a slice.
    throwaway engine bound to a caller-supplied context, which is how the offline mixdown render
    (`src/audio/export/renderMixdown.ts`) works — it never touches `audioEngine`, and the snapshot
    it renders is assembled by `store/mixdownSlice.ts`, because `src/audio/` may not read the store.**
-3. `src/store/` — never imports `components/`. One Zustand store composed from slices
-   (`transport`, `musicContext`, `synth`, `chords`, `bass`, `beat`, `effects`, `ui`,
-   `presets`, `loop`, `lead`, `project`), with `persist` (key `musibox_project_state_v1`, `partialize` +
+3. `src/store/` — never imports `components/`. One Zustand store composed from the slices
+   `store.ts` composes (the list there binds): `transport`, `musicContext`, `synth`, `chords`,
+   `bass`, `pad`, `lead`, `fx`, `beat`, `effects`, `ui`, `presets`, `loop`, `loopCopy`,
+   `project`, `mixdown`, `drive` — plus one separate vanilla store, `audioRecovery.ts`, for
+   audio-recovery state, kept outside the persisted app store. The app store uses `persist` (key `musibox_project_state_v1`, `partialize` +
    `migrate` in `store.ts`, legacy-key adoption in `migrate.ts`) and `subscribeWithSelector`.
    There is no per-version migration step to add any more — `PERSIST_VERSION` is stamped on
    every write but, since DEV-388, drives no read-time transform (`migrate` in `store.ts` is
@@ -104,12 +110,21 @@ shows it, never in a slice.
    through `withDriveToken` at the moment it needs it. A token in a slice would be a token in
    `partialize` the first time someone added it to the list, and a token in the store is a
    token in the devtools panel.
-4. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
+4. `src/components/` — views, plus the live playback **controllers**; must not import
+   `audio/engine`. The controllers — `useChordPlayback`, `useLeadPlayback`,
+   `useSequencerPlayback`, `useInputDeck`, `usePlayheadSync` — and the step and playhead
+   pub/subs (`playbackStep.ts`, `playheadBeat.ts`) live here, reach audio through
+   `audio/playback/playbackEngine`, never `audio/engine`, and are mounted inside the grids — **a
+   lane sounds because its grid is mounted**, which is one more reason every view stays mounted.
+   Only `AudioVisualizer.tsx`,
    `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx` and `ui/SourceMeter.tsx`
    (read-only analyser consumers) and test files are exempt — routing their per-frame analyser
    reads through the store would mean a store write on every animation frame and a re-render of
-   every subscriber. **`eslint.config.js` is the list that binds**; this one has drifted behind it
-   before, so add to both or the allowlist quietly grows without anyone reading it.
+   every subscriber. The `eslint.config.js` block for those four files turns
+   `no-restricted-imports` **off entirely**, so it also lifts the tonal and taper bans for them;
+   a reviewer keeps them free of such imports by hand. **`eslint.config.js` is the list that
+   binds**; this one has drifted behind it before, so add to both or the allowlist quietly grows
+   without anyone reading it.
 
 **A fifth axis sits on top of the four layers: Tonal.js is confined to one file.** `tonal` may be
 imported only from `src/musicCore/tonalAdapter.ts` (DEV-394), enforced with the same
@@ -141,12 +156,13 @@ DEV-394). `src/data/`'s own block already forbids every value import including `
 carries no separate carve-out. The gate covers non-test files under `src/` only — the config's
 final block exempts `**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`,
 `src/musicCore/tonalAdapter.test.ts` and `noteSpelling.test.ts` deliberately pin behavior against
-tonal, and `scripts/` sits outside the gate's `src/**` scope entirely. The analyser exceptions two
-paragraphs up (`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx`,
-`ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it.
+tonal, and `scripts/` sits outside the gate's `src/**` scope entirely. The four analyser files
+two paragraphs up are the other hole: their block disables `no-restricted-imports` wholesale, so
+this axis is not enforced there either.
 `src/architecture/` holds
 cross-cutting architecture tests that don't belong to any single layer — `dependencyLayers.test.ts`
-proves this axis and the four layers above it — and a non-test file placed there would fall under
+proves the Music Core layering and the tonal confinement, with only a few spot-checks of the four
+layers above it (the layer bans themselves are proved by `bun run eslint` over the real tree) — and a non-test file placed there would fall under
 the `src/**` catch-all block like everything else, since the folder has no layering block of its
 own.
 
@@ -324,6 +340,8 @@ converts a body written in the old shape, and it is the only thing in the app th
 **`beatParams` carries its own output trim** (`outputTrimDb`, the measured calibration figure) and
 its own bus filter, so a patch a user edits, saves or exports is self-contained — there is no
 trim table beside the engine to look a kit's level up in, and `src/audio/trims.ts` does not exist.
+(`src/data/trimTable.ts` is a generated calibration artefact that `check:levels` compares against,
+read by no runtime code.)
 **Every control writes the patch directly**; a knob mid-drag previews through a draft and commits
 once (`useBeatParamDraft`), and `applyBeatParams` (`src/audio/beatAdapter.ts`) is the one hop from a
 patch to the DSP, shared by the live bridge, the preview and the offline render.
@@ -332,6 +350,9 @@ patch to the DSP, shared by the live bridge, the preview and the offline render.
 openhat hitom lowtom ride crash bell` is the order `BEAT_VOICE_IDS` declares, and the `BeatVoices`
 interface, `DEFAULT_BEAT_VOICES`, every `BEAT_PRESETS` patch, `DEFAULT_PADS` and `triggerDrum`'s
 dispatch all follow it, so a reviewer comparing any two of those lists is comparing sorted lists.
+`DEFAULT_PADS` follows the order but is not the whole roster: `bell` has no pad
+(`PADLESS_VOICES`). A pad's velocity override is persisted UI state, `drumPadVelocities` in the ui
+slice keyed by voice id, committed once when the slider is released — never per drag frame.
 `BeatVoices` carries no `reference` field — a preset's provenance lives on `FactoryBeatPreset`
 instead, deliberately off the voices type, so `keyof BeatVoices` stays exactly the voice roster and
 never drifts into carrying documentation. `DRUM_ALIASES` is `{ closedhat: 'hihat' }` and nothing
@@ -454,6 +475,30 @@ track. Separately, **the FX track's synth voice** cannot do a PITCH riser as shi
 envelope ramps `filter.frequency` only), and its LFO still restarts on every note (the LFO
 oscillator is created per voice at note-on); a FILTER-SWEEP riser works today. Both limits are
 deferred to their own spec.
+
+**A key change moves every melody track, and the table says which.** `keyChangePatch`
+(`store/musicContextSlice.ts`) is the whole write a root or scale change makes — the new key plus
+every `MELODY_TRACKS` row transposed (root) and remapped (scale) to follow it — so Lead and FX can
+never disagree about the key, and a vibe folds the same patch into its own single `set()`. The
+loop-copy `key` group is the deliberate exception: it copies a key and transposes neither melody
+(`impliesKeyCopy`).
+
+**Deleting a loop is one atomic write, and it can be undone.** `deleteLoop` removes the loop and,
+when it was the active one, installs the fallback loop's per-loop fields in the same `set()` —
+the shape `projectSlice.reconcileActiveLoop` writes — so no caller follows up with `loadLoop`
+and no subscriber sees an `activeLoopId` whose content the flat slices do not hold. That write is
+pure state and touches no audio; the UI calls `deleteLoopLive` (`store/loadLoop.ts`), which wraps it
+in `crossLoopSeam` — the helper `loadLoop`'s `atBoundary` path uses — when the transport is running
+the loop being deleted. The transport never stops. Instead the deleted loop's voices are cut at
+`LOAD_LOOP_RELEASE` (every accompaniment bus, plus the melody grids' sequencer-owned notes) and the
+clock is reset, so the fallback enters at step 0 and song advance counts a whole pass of it. A
+full-hold chord, bass or pad is booked to end at its chord change and a drone at pass end, so
+leaving them to "ring out" would sound the deleted loop's key for bars. Only an audition scoped to
+the deleted loop stops. `deleteLoop` returns a `DeletedLoop` snapshot that `restoreLoop` puts back
+at its index without activating it. The Arrange view offers that as a timed Undo toast instead of a
+confirm dialog, and `undoLoopDelete` re-activates a restored active loop through the same seam (or
+`loadLoop` when nothing plays), so Undo never stops the transport either. A project install
+dismisses a pending Undo (`projectInstallCount`), because loop ids collide across projects.
 
 **A scale-locked lead grid borrows a row; it never hides a note.** A note outside the key is
 never deleted by a view change — before, it simply had no row to be drawn on, so switching to
@@ -609,7 +654,9 @@ the patch is a performance setting a preset would overwrite, which is the defect
 to make unrepresentable. `ArpSettings` (`src/types/synth.ts`) inlines its own literal unions rather
 than reusing the `ArpMode`/`ArpRate` in `src/types.ts`, which belong to the arp SCHEDULER
 (`audio/arpSchedule.ts`, `audio/arpeggiator.ts`); the two modules therefore export no colliding
-names and neither imports the other.
+names and neither imports the other. The one filter-type name has a single owner: the synth
+`FilterType` in `src/types/synth.ts`, from which `src/types.ts`' narrower Beat bus
+`BeatFilterType` derives.
 
 **Every patch field carries its unit in its name, and the conversion to linear gain happens at the
 `AudioParam`.** Levels are dB (`levelDb`, `subLevelDb`, `noiseLevelDb`, `driveDb`, `outputGainDb`),
@@ -655,12 +702,16 @@ concern narrows through `realtimeCtx()` — idle suspend, `resume()`, a `setTime
 subsystem that cannot narrow has no business in the offline path. Treat "the render needs its own
 copy of this" as a defect report about the shared code, not as a second implementation to write.
 
-**`persist` serialises on every `set()`; only the `localStorage` write is coalesced.** Every
-`set()` that touches a key returned by `partialize` re-serialises that slice on the spot. The
+**`persist` serialises only when a persisted value changed; the `localStorage` write is
+coalesced.** zustand still runs `partialize` on every `set()`, but `store/persistStorage.ts`
+(`createDedupedJsonStorage`) compares the result with the last one it wrote and stringifies
+nothing when every persisted top-level value is the same reference — so a `set()` that touches
+no persisted key costs no JSON work. That comparison is by reference, so every writer of a
+persisted value must **replace it, never mutate it in place** (`store.test.ts` pins this). The
 write itself goes through `utils/coalescedStorage.ts`, which buffers it to an idle callback and
-flushes on `pagehide`/`visibilitychange` — so the serialise cost is still per-`set()`, and
-anything driven by a pointer, a clock tick or an animation frame must not write persisted state
-directly. Consequence for tests and for reading `localStorage` in a live page: storage lags the
+flushes on `pagehide`/`visibilitychange`. A `set()` that DOES change a persisted key still
+re-serialises the whole persisted state on the spot, so anything driven by a pointer, a clock
+tick or an animation frame must not write persisted state directly. Consequence for tests and for reading `localStorage` in a live page: storage lags the
 store by up to one idle window; call `flushPersistedWrites()` before asserting on it.
 
 **There are no migration chains — validation replaced them, and that is a decision with a
@@ -706,7 +757,16 @@ click alone, press play on the lead.
 subscription per engine-settable value with `fireImmediately`, started once by `useEngineSync()`
 in `App.tsx`. The `AudioContext` is created on the first user click, after which
 `applyEngineSnapshot()` re-applies the whole persisted audio state. **Never call engine setters
-from a component** — add the state to a slice and wire it in `engineSync.ts`.
+from a component** — add the state to a slice and wire it in `engineSync.ts`. `engineSync` is
+the path for *persistent* audio state, not the only store module that touches the engine: a
+small set call `audioEngine` directly for **cuts, previews and lifecycle**, and each says why in
+its docblock — the loop switch (`loadLoop`), the vibe swap (`vibes`), the project install
+(`projectSlice`), the previews (`synthPatchPreview`, `effectsPreview`, `beatPreview`,
+`synthPresetInstall`) and runtime/incident plumbing (`audioRecovery`, `incidentReporter`,
+`sourceBuses`). A persistent value — a MIDI CC patch edit included — never joins that list; it
+reaches the engine through its `engineSync` subscription only. This list is a snapshot;
+the code binds, so re-derive it (`grep -ln audioEngine src/store/*.ts`, discarding tests and comment-only hits)
+before relying on it.
 
 **Playback is PLANNED, then PERFORMED, and the planner half is pure.**
 `src/audio/playback/plan/` holds one planner per lane — `padPlan.ts`, `chordPlan.ts` (chord and
@@ -801,8 +861,9 @@ Save commits to** — absent, not disabled, when `VITE_GOOGLE_CLIENT_ID` is unse
 resolves availability *once, lazily* and turns
 every failure into a typed result — a device that cannot store projects is a **normal degraded
 state the UI renders, never an exception path**, the same discipline `resolveStorage()` follows.
-Bodies and metadata live in **separate object stores** so listing the library never deserialises
-a single project body; every write touches both in one transaction. The slot's value is a
+The database is **one object store (`project`) holding one fixed slot key** (`projectStoreIdb.ts`);
+its version upgrade drops the old two-store layout, and there is no project library listing to
+keep cheap. The slot's value is a
 **record, `{ body, source }`** (`ProjectSlotRecord` in `store/projectSource.ts`): `source` is
 where an explicit Save writes back — `untitled`, a Drive `fileId`, or a local
 `FileSystemFileHandle` — and it is held **beside** the body, never inside it, because a file id
