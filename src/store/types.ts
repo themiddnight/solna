@@ -645,8 +645,8 @@ export interface Loop extends PadState, FxState {
    * The APP's label, never empty. Starts at `untitled-{n}` and is overwritten
    * with a vibe's display NAME (a snapshot, not a reference) whenever a vibe
    * is applied to this loop. Deliberately NOT in LOOP_FLAT_KEYS: it is
-   * loop-slot identity, not loop content, so it never rides in a
-   * LoopStatePatch and no copy group can name it.
+   * loop-slot identity, not loop content, so it never rides in
+   * `LoopContent` and no copy group can name it.
    */
   tempName: string;
   repeatCount?: number; // default 1, number of times this loop plays before advancing in song mode
@@ -702,8 +702,6 @@ export interface Loop extends PadState, FxState {
   bassMuted: boolean;
 }
 
-/** The per-loop fields, without identity — what loadLoop writes to the flat slices. */
-export type LoopStatePatch = Omit<Loop, 'id' | 'name' | 'repeatCount' | 'tempName'>;
 
 /**
  * The per-loop mixer: what an Arrange card's channel strips edit.

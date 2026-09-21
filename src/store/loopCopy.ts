@@ -1,4 +1,5 @@
-import type { Loop, LoopStatePatch } from './types';
+import type { LoopContent } from './loop';
+import type { Loop } from './types';
 
 /** The five mixer tracks a group can name, plus `loop` for the two loop-wide groups. */
 export type LoopCopyTrack = 'lead' | 'fx' | 'chord' | 'bass' | 'pad' | 'drums' | 'loop';
@@ -32,7 +33,7 @@ export interface LoopCopyGroup {
   track: LoopCopyTrack;
   aspect: LoopCopyAspect;
   label: string;
-  keys: readonly (keyof LoopStatePatch)[];
+  keys: readonly (keyof LoopContent)[];
 }
 
 /**
@@ -42,9 +43,9 @@ export interface LoopCopyGroup {
  * asserts the union of every `keys` equals LOOP_FLAT_KEYS exactly.
  *
  * Neither label field appears here and neither can: `name` and `tempName` are
- * loop-slot identity, so `LoopStatePatch` (Omit<Loop, 'id' | 'name' |
- * 'repeatCount' | 'tempName'>) does not carry them and `keyof LoopStatePatch`
- * cannot name one. `repeatCount` is out for the same structural reason — it is
+ * loop-slot identity, so `LoopContent` (Pick<Loop, LoopFlatKey>) does not
+ * carry them and `keyof LoopContent` cannot name one. `repeatCount` is out
+ * for the same structural reason — it is
  * arrangement data, not loop content.
  *
  * padVolume/padMuted reach a Loop through PadState rather than through the
@@ -183,7 +184,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
 export function buildLoopCopyPatch(
   source: Loop,
   selected: readonly LoopCopyGroupId[],
-): Partial<LoopStatePatch> {
+): Partial<LoopContent> {
   const wanted = new Set<LoopCopyGroupId>(selected);
   const src = source as unknown as Record<string, unknown>;
   const patch: Record<string, unknown> = {};
@@ -196,7 +197,7 @@ export function buildLoopCopyPatch(
   // beatMix, leadMelodySteps, chords, customChordRhythm, customChordHoldSteps,
   // customBassPattern, customBassHoldSteps and padDroneIntervals are mutable
   // substructure the target must own outright.
-  return structuredClone(patch) as Partial<LoopStatePatch>;
+  return structuredClone(patch) as Partial<LoopContent>;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   loopStatePatch,
   resolveActiveLoop,
   LOOP_FLAT_KEYS,
+  type LoopContent,
 } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { defaultBeatState } from './beatPresets';
@@ -292,5 +293,28 @@ describe('resolveActiveLoop', () => {
     expect(resolveActiveLoop(loops, 'zzz').id).toBe('a');
     expect(resolveActiveLoop(loops, null).id).toBe('a');
     expect(resolveActiveLoop(loops, undefined).id).toBe('a');
+  });
+});
+
+describe('LoopContent', () => {
+  test('every Loop field is either slot identity or listed in LOOP_FLAT_KEYS (compile-time)', () => {
+    // `bun run lint` (tsc) fails this assignment if a Loop field is unlisted.
+    type Identity = 'id' | 'name' | 'tempName' | 'repeatCount';
+    type Unlisted = Exclude<keyof Loop, (typeof LOOP_FLAT_KEYS)[number] | Identity>;
+    const everyFieldClassified: [Unlisted] extends [never] ? true : false = true;
+    expect(everyFieldClassified).toBe(true);
+  });
+
+  test('a default loop is exactly identity plus LOOP_FLAT_KEYS', () => {
+    const keys = Object.keys(createDefaultLoop()).sort();
+    expect(keys).toEqual([...LOOP_FLAT_KEYS, 'id', 'name', 'tempName', 'repeatCount'].sort());
+  });
+
+  test('LoopContent carries no identity field', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the four aliases exist only to strip identity fields via rest
+    const content: LoopContent = (({ id: _i, name: _n, tempName: _t, repeatCount: _r, ...rest }) => rest)(
+      createDefaultLoop(),
+    );
+    expect('id' in content).toBe(false);
   });
 });

@@ -2,11 +2,17 @@ import type { MasterEffects } from '../types';
 import type { MeterId } from '../utils/meter';
 import { DEFAULT_METER_ID } from '../utils/meter';
 import { INITIAL_EFFECTS } from './initialState';
-import { LOOP_FLAT_KEYS, loopStatePatch, resolveActiveLoop, withFreshTempNames } from './loop';
+import {
+  LOOP_FLAT_KEYS,
+  loopStatePatch,
+  resolveActiveLoop,
+  withFreshTempNames,
+  type LoopContent,
+} from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { DEFAULT_BPM } from './transportSlice';
 import { DEFAULT_FADER_DB } from './levelUnits';
-import type { AppStore, Loop, LoopStatePatch } from './types';
+import type { AppStore, Loop } from './types';
 
 /**
  * The `.solna` / IndexedDB format version. Deliberately separate from the
@@ -178,11 +184,11 @@ export const PROJECT_CONTENT_KEYS = ['bpm', 'meterId', 'masterVolume', 'effects'
 
 /**
  * Every field of a Loop that is project content, in fingerprint order.
- * Derived from LOOP_FLAT_KEYS so a new LoopStatePatch field is picked up
+ * Derived from LOOP_FLAT_KEYS so a new LoopContent field is picked up
  * automatically — and pinned by a test so adding one is a conscious decision
  * about whether it belongs in a project. This is not every field of `Loop`:
  * `tempName` is loop-slot identity rather than content, so it is opted out
- * one layer up, in `LoopStatePatch`'s own `Omit` (types.ts), and never
+ * one layer up, in `LoopContent`'s own `Pick` (loop.ts), and never
  * reaches LOOP_FLAT_KEYS or this list to begin with — see `ProjectLoop`'s
  * docblock below for why it is excluded, not what excludes it.
  */
@@ -237,7 +243,7 @@ export function buildProjectContent(state: ProjectContentSource): ProjectContent
 // so what actually reaches the store is a full Loop, never the tempName-less
 // ProjectContent shape a project body carries on disk.
 export type ProjectOpenPatch = Omit<ProjectContent, 'loops'> &
-  LoopStatePatch & { loops: Loop[]; activeLoopId: string; selectedVibeId: null };
+  LoopContent & { loops: Loop[]; activeLoopId: string; selectedVibeId: null };
 
 /**
  * The single store patch that installs a project. Encodes the reset rules:

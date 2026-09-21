@@ -14,7 +14,7 @@ import {
 } from '@/utils/patternTimeline';
 import type { BassStepChoice } from '../data/bassPatterns';
 import type { ChordItem } from '../types';
-import type { Loop, LoopStatePatch } from './types';
+import type { Loop } from './types';
 
 /** Every per-loop persisted field, in one source of truth. */
 export const LOOP_FLAT_KEYS = [
@@ -75,7 +75,17 @@ export const LOOP_FLAT_KEYS = [
   'bassMuted',
   'fxVolume',
   'fxMuted',
-] as const;
+] as const satisfies readonly (keyof Loop)[];
+
+export type LoopFlatKey = (typeof LOOP_FLAT_KEYS)[number];
+
+/**
+ * A loop's musical content: every field except its slot identity (`id`,
+ * `name`, `tempName`, `repeatCount`). What `loadLoop` writes to the flat
+ * slices, what the mirror writes back, and what `changeKey` transforms.
+ * loop.test.ts pins at compile time that no `Loop` field is left out.
+ */
+export type LoopContent = Pick<Loop, LoopFlatKey>;
 
 /** Loop ids are new and unique per project (same style as presetsSlice). */
 export function newLoopId(): string {
@@ -464,13 +474,13 @@ export function cloneLoop(loop: Loop): Loop {
  * Picks the per-loop fields off any object that carries them — a `Loop`
  * (for `loadLoop`) or the flat `AppStore` (for the sync-back subscription).
  */
-export function loopStatePatch(source: object): LoopStatePatch {
+export function loopStatePatch(source: object): LoopContent {
   const out: Record<string, unknown> = {};
   const src = source as Record<string, unknown>;
   for (const key of LOOP_FLAT_KEYS) {
     out[key] = src[key];
   }
-  return out as LoopStatePatch;
+  return out as LoopContent;
 }
 
 /**
