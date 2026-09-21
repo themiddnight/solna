@@ -105,7 +105,7 @@ shows it, never in a slice.
    `partialize` the first time someone added it to the list, and a token in the store is a
    token in the devtools panel.
 4. `src/components/` — dumb views; must not import `audio/engine`. Only `AudioVisualizer.tsx`,
-   `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`, `ui/GainReductionMeter.tsx` and `ui/SourceMeter.tsx`
+   `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx` and `ui/SourceMeter.tsx`
    (read-only analyser consumers) and test files are exempt — routing their per-frame analyser
    reads through the store would mean a store write on every animation frame and a re-render of
    every subscriber. **`eslint.config.js` is the list that binds**; this one has drifted behind it
@@ -142,13 +142,19 @@ carries no separate carve-out. The gate covers non-test files under `src/` only 
 final block exempts `**/*.test.{ts,tsx}` from every import ban, which is how `scales.test.ts`,
 `src/musicCore/tonalAdapter.test.ts` and `noteSpelling.test.ts` deliberately pin behavior against
 tonal, and `scripts/` sits outside the gate's `src/**` scope entirely. The analyser exceptions two
-paragraphs up (`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`,
-`ui/GainReductionMeter.tsx`, `ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it.
+paragraphs up (`AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx`,
+`ui/SourceMeter.tsx`) are unrelated to this axis and unchanged by it.
 `src/architecture/` holds
 cross-cutting architecture tests that don't belong to any single layer — `dependencyLayers.test.ts`
 proves this axis and the four layers above it — and a non-test file placed there would fall under
 the `src/**` catch-all block like everything else, since the folder has no layering block of its
 own.
+
+**`src/incidents/` is a privacy boundary beside the four layers.** It builds public bug reports from
+already-sanitized arguments, so `eslint.config.js` bans it from importing `store/`, `components/` or the
+audio engine (type-only imports from `@/audio/runtime/*` are fine): a state snapshot must have no path
+into a report. `IncidentReportV1` is a closed schema with no open-ended bag, and `isIncidentReportV1`
+rejects unknown keys.
 
 `src/utils/` stays outside the chain, above `data/`: it may read `data/` at runtime
 (`musicTheory.ts` imports `SCALES`), but nothing in `data/` may read it back except through an

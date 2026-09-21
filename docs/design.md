@@ -154,8 +154,6 @@ Solna is structured into modular, single-responsibility React components:
 11. **`ChordPresetLibrary.tsx`** / **`SynthPresetLibrary.tsx`**: Searchable, category-filtered preset browsers for chord progressions and synth patches, including user-saved presets from `localStorage`.
 12. **`chord/SortableChordCard.tsx`**: A single draggable chord card (`@dnd-kit/sortable`) used by `ChordView`.
 13. **`InstantVibesBar.tsx`** *(see item 2)* and **`useSequencerPlayback.ts`** / **`chord/useChordPlayback.ts`**: playback hooks, not visual components.
-14. **`ui/AmbientBackdrop.tsx`**: full-bleed, analyser-driven ambient field mounted as the first child of the App root at `absolute inset-0 z-0`, behind the whole workspace. Gives every tab continuous "audio is live" feedback without a meter's per-bin detail — three slow-drifting radial-gradient blobs, tinted `primary` / `accent` / `secondary`, whose size and opacity track the analyser's average level. It is frozen (not merely paused) under `prefers-reduced-motion` and idle whenever nothing is playing, per `shouldAnimateBackdrop`. It is one of the five `no-restricted-imports` exemptions in layering rule 3 (with `AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx` and `ui/SourceMeter.tsx` — `eslint.config.js` is the binding list), for the same reason as the others: routing a per-frame analyser read through the Zustand store would mean a store write on every animation frame and a re-render of every subscriber, so it reads `audioEngine` directly instead.
-
 ### The `ui/` primitive layer
 
 Shared, presentation-only controls under `src/components/ui/`. These own the daisyUI class defaults, so feature components should pass **no** colour overrides:
