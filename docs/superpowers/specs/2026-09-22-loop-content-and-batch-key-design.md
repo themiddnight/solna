@@ -49,7 +49,7 @@ export type LoopFlatKey = (typeof LOOP_FLAT_KEYS)[number];
 export type LoopContent = Pick<Loop, LoopFlatKey>;
 ```
 
-- A compile-time exhaustiveness check in the same file fails `bun run lint` if a `Loop` field is
+- A compile-time exhaustiveness check in `loop.test.ts` (tests are type-checked by `bun run lint`) fails if a `Loop` field is
   neither identity (`id`, `name`, `tempName`, `repeatCount`) nor listed in `LOOP_FLAT_KEYS`:
   `Exclude<keyof Loop, LoopFlatKey | 'id' | 'name' | 'tempName' | 'repeatCount'>` must be `never`.
   `LOOP_FLAT_KEYS` also gets `satisfies readonly (keyof Loop)[]`. The two directions together
@@ -70,16 +70,18 @@ export type LoopContent = Pick<Loop, LoopFlatKey>;
   docblock warns about.
 - `createDefaultLoop()` becomes `{ id: DEFAULT_LOOP_ID, name: '', tempName: 'untitled-1',
   repeatCount: 1, ...createDefaultLoopContent() }`.
-- Every slice factory that owns per-loop fields takes a `defaults: LoopContent` parameter and
+- Every slice factory that writes per-loop literals takes a `defaults: LoopContent` parameter and
   reads its initial values from it: `createMusicContextSlice`, `createSynthSlice`,
-  `createChordsSlice`, `createBassSlice`, `createPadSlice`, `createMelodySlice` (Lead and FX via
-  `createLeadSlice`/`createFxSlice`), `createBeatSlice`. `store.ts` calls
-  `createDefaultLoopContent()` once and passes it to each. Non-content fields (`leadCursor`,
-  clipboards, `soloTracks`, …) keep their literals.
+  `createChordsSlice`, `createBassSlice`, `createMelodySlice` (Lead and FX via
+  `createLeadSlice`/`createFxSlice`). `store.ts` calls `createDefaultLoopContent()` once and
+  passes it to each. `createPadSlice`, `createBeatSlice` and `createFxSlice`'s synth fields
+  already spread the shared factories (`defaultPadState`, `defaultBeatState`, `defaultFxState`)
+  that `createDefaultLoopContent` spreads too — one source already, so they stay as they are.
+  Non-content fields (cursors, clipboards, `soloTracks`, …) keep their literals.
 - Pin: `loopStatePatch(useAppStore.getInitialState())` deep-equals
   `createDefaultLoopContent()`.
-- The two direct test callers of slice factories (`store.test.ts`) pass
-  `createDefaultLoopContent()`.
+- The direct test callers of slice factories (`createChordsSlice`/`createBassSlice` in
+  `store.test.ts`) pass `createDefaultLoopContent()`.
 
 ### 1.3 `changeKey` — pure, in the store layer
 
@@ -318,7 +320,7 @@ export function changeKeyAcrossLoops(
 `changeKey` can write. Restoring the whole content would also revert unrelated edits made between
 the batch and Undo (a knob, a drum step). Same intent, no collateral.
 
-### 2.2 Store actions (loop slice)
+### 2.2 Store actions (`src/store/loopKeyChangeSlice.ts`, part of `LoopSlice`)
 
 ```ts
 applyLoopKeyChange(ids, target, opts): LoopKeyChangeUndo | null
@@ -375,8 +377,9 @@ No extra coordination is needed; a test pins both orders.
 - **Pure helpers** exported from `useKeyChangeDialog.ts` and tested directly:
   `keyChangePreview(loops, selectedIds, target)` → rows `{ id, label, from, to, changes }`;
   `canApplyKeyChange(rows)`.
-- **Store reads** (R274/R275): the dialog mounts only while open (as `LoopCopyDialog` does);
-  `loops` and `activeLoopId` one selector each.
+- **Store reads** (R274/R275): the dialog mounts only while open (as `LoopCopyDialog` does) and
+  takes `loops` and `activeLoopId` as props from `ArrangeView`, which already selects each with
+  its own narrow selector — so the dialog renders under `renderToString` with test data (R257).
 - **Undo:** `src/components/song/useLoopKeyChangeUndo.ts` mirrors `useLoopDeleteUndo`:
   `useTimedToast<LoopKeyChangeUndo>()`, `LOOP_UNDO_MS`, dismissed on `projectInstallCount`
   (loop ids collide across projects — R155's reason), single level (a new batch replaces the
@@ -407,7 +410,7 @@ No extra coordination is needed; a test pins both orders.
 - `loopKeyChange.test.ts`: `transposeRoot` wrap both ways and `ROOTS` spelling; `targetKeyFor`
   both modes; `changeKeyAcrossLoops` changes only selected ids, keeps others by reference, skips
   unknown ids and no-op targets, respects `harmonizeChords`, snapshots pre-change fields.
-- `loopSlice.test.ts` (or `loopKeyChangeSlice.test.ts`): one notification per apply and per undo;
+- `loopKeyChangeSlice.test.ts`: one notification per apply and per undo;
   non-active loops updated in `loops[]`, flat untouched; active loop updated flat and
   `loops[active]` equal to flat; indicator set only when the active loop's chords changed; undo
   restores, skips deleted loops, clears the indicator for the active loop.
