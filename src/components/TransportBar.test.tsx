@@ -5,6 +5,7 @@ import { aggregatePlayerState, transportDisplayState } from '../store/transportS
 import { resolveTransportButtons } from './ui/PlayerTransport';
 import { createDefaultLoop } from '../store/loopSlice';
 import { useAppStore } from '../store/store';
+import { audioRecoveryStore } from '../store/audioRecovery';
 import type { Loop } from '../store/types';
 
 describe('TransportBar', () => {
@@ -162,5 +163,15 @@ describe('the transport bar no longer carries the solo chip', () => {
     const html = renderToString(<TransportBar />);
     expect(html).not.toContain('data-solo-chip');
     expect(html).not.toContain('SOLO ·');
+  });
+});
+
+describe('transport bar audio recovery warning', () => {
+  afterEach(() => audioRecoveryStore.setState({ status: 'healthy', modalOpen: false, evidence: [] }));
+
+  test('is absent when healthy and present when recovery was dismissed', () => {
+    expect(renderToString(<TransportBar />)).not.toContain('Audio needs recovery');
+    audioRecoveryStore.setState({ status: 'unhealthy', modalOpen: false });
+    expect(renderToString(<TransportBar />)).toContain('aria-label="Audio needs recovery"');
   });
 });

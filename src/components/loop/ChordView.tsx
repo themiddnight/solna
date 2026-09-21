@@ -10,6 +10,7 @@ import { QuickSavePopover } from '../ui/QuickSavePopover';
 import { SegmentHeader } from '../ui/SegmentHeader';
 import { GroupFrame } from '../ui/GroupFrame';
 import { COUNT_BADGE } from '../ui/fieldClasses';
+import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 import { ChordModulePanel } from './chord/ChordModulePanel';
 import { BassModulePanel } from './chord/BassModulePanel';
 import { PadModulePanel } from './chord/PadModulePanel';
@@ -129,6 +130,7 @@ function AccompanimentModules({
 }
 
 export const ChordView = React.memo(function ChordView() {
+  markDiagnosticRender('ChordView');
   // ChordView reads the store directly: every value below replaces one of
   // the ~34 props it used to receive from App.tsx.
   const state = useChordViewState();

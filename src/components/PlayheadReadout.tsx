@@ -3,12 +3,14 @@ import { formatChordLabel } from '../utils/musicTheory';
 import { beatsPerBarFor, resolveBeatCounter, resolveNowNext } from '../utils/playhead';
 import { BeatDots } from './ui/BeatDots';
 import { NowNextChord } from './ui/NowNextChord';
+import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 
 /**
  * Header readout: which chord is sounding, which one is queued, and where the
  * transport sits inside the current chord.
  */
 export function PlayheadReadout({ className = '' }: { className?: string }) {
+  markDiagnosticRender('PlayheadReadout');
   const chords = useAppStore((s) => s.chords);
   const playheadBeat = useAppStore((s) => s.playheadBeat);
   const playheadChordIndex = useAppStore((s) => s.playheadChordIndex);

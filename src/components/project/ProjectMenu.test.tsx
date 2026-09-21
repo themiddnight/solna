@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { MALFORMED_MESSAGE, type ProjectParseResult } from '@/store/projectFile';
@@ -9,6 +10,7 @@ import { UNREADABLE_FILE_MESSAGE, type FileReadResult } from '@/utils/projectFil
 import type { PickHandleResult } from '@/utils/localFileSave';
 import {
   PROJECT_MENU_SECTIONS,
+  toolsRows,
   ProjectMenu,
   REPLACE_CONFIRM_MESSAGE,
   REPLACING_ACTIONS,
@@ -43,6 +45,9 @@ function recordingReport() {
   return { report: (m: string | null) => messages.push(m), messages };
 }
 
+/** The Tools rows this build ships: `Diagnostics` exists only when `import.meta.env.DEV`. */
+const shippedTools = () => toolsRows({ development: import.meta.env.DEV === true }).map((r) => r.action);
+
 const allActions = () => PROJECT_MENU_SECTIONS.flatMap((section) => section.rows.map((row) => row.action));
 
 /** The actions a user actually sees, given availability, sign-in and source. */
@@ -50,8 +55,8 @@ const visibleActions = (available: boolean, signedIn: boolean, sourceKind: 'driv
   visibleMenuSections(available, signedIn, sourceKind, null).flatMap((s) => s.rows.map((r) => r.action));
 
 describe('ProjectMenu menu composition', () => {
-  test('orders the menu as New, then Local, then Drive', () => {
-    expect(PROJECT_MENU_SECTIONS.map((s) => s.heading)).toEqual([null, 'Local', 'Drive']);
+  test('orders the menu as New, then Local, Drive, and tools', () => {
+    expect(PROJECT_MENU_SECTIONS.map((s) => s.heading)).toEqual([null, 'Local', 'Drive', 'Tools']);
     expect(allActions()).toEqual([
       'new',
       'open',
@@ -60,6 +65,7 @@ describe('ProjectMenu menu composition', () => {
       'open-drive',
       'save-as-drive',
       'disconnect-drive',
+      ...shippedTools(),
     ]);
   });
 
@@ -93,7 +99,7 @@ describe('ProjectMenu menu composition', () => {
 
   test('the Drive rows appear only when they can work, and the section vanishes otherwise', () => {
     // No client id: no Drive section at all — not a disabled one.
-    expect(visibleActions(false, false, 'untitled')).toEqual(['new', 'open', 'save', 'save-as']);
+    expect(visibleActions(false, false, 'untitled')).toEqual(['new', 'open', 'save', 'save-as', ...shippedTools()]);
     // Configured but signed out: Open from Drive and Save as to Drive are offered
     // (the modal is where connecting happens), Disconnect is not.
     expect(visibleActions(true, false, 'untitled')).toEqual([
@@ -103,6 +109,7 @@ describe('ProjectMenu menu composition', () => {
       'save-as',
       'open-drive',
       'save-as-drive',
+      ...shippedTools(),
     ]);
     expect(visibleActions(true, true, 'untitled')).toContain('disconnect-drive');
   });
@@ -116,6 +123,7 @@ describe('ProjectMenu menu composition', () => {
       'save',
       'save-as-drive',
       'disconnect-drive',
+      ...shippedTools(),
     ]);
   });
 
@@ -301,5 +309,41 @@ describe('ProjectMenu rendering', () => {
     expect(html).toContain('type="file"');
     expect(html).toContain('accept=".solna,.json"');
     expect(html).toContain('hidden sm:inline');
+  });
+});
+
+describe('report-bug action', () => {
+  test('the Tools section offers Report a Bug', () => {
+    const tools = PROJECT_MENU_SECTIONS.find((s) => s.id === 'tools');
+    expect(tools?.rows.map((r) => r.action)).toContain('report-bug');
+  });
+
+  test('production Tools has only report-bug; development adds diagnostics', () => {
+    expect(toolsRows({ development: false }).map((r) => r.action)).toEqual(['report-bug']);
+    expect(toolsRows({ development: true }).map((r) => r.action)).toEqual(['diagnostics', 'report-bug']);
+  });
+
+  test('the diagnostics panel loader is only constructed behind a compile-time DEV guard', () => {
+    const source = readFileSync(new URL('./ProjectMenu.tsx', import.meta.url), 'utf8');
+    const lazyAt = source.indexOf("import('@/diagnostics/DiagnosticPanel')");
+    expect(lazyAt).toBeGreaterThan(-1);
+    expect(source.indexOf("import('@/diagnostics/DiagnosticPanel')", lazyAt + 1)).toBe(-1);
+    expect(source.slice(Math.max(0, lazyAt - 120), lazyAt)).toContain('import.meta.env.DEV');
+  });
+
+  test('reportManualIncident publishes an open manual/degraded report with no audio and only a route category', async () => {
+    const { reportManualIncident, routeCategory } = await import('@/store/incidentReporter');
+    const { incidentStore, clearIncident } = await import('@/incidents/incidentStore');
+    await clearIncident();
+    reportManualIncident('/loop/secret-project-name?loopId=abc');
+    const { current, open } = incidentStore.getState();
+    expect(open).toBe(true);
+    expect(current?.kind).toBe('manual');
+    expect(current?.severity).toBe('degraded');
+    expect(current?.audio).toBeNull();
+    expect(current?.summary).toBe('Manual bug report from the loop view');
+    expect(JSON.stringify(current)).not.toContain('secret-project-name');
+    expect(routeCategory('/somewhere/else')).toBe('unknown');
+    await clearIncident();
   });
 });

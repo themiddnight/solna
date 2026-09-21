@@ -1,5 +1,6 @@
 import React, { Fragment, useCallback, useRef, useState } from 'react';
-import { Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from 'lucide-react';
+import { Activity, Bug, Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from 'lucide-react';
+import { reportManualIncident } from '@/store/incidentReporter';
 import { defaultSaveName } from '@/utils/driveBrowser';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectSaveResult } from '@/store/projectSlice';
@@ -15,6 +16,12 @@ import { useLiveStore } from '../ui/useLiveStore';
 import { Wordmark } from '../ui/Wordmark';
 import { DriveFileBrowserModal } from './DriveFileBrowserModal';
 
+// Compile-time guard: production builds fold `import.meta.env.DEV` to false, so the
+// dynamic import (and its chunk) never ships. Incident reports are the only production surface.
+const DiagnosticPanel = import.meta.env.DEV
+  ? React.lazy(() => import('@/diagnostics/DiagnosticPanel'))
+  : null;
+
 export type ProjectMenuAction =
   | 'new'
   | 'open'
@@ -22,7 +29,9 @@ export type ProjectMenuAction =
   | 'save-as'
   | 'open-drive'
   | 'save-as-drive'
-  | 'disconnect-drive';
+  | 'disconnect-drive'
+  | 'diagnostics'
+  | 'report-bug';
 
 /**
  * Only the actions that REPLACE the one autosaved project confirm. Save writes
@@ -51,7 +60,7 @@ interface ProjectMenuRow {
 
 export interface ProjectMenuSection {
   /** A stable id for placement logic — never rendered and never a display string. */
-  id: 'document' | 'local' | 'drive';
+  id: 'document' | 'local' | 'drive' | 'tools';
   /** Rendered as a non-interactive menu title; null for the unlabelled first group. */
   heading: string | null;
   /** A second, muted line under the heading — the Drive account, when connected. */
@@ -67,6 +76,12 @@ export interface ProjectMenuSection {
  */
 /** The Save row as one literal, placed into Local or Drive — never written twice. */
 const SAVE_ROW: ProjectMenuRow = { action: 'save', label: 'Save', icon: Save };
+
+/** Tools rows: `Diagnostics` (the recorder panel) is a maintainer tool and never ships to production. */
+export function toolsRows({ development }: { development: boolean }): ProjectMenuRow[] {
+  const report: ProjectMenuRow = { action: 'report-bug', label: 'Report a Bug', icon: Bug };
+  return development ? [{ action: 'diagnostics', label: 'Diagnostics', icon: Activity }, report] : [report];
+}
 
 export const PROJECT_MENU_SECTIONS: readonly ProjectMenuSection[] = [
   {
@@ -91,6 +106,11 @@ export const PROJECT_MENU_SECTIONS: readonly ProjectMenuSection[] = [
       { action: 'save-as-drive', label: 'Save as to Drive…', icon: CloudUpload },
       { action: 'disconnect-drive', label: 'Disconnect Drive', icon: CloudOff },
     ],
+  },
+  {
+    id: 'tools',
+    heading: 'Tools',
+    rows: toolsRows({ development: import.meta.env.DEV === true }),
   },
 ];
 
@@ -195,6 +215,8 @@ interface MenuActionHandlers {
   saveAs: () => void;
   browseSaveAs: () => void;
   disconnectDrive: () => void;
+  diagnostics: () => void;
+  reportBug: () => void;
 }
 
 function runMenuAction(action: ProjectMenuAction, handlers: MenuActionHandlers): void {
@@ -220,6 +242,8 @@ function runMenuAction(action: ProjectMenuAction, handlers: MenuActionHandlers):
     handlers.disconnectDrive();
     return;
   }
+  if (action === 'diagnostics') handlers.diagnostics();
+  if (action === 'report-bug') handlers.reportBug();
 }
 
 /** The store's own `openProjectFile` shape, named here so the pure helpers below need no store import. */
@@ -496,6 +520,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
   const [browser, setBrowser] = useState<ProjectBrowseMode | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const projectName = useLiveStore((s) => s.projectName);
@@ -525,6 +550,8 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
       saveAs: () => void runSaveAs(),
       browseSaveAs: () => setBrowser('save-as'),
       disconnectDrive: () => void disconnectDrive(),
+      diagnostics: () => setDiagnosticsOpen(true),
+      reportBug: () => reportManualIncident(),
     });
 
   const onConfirmReplace = () => {
@@ -590,6 +617,11 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
         />
       )}
       {pending !== null && <ProjectLoading overlay label={pending} />}
+      {DiagnosticPanel && diagnosticsOpen && (
+        <React.Suspense fallback={<ProjectLoading overlay label="Loading diagnostics…" />}>
+          <DiagnosticPanel open onClose={() => setDiagnosticsOpen(false)} />
+        </React.Suspense>
+      )}
     </div>
   );
 }

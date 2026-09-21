@@ -1,4 +1,8 @@
 import React from 'react';
+import { IncidentDialog } from './ui/IncidentDialog';
+import { openIncident } from '@/incidents/incidentStore';
+import { sanitizeError } from '@/incidents/sanitize';
+import type { RenderIncidentInput } from '@/incidents/types';
 
 export const ERROR_TITLE = 'Solna hit an unexpected error.';
 
@@ -51,6 +55,9 @@ export function ErrorFallback({
         <button type="button" className="btn btn-sm" onClick={() => window.location.reload()}>
           Refresh
         </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={openIncident}>
+          Report
+        </button>
       </div>
       {showDetails && (
         <details className="w-full max-w-2xl text-left">
@@ -62,6 +69,8 @@ export function ErrorFallback({
           </pre>
         </details>
       )}
+      {/* The workspace (and its own dialog) is unmounted while this shows. */}
+      <IncidentDialog />
     </div>
   );
 }
@@ -69,6 +78,8 @@ export function ErrorFallback({
 export interface ErrorBoundaryProps {
   children: React.ReactNode;
   showDetails?: boolean;
+  /** Receives the fatal render incident before the fallback is offered. */
+  onIncident?: (input: RenderIncidentInput) => void;
 }
 
 interface ErrorBoundaryState {
@@ -88,7 +99,17 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     return { error };
   }
 
-  componentDidCatch(_error: Error, info: React.ErrorInfo): void {
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    try {
+      this.props.onIncident?.({
+        kind: 'render-crash',
+        severity: 'fatal',
+        summary: 'Solna crashed while rendering',
+        error: sanitizeError(error, info.componentStack),
+      });
+    } catch {
+      // Reporting must never turn a caught render error into a second crash.
+    }
     // Still logged (React logs too): a production report needs the stack, and
     // the DEV-only <details> is a convenience, not the only copy.
     this.setState({ componentStack: info.componentStack ?? null });

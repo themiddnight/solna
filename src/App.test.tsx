@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import * as routing from './routing/useRouteSync';
 import App, { registerFirstGesture, registerIdleWake } from './App';
@@ -153,4 +154,26 @@ test('pending project boot does not mount the route coordinator', () => {
   } finally {
     routeSync.mockRestore();
   }
+});
+
+describe('audio recovery wiring', () => {
+  test('Workspace mounts the recovery bridge and incident dialog exactly once', () => {
+    const source = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+    expect(source.match(/startAudioRecoveryBridge\(\)/g)).toHaveLength(1);
+    expect(source.match(/<IncidentDialog \/>/g)).toHaveLength(1);
+  });
+
+  test('the root installs global capture and hydrates the stored incident once', () => {
+    const source = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+    expect(source.match(/installGlobalIncidentCapture\(window/g)).toHaveLength(1);
+    expect(source.match(/hydrateLatestIncident\(\)/g)).toHaveLength(1);
+    expect(source).toContain('onIncident={reportRenderIncident}');
+  });
+});
+
+describe('boot failure reporting', () => {
+  test('an exception escaping project boot is reported once, beside the console log', () => {
+    const source = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+    expect(source.match(/reportOperationFailure\('boot', err, 'degraded'\)/g)).toHaveLength(1);
+  });
 });

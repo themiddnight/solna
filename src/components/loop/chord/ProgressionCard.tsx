@@ -8,6 +8,7 @@ import { beatsPerBarFor, resolveBeatCounter } from '@/utils/playhead';
 import { formatChordLabel } from '@/utils/musicTheory';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { ChordQuality } from '@/musicCore';
+import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 import type {
   ChordPalette,
   ChordViewState,
@@ -263,6 +264,7 @@ interface SortableProgressionProps {
 
 /** The drag-to-reorder row of chord cards. */
 function SortableProgression({ state, editor, previews }: SortableProgressionProps) {
+  markDiagnosticRender('ProgressionPlayhead');
   const {
     chords, chordIds, scaleRoot, scaleType, meterId, playheadBeat,
     playheadChordIndex, playheadChordStartBeat, chordOctave,

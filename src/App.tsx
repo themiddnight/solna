@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { AmbientBackdrop } from './components/ui/AmbientBackdrop';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { BottomInputDock } from './components/ui/BottomInputDock';
 import { Header } from './components/Header';
@@ -8,12 +7,18 @@ import { ProjectLoading } from './components/ProjectLoading';
 import { LoopPage } from './components/loop/LoopPage';
 import { SongPage } from './components/song/SongPage';
 import { TransportBar } from './components/TransportBar';
+import { IncidentDialog } from './components/ui/IncidentDialog';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { ProjectNotice } from './components/project/ProjectNotice';
 import { UpdateBanner } from './components/ui/UpdateBanner';
+import { installGlobalIncidentCapture } from './incidents/globalCapture';
+import { reportOperationFailure } from './incidents/operationFailure';
+import { hydrateLatestIncident } from './incidents/incidentStore';
+import { reportGlobalIncident, reportRenderIncident } from './store/incidentReporter';
 import { audioEngine } from './audio/engine';
 import { bootProject, useAppStore } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
+import { startAudioRecoveryBridge } from './store/audioRecovery';
 import { useRouteSync } from './routing/useRouteSync';
 import { usePlayheadSync } from './components/usePlayheadSync';
 import { useInputDeck } from './components/useInputDeck';
@@ -142,6 +147,10 @@ function Workspace() {
     return registerIdleWake(window, () => audioEngine.wakeIfIdle());
   }, []);
 
+  // Audio health -> recovery store (stops players and offers a user-triggered
+  // recovery when the realtime clock is confirmed unhealthy).
+  useEffect(() => startAudioRecoveryBridge(), []);
+
   return (
     <div
       // The left/right display-cutout insets, once for the whole app: a phone
@@ -149,15 +158,9 @@ function Workspace() {
       // the transport bar's master fader otherwise. `env()` is 0px in a normal
       // tab, so this is inert outside an installed, rotated app. The bottom
       // inset is on the transport bar itself (see index.css) so that bar's own
-      // background, not the canvas, sits under the home indicator.
+      // background sits under the home indicator.
       className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
     >
-      {/* Low-contrast analyser-driven field behind the whole workspace, so
-          every tab shows continuous "audio is live" feedback. Must stay the
-          first child at z-0 — see AmbientBackdrop.tsx's doc comment for why
-          `fixed`/`-z-10` would paint behind the root's opaque bg-canvas. */}
-      <AmbientBackdrop />
-
       {/* Navigation Header */}
       <Header />
 
@@ -198,6 +201,8 @@ function Workspace() {
       {/* Persistent Transport Bar at bottom */}
       <TransportBar />
 
+      <IncidentDialog />
+
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
 
@@ -223,6 +228,7 @@ function ProjectBootGate() {
         // means something threw outright — the store keeps its factory
         // content and the workspace is still revealed below.
         console.error('[boot] project load failed; continuing with factory content', err);
+        reportOperationFailure('boot', err, 'degraded');
       })
       .finally(() => {
         if (!cancelled) setBooted(true);
@@ -241,8 +247,15 @@ function ProjectBootGate() {
  * could not be caught by a boundary that Workspace rendered itself.
  */
 function App() {
+  // Installed once at the root, ahead of boot, so a failure while loading the
+  // project is captured too. Also restores the last stored incident (closed).
+  useEffect(() => {
+    void hydrateLatestIncident();
+    return installGlobalIncidentCapture(window, reportGlobalIncident);
+  }, []);
+
   return (
-    <ErrorBoundary showDetails={import.meta.env.DEV === true}>
+    <ErrorBoundary showDetails={import.meta.env.DEV === true} onIncident={reportRenderIncident}>
       <ProjectBootGate />
     </ErrorBoundary>
   );

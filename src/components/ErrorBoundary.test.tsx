@@ -90,4 +90,28 @@ describe('ErrorBoundary', () => {
     expect(html).toContain('kaboom');
     expect(html).toContain('>Retry<');
   });
+
+  test('componentDidCatch publishes a sanitized fatal render incident and survives a throwing reporter', () => {
+    const seen: unknown[] = [];
+    const boundary = new ErrorBoundary({ children: null, onIncident: (i) => seen.push(i) });
+    boundary.setState = () => {};
+    boundary.componentDidCatch(new Error('kaboom at /Users/me/x.ts'), { componentStack: '\n  in Boom' } as React.ErrorInfo);
+    expect(seen).toHaveLength(1);
+    const input = seen[0] as { kind: string; severity: string; error: { message: string; componentStack: string | null } };
+    expect(input.kind).toBe('render-crash');
+    expect(input.severity).toBe('fatal');
+    expect(input.error.componentStack).toContain('Boom');
+    expect(input.error.message).not.toContain('/Users/me');
+
+    const throwing = new ErrorBoundary({ children: null, onIncident: () => { throw new Error('nope'); } });
+    throwing.setState = () => {};
+    expect(() => throwing.componentDidCatch(new Error('x'), { componentStack: '' } as React.ErrorInfo)).not.toThrow();
+  });
+
+  test('the fallback offers Report beside Retry and Refresh', () => {
+    const html = renderToString(
+      <ErrorFallback message="kaboom" stack={null} componentStack={null} showDetails={false} onRetry={noop} />
+    );
+    expect(html).toContain('>Report<');
+  });
 });

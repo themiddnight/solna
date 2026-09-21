@@ -8,6 +8,7 @@ import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
 import { VuMeter } from "./ui/VuMeter";
 import { MidiIndicator } from "./ui/MidiIndicator";
+import { IncidentWarning } from "./ui/IncidentDialog";
 import { aggregateAllPlayers, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
@@ -15,6 +16,7 @@ import type { MeterId } from '@/utils/meter';
 import { loopLabel } from '@/store/loop';
 import { layerForTab } from '@/types';
 import { playTargetLabel } from './transportAction';
+import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 
 /** The song-mode badge: present only while a song position exists. */
 export function songModeLabel(
@@ -225,6 +227,7 @@ function MasterFader({
 }
 
 export const TransportBar = React.memo(function TransportBar() {
+  markDiagnosticRender('TransportBar');
   // Transport slice
   const playAll = useAppStore((s) => s.playAll);
   const soloLoop = useAppStore((s) => s.soloLoop);
@@ -363,6 +366,9 @@ export const TransportBar = React.memo(function TransportBar() {
             wraps to two rows below `sm` — the row it shares with the meter and
             the fader has the space the single row did not. */}
         <MidiIndicator />
+
+        {/* Shown while an incident exists and its dialog is dismissed. */}
+        <IncidentWarning />
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 sm:contents">
