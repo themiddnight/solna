@@ -81,6 +81,15 @@ export function createUiSlice(set: Set): UiSlice {
     loopClipboard: null,
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     followPlayhead: readStoredFollowPlayhead() ?? true,
+    drumPadVelocities: {},
+    // A non-finite input is a no-op, not a clamp: Math.min/max pass NaN
+    // through, and the sanitize that would drop it only runs on the next load.
+    setDrumPadVelocity: (id, velocity) => {
+      if (!Number.isFinite(velocity)) return;
+      set((s) => ({
+        drumPadVelocities: { ...s.drumPadVelocities, [id]: Math.min(1, Math.max(0, velocity)) },
+      }));
+    },
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
     isMidiSettingsOpen: false,

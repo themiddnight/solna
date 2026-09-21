@@ -66,3 +66,65 @@ describe('Slider tokens', () => {
     expect(element.props.onDoubleClick).toBe(handleDoubleClick);
   });
 });
+
+describe('Slider commit', () => {
+  // A fake <input>: the handlers read `value` and keep their "moved since the
+  // last commit" flag in `dataset`, on the element itself.
+  const fakeInput = (value: string) => ({ value, dataset: {} as DOMStringMap });
+  const event = (target: ReturnType<typeof fakeInput>) => ({ target, currentTarget: target });
+
+  const render = () => {
+    const commits: number[] = [];
+    const changes: number[] = [];
+    const element = Slider({
+      min: 0,
+      max: 1,
+      step: 0.01,
+      value: 0.5,
+      onChange: (v) => changes.push(v),
+      onCommit: (v) => commits.push(v),
+    });
+    return { props: element.props, commits, changes };
+  };
+
+  test('a drag commits once, on release, with the value the input holds', () => {
+    const { props, commits, changes } = render();
+    const input = fakeInput('0.3');
+    props.onChange(event(input));
+    input.value = '0.7';
+    props.onChange(event(input));
+    props.onPointerUp(event(input));
+    expect(changes).toEqual([0.3, 0.7]);
+    expect(commits).toEqual([0.7]);
+  });
+
+  test('a Tab keyup that only lands focus writes nothing', () => {
+    const { props, commits } = render();
+    props.onKeyUp(event(fakeInput('0.5')));
+    expect(commits).toEqual([]);
+  });
+
+  test('a cancelled pointer and a blur are backstops that still commit a moved value', () => {
+    const cancelled = render();
+    const a = fakeInput('0.2');
+    cancelled.props.onChange(event(a));
+    cancelled.props.onPointerCancel(event(a));
+    expect(cancelled.commits).toEqual([0.2]);
+
+    const blurred = render();
+    const b = fakeInput('0.9');
+    blurred.props.onChange(event(b));
+    blurred.props.onBlur(event(b));
+    expect(blurred.commits).toEqual([0.9]);
+  });
+
+  test('a gesture commits once even when several end events arrive', () => {
+    const { props, commits } = render();
+    const input = fakeInput('0.4');
+    props.onChange(event(input));
+    props.onPointerUp(event(input));
+    props.onBlur(event(input));
+    props.onKeyUp(event(input));
+    expect(commits).toEqual([0.4]);
+  });
+});

@@ -334,6 +334,9 @@ const PERSISTED_KEYS = [
   // NOT project content — see PROJECT_CONTENT_KEYS.
   'customBeatPresets',
   'activeLoopId',
+  // Drum-pad velocity overrides: a UI preference that survives a reload,
+  // never project content.
+  'drumPadVelocities',
 ];
 
 /**

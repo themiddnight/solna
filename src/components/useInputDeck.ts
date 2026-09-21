@@ -27,13 +27,14 @@ import {
   getScaleLockedKeyboardNotesFlat,
   getChordKeyboardRows,
 } from './ui/Keyboard';
-import type { DrumPad, KeyboardMode } from '../types';
+import type { BeatVoiceId, DrumPad, KeyboardMode } from '../types';
 import type { ActiveSynth, ArpSettings } from '../types/synth';
 import type { VoiceId } from '../audio/synth/voiceId';
 import { synthReleaseSeconds } from '../utils/synthPatch';
 import type { SynthControlTarget } from '../utils/synthControl';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
+import { padsWithVelocities } from './drumPadVelocity';
 import { synthTargetForFocus } from '../store/focusTrack';
 import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD } from '../store/sourceBuses';
 
@@ -238,6 +239,7 @@ export interface InputDeckDrumProps {
   activePadId: string | null;
   onTriggerPad: (pad: DrumPad) => void;
   onPadVolumeChange: (padId: string, volume: number) => void;
+  onPadVolumeCommit: (padId: string, volume: number) => void;
 }
 
 // The patch and the Arp settings the keyboard/arp actually play: the FOCUSED
@@ -611,7 +613,13 @@ function useQwertyNoteListeners({
  * matter how stable their other props are.
  */
 function useDrumPads(): InputDeckDrumProps {
-  const [pads, setPads] = useState<DrumPad[]>(DEFAULT_PADS);
+  // Persisted overrides from the ui slice, plus a local DRAFT for a slider
+  // mid-drag: the drag previews here and commits once on release, because a
+  // pointer gesture must never write persisted state per move.
+  const overrides = useAppStore((s) => s.drumPadVelocities);
+  const setDrumPadVelocity = useAppStore((s) => s.setDrumPadVelocity);
+  const [draft, setDraft] = useState<Partial<Record<string, number>>>({});
+  const pads = useMemo(() => padsWithVelocities(DEFAULT_PADS, overrides, draft), [overrides, draft]);
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
   const triggerPad = useCallback((pad: DrumPad) => {
@@ -636,8 +644,22 @@ function useDrumPads(): InputDeckDrumProps {
   }, [pads, triggerPad]);
 
   const handlePadVolumeChange = useCallback((padId: string, volume: number) => {
-    setPads((prev) => prev.map((p) => (p.id === padId ? { ...p, volume } : p)));
+    setDraft((prev) => ({ ...prev, [padId]: volume }));
   }, []);
+
+  const handlePadVolumeCommit = useCallback(
+    (padId: string, volume: number) => {
+      // Pad ids ARE Beat voice ids (DrumPadGrid.test.tsx pins the roster).
+      setDrumPadVelocity(padId as BeatVoiceId, volume);
+      setDraft((prev) => {
+        if (!(padId in prev)) return prev;
+        const next = { ...prev };
+        delete next[padId];
+        return next;
+      });
+    },
+    [setDrumPadVelocity],
+  );
 
   return useMemo<InputDeckDrumProps>(
     () => ({
@@ -645,8 +667,9 @@ function useDrumPads(): InputDeckDrumProps {
       activePadId,
       onTriggerPad: triggerPad,
       onPadVolumeChange: handlePadVolumeChange,
+      onPadVolumeCommit: handlePadVolumeCommit,
     }),
-    [pads, activePadId, triggerPad, handlePadVolumeChange],
+    [pads, activePadId, triggerPad, handlePadVolumeChange, handlePadVolumeCommit],
   );
 }
 

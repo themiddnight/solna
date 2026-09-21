@@ -36,6 +36,7 @@ const drumProps = {
   activePadId: null,
   onTriggerPad: () => {},
   onPadVolumeChange: () => {},
+  onPadVolumeCommit: () => {},
 };
 
 beforeEach(() => {

@@ -88,7 +88,7 @@ describe('useInputDeck', () => {
       'scaleType', 'setKeyboardMode', 'setKeyboardOctave',
     ]);
     expect(Object.keys(captured!.drumProps).sort()).toEqual([
-      'activePadId', 'onPadVolumeChange', 'onTriggerPad', 'pads',
+      'activePadId', 'onPadVolumeChange', 'onPadVolumeCommit', 'onTriggerPad', 'pads',
     ]);
   });
 });

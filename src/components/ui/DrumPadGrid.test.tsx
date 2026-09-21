@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { DrumPadGrid, DEFAULT_PADS, PADLESS_VOICES } from './DrumPadGrid';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
@@ -9,6 +10,7 @@ const props = {
   activePadId: null,
   onTriggerPad: noop,
   onPadVolumeChange: noop,
+  onPadVolumeCommit: noop,
 };
 
 describe('DEFAULT_PADS', () => {
@@ -84,5 +86,17 @@ describe('DrumPadGrid', () => {
   test('lights the active pad', () => {
     const html = renderToString(<DrumPadGrid {...props} activePadId="kick" />);
     expect(html).toContain('ring-4 ring-primary');
+  });
+});
+
+describe('pad velocity commits once per gesture', () => {
+  // renderToString cannot fire a pointer event, so the grid's wiring is pinned
+  // at the source: it hands each slider's release to onPadVolumeCommit. When
+  // the Slider commits (a gesture's end, only after a move — never from the
+  // onChange that runs on every move) is its own contract, in Slider.test.tsx.
+  const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8');
+
+  test('the grid routes each slider release to onPadVolumeCommit', () => {
+    expect(read('./DrumPadGrid.tsx')).toContain('onCommit={(val) => onPadVolumeCommit(pad.id, val)}');
   });
 });

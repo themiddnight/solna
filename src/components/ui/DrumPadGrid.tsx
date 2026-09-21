@@ -24,9 +24,10 @@ import { Slider } from './Slider';
 // NOTE (DEV-386): `volume` here is a VELOCITY, not a level — a per-pad strike
 // strength that goes to triggerDrum as a performance attribute. It keeps its
 // authored values (kick 0.9, hihat 0.75, …); flattening them would be an
-// audible regression. Renaming the field would touch the pad type, the
-// persisted pad list and its tests, so it is deliberately left for a
-// follow-up. See utils/gainUnits.ts for the velocity-vs-level rule.
+// audible regression. `DEFAULT_PADS.volume` is the default a pad falls back
+// to; a velocity the user moves persists per pad in the ui slice
+// (`drumPadVelocities`), keyed by pad id — the Beat voice id — and committed
+// once on slider release. See utils/gainUnits.ts for the velocity-vs-level rule.
 export const DEFAULT_PADS: DrumPad[] = [
   { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-drum-kick to-drum-kick/60 text-drum-kick-content', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
   { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-drum-snare to-drum-snare/60 text-drum-snare-content', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },
@@ -54,7 +55,10 @@ export interface DrumPadGridProps {
   pads: DrumPad[];
   activePadId: string | null;
   onTriggerPad: (pad: DrumPad) => void;
+  /** Live preview while the slider moves. */
   onPadVolumeChange: (padId: string, volume: number) => void;
+  /** The gesture ended: persist the velocity. */
+  onPadVolumeCommit: (padId: string, volume: number) => void;
 }
 
 /** The presentational pad grid, shared by the in-page DrumPads card and the
@@ -64,6 +68,7 @@ export function DrumPadGrid({
   activePadId,
   onTriggerPad,
   onPadVolumeChange,
+  onPadVolumeCommit,
 }: DrumPadGridProps) {
   return (
     // 5 columns matches the two-row, five-per-row keyboard map exactly (ten
@@ -109,6 +114,7 @@ export function DrumPadGrid({
                 step={0.01}
                 value={pad.volume}
                 onChange={(val) => onPadVolumeChange(pad.id, val)}
+                onCommit={(val) => onPadVolumeCommit(pad.id, val)}
                 className="range range-xs range-primary w-full"
                 title={`${pad.name} Volume`}
               />

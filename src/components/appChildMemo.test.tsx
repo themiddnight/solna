@@ -47,7 +47,7 @@ const keyboardProps = {
 };
 
 const drumProps = {
-  pads: [], activePadId: null, onTriggerPad: noop, onPadVolumeChange: noop,
+  pads: [], activePadId: null, onTriggerPad: noop, onPadVolumeChange: noop, onPadVolumeCommit: noop,
 };
 
 // LoopPage and SequencerView take no props (the drumProps chain that used to
