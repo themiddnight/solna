@@ -12,6 +12,7 @@ import {
   startMidiInputBridge,
 } from './midiInput';
 import { useAppStore } from './store';
+import { startEngineSync, stopEngineSync } from './engineSync';
 import { sliderPosTodB } from '../utils/gainUnits';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth } from '../types/synth';
@@ -441,27 +442,15 @@ describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp',
   });
 });
 
-// Unlike masterVolume, the five synth-param branches (filterCutoff,
-// filterResonance, attack, release, oscType) push to audioEngine directly, in
-// addition to writing the store. That is not leftover duplication: engineSync
-// (not started in this file — see its own subscription tests) ALSO routes
-// updateSynthPatch through its own per-key frame coalescer
-// (src/utils/frameCoalescer.ts) keyed on the synth bus, which applies only
-// the FIRST value inside an animation-frame window and defers any repeat to
-// the next frame; the direct call here is what an isolated `synthParams`
-// write (with engineSync not running) still needs to reach the engine at
-// all. `applyCcMapping` itself now ALSO routes every branch's whole body
-// (store write plus this direct engine call) through its own module-level
-// `ccFrames` coalescer, keyed on `mapping.targetKey` — a hardware fader
-// sweep transmits CC byte-pairs at a rate comparable to or higher than a
-// mouse drag, and per-message store writes carried the full render-fanout
-// and persist-tick cost of a `set()` for every byte pair. This test pins
-// that a single message per target still reaches the engine with the right
-// computed value, in the same synchronous tick; the coalescing behaviour
-// itself — a same-target repeat inside one frame collapsing to the latest
-// value — is proven separately below.
-describe('MIDI CC pushes the five synth-param branches straight to the engine', () => {
-  test('filterCutoff (CC 74) computes Hz from the CC value and pushes it directly', () => {
+// Like masterVolume, the five synth-param branches (filterCutoff,
+// filterResonance, attack, release, oscType) write the store and stop there:
+// engineSync's patch subscription is what pushes a patch to the engine, and
+// its frame coalescer is leading-edge, so the edit still reaches the engine on
+// the same tick (proven by 'a CC edit reaches the engine exactly once' below).
+// engineSync is not started here, so these tests also pin that the bridge
+// makes no engine call of its own.
+describe('MIDI CC writes the five synth-param branches into the Lead patch', () => {
+  test('filterCutoff (CC 74) computes Hz from the CC value and writes it to the store', () => {
     const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
     const input = connect('dev-cc-filter-cutoff');
 
@@ -469,19 +458,15 @@ describe('MIDI CC pushes the five synth-param branches straight to the engine', 
 
     const expectedHz = Math.round(20 * Math.pow(1000, 64 / 127));
     expect(useAppStore.getState().synthParams.patch.synth.filter.cutoffHz).toBe(expectedHz);
-    const lastCall = updateSynthPatch.mock.calls.at(-1);
-    expect(lastCall?.[2]).toBe('synth');
-    // Argument 1 is the patch the engine is told it WAS, argument 2 what it
-    // now IS — `updateSynthPatch` diffs them to decide what actually moved.
-    expect(nextPatch(lastCall).patch.synth.filter.cutoffHz).toBe(expectedHz);
+    expect(updateSynthPatch).not.toHaveBeenCalled();
 
     updateSynthPatch.mockRestore();
   });
 
-  test('filterResonance (CC 71), attack (CC 73), release (CC 72) and oscType (CC 16) all push directly too', () => {
+  test('filterResonance (CC 71), attack (CC 73), release (CC 72) and oscType (CC 16) all write the store too', () => {
     const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
     const input = connect('dev-cc-other-synth-targets');
-    const slot2Before = useAppStore.getState().synthParams.patch.synth.oscillators[1].waveform;
+    const before = useAppStore.getState().synthParams.patch.synth;
 
     input.onmidimessage?.({ data: [0xb0, 71, 64], target: input });
     input.onmidimessage?.({ data: [0xb0, 73, 64], target: input });
@@ -489,15 +474,15 @@ describe('MIDI CC pushes the five synth-param branches straight to the engine', 
     input.onmidimessage?.({ data: [0xb0, 16, 64], target: input });
 
     const patch = useAppStore.getState().synthParams.patch.synth;
-    const calls = updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
-    expect(calls.length).toBe(4);
-    expect(nextPatch(calls.at(-4)).patch.synth.filter.resonance).toBe(patch.filter.resonance);
-    expect(nextPatch(calls.at(-3)).patch.synth.ampEnvelope.attack).toBe(patch.ampEnvelope.attack);
-    expect(nextPatch(calls.at(-2)).patch.synth.ampEnvelope.release).toBe(patch.ampEnvelope.release);
-    expect(nextPatch(calls.at(-1)).patch.synth.oscillators[0].waveform).toBe(patch.oscillators[0].waveform);
+    const n = 64 / 127;
+    expect(patch.filter.resonance).toBe(Number(n.toFixed(3)));
+    expect(patch.ampEnvelope.attack).toBe(Number((0.001 + n * 1.999).toFixed(3)));
+    expect(patch.ampEnvelope.release).toBe(Number((0.01 + n * 4.99).toFixed(3)));
+    expect(patch.oscillators[0].waveform).toBe('sawtooth');
     // Slot 2 is untouched: a CC that re-voiced both oscillators would
     // collapse a two-oscillator patch into one sound on the first knob move.
-    expect(patch.oscillators[1].waveform).toBe(slot2Before);
+    expect(patch.oscillators[1].waveform).toBe(before.oscillators[1].waveform);
+    expect(updateSynthPatch).not.toHaveBeenCalled();
 
     updateSynthPatch.mockRestore();
   });
@@ -524,30 +509,29 @@ describe('MIDI CC coalesces repeated messages to the same target', () => {
   // armed after each test, so the leading-edge assumption below never
   // depends on run order.
 
-  test('two messages to the SAME synth target in one tick reach the engine once immediately (leading value), then once more at frame rate (latest value)', async () => {
-    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
+  test('two messages to the SAME synth target in one tick commit the Lead patch once immediately (leading value), then once more at frame rate (latest value)', async () => {
+    const commits: number[] = [];
+    const unsub = useAppStore.subscribe(
+      (st) => st.synthParams,
+      (synth) => commits.push(synth.patch.synth.filter.cutoffHz),
+    );
     const input = connect('dev-cc-coalesce-cutoff');
-    const synthCalls = () => updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
 
     input.onmidimessage?.({ data: [0xb0, 74, 40], target: input });
     input.onmidimessage?.({ data: [0xb0, 74, 100], target: input });
 
-    // Before any animation frame runs: exactly ONE push has reached the
-    // engine — the leading edge, computed from the FIRST message — not two.
-    expect(synthCalls().length).toBe(1);
+    // Before any animation frame runs: exactly ONE commit — the leading edge,
+    // computed from the FIRST message — not two.
     const hzAfterFirst = Math.round(20 * Math.pow(1000, 40 / 127));
-    expect(nextPatch(synthCalls().at(-1)).patch.synth.filter.cutoffHz).toBe(hzAfterFirst);
+    expect(commits).toEqual([hzAfterFirst]);
 
     await nextFrame();
 
-    // The frame drains the deferred message: one more call, using the LAST
+    // The frame drains the deferred message: one more commit, using the LAST
     // value (100/127), never the intermediate one that already landed.
-    expect(synthCalls().length).toBe(2);
     const hzAfterSecond = Math.round(20 * Math.pow(1000, 100 / 127));
-    expect(nextPatch(synthCalls().at(-1)).patch.synth.filter.cutoffHz).toBe(hzAfterSecond);
-    expect(useAppStore.getState().synthParams.patch.synth.filter.cutoffHz).toBe(hzAfterSecond);
-
-    updateSynthPatch.mockRestore();
+    expect(commits).toEqual([hzAfterFirst, hzAfterSecond]);
+    unsub();
   });
 
   test('two messages to the SAME masterVolume target in one tick commit the store once immediately (leading value), then once more at frame rate (latest value)', async () => {
@@ -567,17 +551,19 @@ describe('MIDI CC coalesces repeated messages to the same target', () => {
     expect(useAppStore.getState().masterVolume).toBeCloseTo(12, 6);
   });
 
-  test('two DIFFERENT synth targets moved in the same tick never block each other — both reach the engine immediately', () => {
-    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockClear();
+  test('two DIFFERENT synth targets moved in the same tick never block each other — both commit immediately', () => {
+    let commits = 0;
+    const unsub = useAppStore.subscribe(
+      (st) => st.synthParams,
+      () => { commits += 1; },
+    );
     const input = connect('dev-cc-coalesce-distinct-targets');
 
     input.onmidimessage?.({ data: [0xb0, 74, 64], target: input }); // filterCutoff
     input.onmidimessage?.({ data: [0xb0, 71, 64], target: input }); // filterResonance
 
-    const synthCalls = updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
-    expect(synthCalls.length).toBe(2);
-
-    updateSynthPatch.mockRestore();
+    expect(commits).toBe(2);
+    unsub();
   });
 });
 
@@ -620,5 +606,22 @@ describe('a MIDI-recorded black key is stored sharp-spelled (ROOTS identity)', (
     noteOn(input, 70); // A#4 / Bb4
     expect(events[0]?.note).toBe('A#4');
     resetNoteInputListeners();
+  });
+});
+
+describe('a CC edit reaches the engine exactly once, through engineSync', () => {
+  test('filterCutoff (CC 74): one updateSynthPatch for synth, same tick', () => {
+    startEngineSync();
+    __flushCcFramesForTests();
+    const updateSynthPatch = spyOn(audioEngine, 'updateSynthPatch').mockImplementation(() => {});
+    const input = connect('dev-cc-single-path');
+
+    input.onmidimessage?.({ data: [0xb0, 74, 64], target: input });
+
+    const calls = updateSynthPatch.mock.calls.filter(([, , source]) => source === 'synth');
+    expect(calls).toHaveLength(1);
+    expect(nextPatch(calls[0]).patch.synth.filter.cutoffHz).toBe(Math.round(20 * Math.pow(1000, 64 / 127)));
+    updateSynthPatch.mockRestore();
+    stopEngineSync();
   });
 });

@@ -1,6 +1,5 @@
 import { midiToSharpName } from '@/musicCore';
 import { createFrameCoalescer } from '@/utils/frameCoalescer';
-import { audioEngine } from '../audio/engine';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth, SubtractiveParams } from '../types/synth';
 import { synthPlaybackNoteOff, synthPlaybackNoteOn } from '../audio/playback/synthPlayback';
@@ -91,8 +90,7 @@ let knownInputIds: string[] = [];
 
 // A hardware fader sweep transmits CC byte-pairs at a rate comparable to or
 // higher than a mouse drag, with no draft/preview stage of its own —
-// `applyCcMapping` used to call a store setter (and, for the synth-patch
-// branches, `audioEngine.updateSynthPatch` directly) on every single message.
+// `applyCcMapping` used to call a store setter on every single message.
 // `midiInput.ts` is a plain store/event-bridge module with no component
 // tree, so Task 4's `useSynthPatchDraft` (a React hook) does not apply here;
 // `store/beatPreview.ts`'s module-level `createFrameCoalescer` is the actual
@@ -121,30 +119,30 @@ export function __flushCcFramesForTests(): void {
 
 // Applies one CC message through the enabled CC mapping for that number.
 //
-// Every branch below routes its store write (and, for the synth-patch
-// branches, its direct `audioEngine.updateSynthPatch` call) through
+// Every branch below routes its store write through
 // `ccFrames.push(mapping.targetKey, ...)` rather than calling it unconditionally:
 // the FIRST message for a target inside an animation-frame window still lands
 // synchronously (a MIDI Learn assignment or a single nudge is never delayed),
 // and only a REPEAT on the same target inside that window defers to the next
-// frame, applying the latest value. `masterVolume` writes the store and STOPS
-// there: engineSync subscribes to that exact field with `fireImmediately`, and
-// this bridge is itself started from inside `startEngineSync`, so the
-// subscription provably exists before any CC can arrive. Pushing
-// `setMasterVolume(faderDbToGain(db))` here as well would duplicate the one
-// dB->linear boundary — two call sites that must agree about the taper
-// forever, for a value the subscription was already going to deliver on the
-// same tick.
+// frame, applying the latest value. Every branch — the synth-patch ones and
+// `masterVolume` alike — writes the store and STOPS there: engineSync
+// subscribes to each of those fields with `fireImmediately`, and this bridge is
+// itself started from inside `startEngineSync`, so the subscription provably
+// exists before any CC can arrive. Pushing `setMasterVolume(faderDbToGain(db))`
+// here as well would duplicate the one dB->linear boundary — two call sites
+// that must agree about the taper forever, for a value the subscription was
+// already going to deliver on the same tick; a direct `updateSynthPatch` would
+// likewise push every synth edit to the engine twice.
 
 /**
- * Writes one CC-mapped control into the Lead patch and pushes the result to
- * the store AND straight to the engine.
+ * Writes one CC-mapped control into the Lead patch. The store write is the
+ * whole job: engineSync's patch subscription pushes it to the engine on the
+ * same tick (its frame coalescer is leading-edge), diffing against what it
+ * last APPLIED.
  *
  * `edit` returns the new `SubtractiveParams`; the common block and the
  * provenance are carried through untouched, so a CC sweep can never widen
- * into a field it does not map. The previous patch goes to the engine beside
- * the next one, because `updateSynthPatch` diffs them to decide which
- * continuous controls actually moved.
+ * into a field it does not map.
  */
 function writeLeadSynth(edit: (synth: SubtractiveParams) => SubtractiveParams): void {
   const s = useAppStore.getState();
@@ -154,7 +152,6 @@ function writeLeadSynth(edit: (synth: SubtractiveParams) => SubtractiveParams): 
     patch: { ...previous.patch, synth: edit(previous.patch.synth) },
   };
   s.setSynthParams(next);
-  audioEngine.updateSynthPatch(previous, next, 'synth');
 }
 
 function applyCcMapping(ccNumber: number, ccValue: number): void {
