@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
+import { setOperationFailureSink } from '@/incidents/operationFailure';
 import { createMemoryBackend, createProjectStore } from './projectStore';
 import { UNTITLED_SOURCE, type ProjectSlotRecord } from './projectSource';
 import { parseProjectFile, unknownLibraryReferences } from './projectFile';
@@ -531,5 +532,52 @@ describe('the project source', () => {
     // with where the project came from.
     expect(serialised).not.toContain('"source"');
     expect(serialised).not.toContain('projectSource');
+  });
+});
+
+describe('operation failure reporting', () => {
+  async function sliceWith(backend: ReturnType<typeof createMemoryBackend>) {
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+    const store = createProjectStore(async () => backend);
+    const slice = createProjectSlice(useAppStore.setState, useAppStore.getState, store, () => 5_000);
+    useAppStore.setState({ ...slice, projectName: null });
+    return useAppStore.getState() as AppStore;
+  }
+  afterEach(() => setOperationFailureSink(null));
+
+  test('a generic storage failure on load and on save is reported, with the notice kept', async () => {
+    const incidents: string[] = [];
+    setOperationFailureSink((input) => incidents.push(input.summary));
+    const backend = createMemoryBackend();
+    backend.getRecord = async () => { throw new Error('idb exploded'); };
+    backend.putRecord = async () => { throw new Error('idb exploded'); };
+    const slice = await sliceWith(backend);
+    await slice.loadProject();
+    await slice.save();
+    expect(incidents).toContain('Unexpected failure during project-load');
+    expect(incidents).toContain('Unexpected failure during project-save');
+    const { useAppStore } = await storeModule;
+    expect(useAppStore.getState().projectNotice).not.toBeNull();
+  });
+
+  test('quota, unavailable storage and an empty slot are not reported', async () => {
+    const incidents: string[] = [];
+    setOperationFailureSink((input) => incidents.push(input.summary));
+    const quota = createMemoryBackend();
+    quota.putRecord = async () => {
+      const error = new Error('full');
+      error.name = 'QuotaExceededError';
+      throw error;
+    };
+    const slice = await sliceWith(quota);
+    await slice.loadProject();
+    await slice.save();
+    const { useAppStore } = await storeModule;
+    const { createProjectSlice } = await import('./projectSlice');
+    const unavailable = createProjectStore(async () => { throw new Error('blocked'); });
+    const blocked = createProjectSlice(useAppStore.setState, useAppStore.getState, unavailable, () => 5_000);
+    await blocked.loadProject();
+    expect(incidents).toEqual([]);
   });
 });

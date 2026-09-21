@@ -105,6 +105,7 @@ describe('createProjectStore against the in-memory backend', () => {
     const store = createProjectStore(async () => backend);
     const result = await store.load();
     expect(result.ok).toBe(false);
+    if (result.ok === false && result.error === 'failed') expect((result.cause as Error).message).toBe('boom');
     if (result.ok === false) expect(result.error).toBe('failed');
   });
 });

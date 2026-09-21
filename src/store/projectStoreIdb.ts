@@ -1,5 +1,6 @@
 import type { ProjectStoreBackend } from './projectStore';
 import { PROJECT_SLOT_KEY } from './projectStore';
+import { requestToPromise, transactionDone } from '@/utils/idbPromise';
 
 const PROJECT_DB_NAME = 'solna-projects';
 /**
@@ -17,21 +18,6 @@ const SLOT = 'project';
  * genuinely stuck webview should reach this.
  */
 const OPEN_TIMEOUT_MS = 10_000;
-
-function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-  });
-}
-
-function transactionDone(tx: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
-  });
-}
 
 /**
  * Opens (and on first use creates) the single-slot database. Rejects — instead

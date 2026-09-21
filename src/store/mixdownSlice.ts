@@ -26,6 +26,7 @@ import { buildProjectContent } from './projectFormat';
 import { faderDbToGain } from './levelUnits';
 import { SOURCE_BUSES } from './sourceBuses';
 import type { AppStore } from './types';
+import { reportOperationFailure } from '@/incidents/operationFailure';
 
 export type MixdownProgress =
   | MixdownRenderProgress
@@ -177,6 +178,11 @@ export function createMixdownSlice(set: Set, get: Get): MixdownSlice {
           // destination uses.
           if (rendered.reason.kind !== 'cancelled') {
             set({ projectNotice: MIXDOWN_FAILURE_MESSAGE[rendered.reason.kind] });
+            // Only an exception inside the render is a defect; an empty
+            // arrangement or an unsupported browser is an expected outcome.
+            if (rendered.reason.kind === 'render-failed') {
+              reportOperationFailure('mixdown', new Error(rendered.reason.detail), 'degraded');
+            }
           }
           return { ok: false, reason: rendered.reason };
         }

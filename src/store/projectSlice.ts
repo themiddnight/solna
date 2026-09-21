@@ -20,6 +20,7 @@ import {
 } from './projectFormat';
 import { serializeProject, unknownLibraryReferences } from './projectFile';
 import { beatPresetIdsWithLibrary } from './sanitizeBeat';
+import { reportOperationFailure } from '@/incidents/operationFailure';
 import { loopStatePatch, resolveActiveLoop } from './loop';
 import type { ProjectStore, ProjectStoreResult, ProjectStoreStatus } from './projectStore';
 import {
@@ -252,6 +253,7 @@ async function loadProjectFromStore(ctx: ProjectContext): Promise<void> {
       ctx.set({ projectSource: UNTITLED_SOURCE });
     } else {
       ctx.set({ projectNotice: result.message });
+      if (result.error === 'failed') reportOperationFailure('project-load', result.cause ?? result.message, 'degraded');
     }
     reconcileActiveLoop(ctx);
     return;
@@ -287,7 +289,10 @@ async function saveToSlot(ctx: ProjectContext): Promise<ProjectStoreResult<Proje
   // clears its handle, so the slot stays stale until the next content
   // change schedules a write. That re-attempt covers everything, because
   // autosave writes the whole content set rather than a delta.
-  if (result.ok === false) ctx.set({ projectNotice: result.message });
+  if (result.ok === false) {
+    ctx.set({ projectNotice: result.message });
+    if (result.error === 'failed') reportOperationFailure('project-save', result.cause ?? result.message, 'degraded');
+  }
   return result;
 }
 

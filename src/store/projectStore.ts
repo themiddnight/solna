@@ -21,7 +21,7 @@ export type ProjectStoreStatus = 'unknown' | 'ready' | 'unavailable';
 type ProjectStoreError = 'unavailable' | 'quota' | 'not-found' | 'failed';
 export type ProjectStoreResult<T> =
   | { ok: true; value: T }
-  | { ok: false; error: ProjectStoreError; message: string };
+  | { ok: false; error: ProjectStoreError; message: string; cause?: unknown };
 
 export const QUOTA_MESSAGE = 'There is not enough storage space to save this project';
 const UNAVAILABLE_MESSAGE =
@@ -92,7 +92,7 @@ export function createProjectStore(openBackend: () => Promise<ProjectStoreBacken
       return await op(backend);
     } catch (err) {
       if (isQuotaError(err)) return { ok: false as const, error: 'quota' as const, message: QUOTA_MESSAGE };
-      return { ok: false as const, error: 'failed' as const, message: FAILED_MESSAGE };
+      return { ok: false as const, error: 'failed' as const, message: FAILED_MESSAGE, cause: err };
     }
   };
 

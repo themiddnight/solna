@@ -10,6 +10,7 @@ import {
 import { getMeter } from '../utils/meter';
 import type { MasterEffects } from '../types';
 import type { ActiveSynth } from '../types/synth';
+import { SOURCE_BUSES } from './sourceBuses';
 
 /**
  * `base` with one nested DSP field moved. Cutoff is the field these tests
@@ -45,6 +46,29 @@ afterEach(() => {
 });
 
 describe('engineSync: bootstrap and transport transitions', () => {
+  test('a fully stopped restart settles every current source bus before resetting the clock', () => {
+    const events: string[] = [];
+    const init = spyOn(audioEngine, 'init').mockImplementation(() => {});
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockImplementation((source, _state, _time, mode) => {
+      events.push(`source:${source}:${mode}`);
+    });
+    const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {
+      events.push('resetClock');
+    });
+    startEngineSync();
+    events.length = 0;
+
+    useAppStore.getState().play('sequencer');
+
+    expect(events).toEqual([
+      ...SOURCE_BUSES.map((bus) => `source:${bus.source}:settle`),
+      'resetClock',
+    ]);
+    init.mockRestore();
+    setSourceState.mockRestore();
+    resetClock.mockRestore();
+  });
+
   test('fireImmediately bootstrap pushes the current state into the engine', () => {
     const setMasterVolume = spyOn(audioEngine, 'setMasterVolume').mockClear();
     const setClockBpm = spyOn(audioEngine, 'setClockBpm').mockClear();
@@ -337,20 +361,17 @@ describe('engineSync: the Beat instrument', () => {
 
   test('the Beat bus fader and mute read beatMix, not a flat field', () => {
     startEngineSync();
-    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
 
     useAppStore.getState().setBeatLevel(-12);
-    const gainCall = setSourceGain.mock.calls.find((c) => c[0] === 'sequencer') as [string, number];
-    expect(gainCall[1]).toBeCloseTo(faderDbToGain(-12), 6);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').gain).toBeCloseTo(faderDbToGain(-12), 6);
 
     useAppStore.getState().toggleBeatMuted();
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'sequencer')).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').muted).toBe(true);
 
     useAppStore.getState().toggleBeatMuted();
     useAppStore.getState().setBeatLevel(DEFAULT_BUS_TRIM_DB);
-    setSourceGain.mockRestore();
-    setSourceMuted.mockRestore();
+    setSourceState.mockRestore();
   });
 });
 
@@ -386,13 +407,13 @@ describe('engineSync meter bridge: the meter and the snapshot', () => {
     useAppStore.setState({ meterId: '4/4' });
   });
 
-  test('applyEngineSnapshot re-applies the pad bus gain and mute after the AudioContext exists', () => {
+  test('applyEngineSnapshot re-applies the complete pad bus state after the AudioContext exists', () => {
     useAppStore.setState({ padVolume: 0.75, padMuted: true });
-    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     applyEngineSnapshot();
-    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(0.75));
-    expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
+    expect(setSourceState).toHaveBeenCalledWith(
+      'pad', { gain: faderDbToGain(0.75), muted: true }, undefined, 'settle',
+    );
     useAppStore.setState({ padVolume: DEFAULT_FADER_DB, padMuted: false });
   });
 
@@ -401,6 +422,58 @@ describe('engineSync meter bridge: the meter and the snapshot', () => {
   // to leave the whole suite green — an un-converted -6 dB bus would reach
   // setSourceGain as -6, which the engine clamp floors to 0 (silence).
 
+});
+
+describe('engineSync source-bus atomicity', () => {
+  test('applyEngineSnapshot settles each source bus atomically', () => {
+    useAppStore.setState({
+      soloTracks: [],
+      synthMuted: false,
+      chordMuted: false,
+      bassMuted: false,
+      padMuted: false,
+    });
+    setBeatBusMuted(false);
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+
+    applyEngineSnapshot();
+
+    expect(setSourceState.mock.calls).toEqual(SOURCE_BUSES.map((bus) => [
+      bus.source,
+      {
+        gain: faderDbToGain(bus.selectLevelDb(useAppStore.getState())),
+        muted: false,
+      },
+      undefined,
+      'settle',
+    ]));
+    expect(setSourceGain).not.toHaveBeenCalled();
+    expect(setSourceMuted).not.toHaveBeenCalled();
+    setSourceState.mockRestore();
+    setSourceGain.mockRestore();
+    setSourceMuted.mockRestore();
+  });
+
+  test('a combined fader and mute edit sends the latest source state in one transition', () => {
+    startEngineSync();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
+    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+
+    useAppStore.setState({ padVolume: -12, padMuted: true });
+
+    expect(setSourceState.mock.calls).toEqual([
+      ['pad', { gain: faderDbToGain(-12), muted: true }, undefined, 'transition'],
+    ]);
+    expect(setSourceGain).not.toHaveBeenCalled();
+    expect(setSourceMuted).not.toHaveBeenCalled();
+    useAppStore.setState({ padVolume: DEFAULT_FADER_DB, padMuted: false });
+    setSourceState.mockRestore();
+    setSourceGain.mockRestore();
+    setSourceMuted.mockRestore();
+  });
 });
 
 describe('engineSync meter bridge: effects debounce and bus faders', () => {
@@ -412,13 +485,13 @@ describe('engineSync meter bridge: effects debounce and bus faders', () => {
       padVolume: -12,
     });
     useAppStore.getState().setBeatLevel(12);
-    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     applyEngineSnapshot();
-    expect(setSourceGain).toHaveBeenCalledWith('synth', faderDbToGain(-6));
-    expect(setSourceGain).toHaveBeenCalledWith('chord', faderDbToGain(-60));
-    expect(setSourceGain).toHaveBeenCalledWith('bass', faderDbToGain(3));
-    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(-12));
-    expect(setSourceGain).toHaveBeenCalledWith('sequencer', faderDbToGain(12));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').gain).toBe(faderDbToGain(-6));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').gain).toBe(0);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').gain).toBe(faderDbToGain(3));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').gain).toBe(faderDbToGain(-12));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').gain).toBe(faderDbToGain(12));
     useAppStore.setState({
       synthVolume: DEFAULT_FADER_DB,
       chordVolume: DEFAULT_FADER_DB,
@@ -449,20 +522,23 @@ describe('engineSync meter bridge: effects debounce and bus faders', () => {
   });
 
   test('the pad bus is bootstrapped and then tracks the store', () => {
-    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
 
     // fireImmediately: the current value is pushed at subscribe time.
-    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(useAppStore.getState().padVolume));
-    expect(setSourceMuted).toHaveBeenCalledWith('pad', useAppStore.getState().padMuted);
+    expect(setSourceState).toHaveBeenCalledWith(
+      'pad',
+      { gain: faderDbToGain(useAppStore.getState().padVolume), muted: useAppStore.getState().padMuted },
+      undefined,
+      'transition',
+    );
 
     useAppStore.getState().setPadVolume(0.42);
-    expect(setSourceGain).toHaveBeenLastCalledWith('pad', faderDbToGain(0.42));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').gain).toBe(faderDbToGain(0.42));
 
     const before = useAppStore.getState().padMuted;
     useAppStore.getState().togglePadMuted();
-    expect(setSourceMuted).toHaveBeenLastCalledWith('pad', !before);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').muted).toBe(!before);
     useAppStore.getState().togglePadMuted();
   });
 
@@ -512,15 +588,15 @@ describe('engineSync meter bridge: every bus fader from dB to gain', () => {
       padVolume: -12,
     });
     useAppStore.getState().setBeatLevel(12);
-    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
-    expect(setSourceGain).toHaveBeenCalledWith('synth', faderDbToGain(-3));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').gain).toBe(faderDbToGain(-3));
     // The bottom of the fader is TRUE silence, not 0.001 (decision 11).
-    expect(setSourceGain).toHaveBeenCalledWith('chord', 0);
-    expect(setSourceGain).toHaveBeenCalledWith('bass', faderDbToGain(6));
-    expect(setSourceGain).toHaveBeenCalledWith('pad', faderDbToGain(-12));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').gain).toBe(0);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').gain).toBe(faderDbToGain(6));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').gain).toBe(faderDbToGain(-12));
     // The top arrives intact: the engine ceiling is derived from it (Step 10).
-    expect(setSourceGain).toHaveBeenCalledWith('sequencer', faderDbToGain(12));
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').gain).toBe(faderDbToGain(12));
 
     useAppStore.setState({
       synthVolume: DEFAULT_FADER_DB,
@@ -537,24 +613,22 @@ describe('engineSync meter bridge: every bus fader from dB to gain', () => {
   // above, synth/chord/sequencer by the bootstrap test's neighbours below.
 
   test('each bus fader tracks a live edit, converted to linear gain', () => {
-    const setSourceGain = spyOn(audioEngine, 'setSourceGain').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
 
     useAppStore.getState().setSynthVolume(-6);
-    const [source, gain] = setSourceGain.mock.calls.at(-1) as [string, number];
-    expect(source).toBe('synth');
-    expect(gain).toBeCloseTo(0.5011872, 6);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').gain).toBeCloseTo(0.5011872, 6);
     useAppStore.getState().setSynthVolume(0);
-    expect(setSourceGain).toHaveBeenLastCalledWith('synth', 1);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').gain).toBe(1);
 
     useAppStore.getState().setChordVolume(-60);
-    expect((setSourceGain.mock.calls.at(-1) as [string, number])[1]).toBe(0);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').gain).toBe(0);
 
     useAppStore.getState().setBassVolume(-6);
-    expect(setSourceGain.mock.calls.at(-1)).toEqual(['bass', faderDbToGain(-6)]);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').gain).toBe(faderDbToGain(-6));
 
     useAppStore.getState().setBeatLevel(12);
-    expect(setSourceGain.mock.calls.at(-1)).toEqual(['sequencer', faderDbToGain(12)]);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').gain).toBe(faderDbToGain(12));
 
     useAppStore.setState({
       synthVolume: DEFAULT_FADER_DB,
@@ -611,11 +685,11 @@ describe('EFFECT_KEYS_EXCEPT_DECAY', () => {
 });
 
 /**
- * The value setSourceMuted was last called with for one engine source, scanned
+ * The source state last sent for one engine source, scanned
  * across the spy's whole call history rather than only calls "since the last
- * mockClear". A bus whose audibility never flips within a scenario is, by
- * design, never re-pushed after its fireImmediately bootstrap (the mute
- * subscription's default `Object.is` equality only fires on a real flip), so
+ * mockClear". A bus whose gain and effective mute stay unchanged within a
+ * scenario is never re-pushed after its fireImmediately bootstrap: the atomic
+ * source-state subscription compares both fields with `sourceStateEqual`, so
  * a call-history assertion for that bus would demand a redundant engine call
  * the implementation correctly never makes. What the feature promises is the
  * RESULTING engine state, not that a call happened — so read the last value
@@ -627,11 +701,14 @@ describe('EFFECT_KEYS_EXCEPT_DECAY', () => {
  * "the engine was never told anything about this source" as a passing
  * assertion, so a never-pushed source fails loudly instead of quietly.
  */
-function lastMutedFor(calls: readonly unknown[][], source: string): boolean {
+function lastSourceStateFor(
+  calls: readonly unknown[][],
+  source: string,
+): { gain: number; muted: boolean } {
   for (let i = calls.length - 1; i >= 0; i -= 1) {
-    if (calls[i][0] === source) return calls[i][1] as boolean;
+    if (calls[i][0] === source) return calls[i][1] as { gain: number; muted: boolean };
   }
-  throw new Error(`setSourceMuted was never called with source '${source}'`);
+  throw new Error(`setSourceState was never called with source '${source}'`);
 }
 
 /** The Beat bus mute is a field of `beatMix`, and the slice's own toggle is the
@@ -652,48 +729,50 @@ describe('track solo reaches the engine as bus audibility', () => {
     setBeatBusMuted(false);
   });
 
-  test('soloing drums silences the four melodic buses and keeps the drum bus open', () => {
+  test('soloing drums silences the five melodic buses and keeps the drum bus open', () => {
     useAppStore.setState({ soloTracks: [] });
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
-    setSourceMuted.mockClear();
+    setSourceState.mockClear();
 
     useAppStore.getState().toggleSoloTrack('drums');
 
-    expect(setSourceMuted).toHaveBeenCalledWith('synth', true);
-    expect(setSourceMuted).toHaveBeenCalledWith('chord', true);
-    expect(setSourceMuted).toHaveBeenCalledWith('bass', true);
-    expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
-    expect(setSourceMuted).not.toHaveBeenCalledWith('sequencer', true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'fx').muted).toBe(true);
+    expect(setSourceState.mock.calls.some(([source]) => source === 'sequencer')).toBe(false);
   });
 
   test('solo beats mute: a muted bus opens when it is soloed', () => {
     useAppStore.setState({ soloTracks: [] });
     setBeatBusMuted(true);
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
-    setSourceMuted.mockClear();
+    setSourceState.mockClear();
 
     useAppStore.getState().toggleSoloTrack('drums');
 
-    expect(setSourceMuted).toHaveBeenCalledWith('sequencer', false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').muted).toBe(false);
   });
 
   test('solo is additive: drums + lead leaves both buses open', () => {
     useAppStore.setState({ soloTracks: [] });
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
 
     useAppStore.getState().toggleSoloTrack('drums');
     useAppStore.getState().toggleSoloTrack('lead');
-    setSourceMuted.mockClear();
+    setSourceState.mockClear();
     applyEngineSnapshot();
 
-    expect(setSourceMuted).toHaveBeenCalledWith('sequencer', false);
-    expect(setSourceMuted).toHaveBeenCalledWith('synth', false);
-    expect(setSourceMuted).toHaveBeenCalledWith('chord', true);
-    expect(setSourceMuted).toHaveBeenCalledWith('bass', true);
-    expect(setSourceMuted).toHaveBeenCalledWith('pad', true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').muted).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').muted).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'fx').muted).toBe(true);
   });
 
   test('soloing overrides mute in both directions, and clearing hands every bus back to its own mute flag', () => {
@@ -706,7 +785,7 @@ describe('track solo reaches the engine as bus audibility', () => {
     // fireImmediately bootstrap alone satisfied it and solo never had to
     // reach the engine at all.
     useAppStore.setState({ soloTracks: [], chordMuted: true });
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
     startEngineSync();
     useAppStore.getState().toggleSoloTrack('drums');
 
@@ -714,21 +793,23 @@ describe('track solo reaches the engine as bus audibility', () => {
     // name) is audible. synth and pad are muted despite their own mute flags
     // being false, and bass — the flag-false case that a solo-blind
     // implementation gets wrong — must be muted too.
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'synth')).toBe(true);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'chord')).toBe(true);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'bass')).toBe(true);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'pad')).toBe(true);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'sequencer')).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'fx').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').muted).toBe(false);
 
     useAppStore.getState().clearSoloTracks();
 
     // After clearing: every bus reads back exactly what its own mute flag
     // implies, chord included (chordMuted: true survives the whole journey).
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'synth')).toBe(false);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'chord')).toBe(true);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'bass')).toBe(false);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'pad')).toBe(false);
-    expect(lastMutedFor(setSourceMuted.mock.calls, 'sequencer')).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'synth').muted).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'chord').muted).toBe(true);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'bass').muted).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'pad').muted).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'fx').muted).toBe(false);
+    expect(lastSourceStateFor(setSourceState.mock.calls, 'sequencer').muted).toBe(false);
   });
 
   test('the snapshot pass and the subscriptions push the same audibility for the same state', () => {
@@ -739,7 +820,7 @@ describe('track solo reaches the engine as bus audibility', () => {
     // paths distinguishable — a revert of either consumer back to reading the
     // raw mute flag instead of busAudible would make its per-source values
     // disagree with the other's.
-    const sources = ['synth', 'chord', 'bass', 'pad', 'sequencer'] as const;
+    const sources = ['synth', 'chord', 'bass', 'pad', 'fx', 'sequencer'] as const;
     useAppStore.setState({
       soloTracks: ['pad'],
       synthMuted: false,
@@ -748,20 +829,20 @@ describe('track solo reaches the engine as bus audibility', () => {
       padMuted: true,
     });
     setBeatBusMuted(false);
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockClear();
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockClear();
 
     startEngineSync();
-    const fromSubscriptions = sources.map((s) => lastMutedFor(setSourceMuted.mock.calls, s));
+    const fromSubscriptions = sources.map((s) => lastSourceStateFor(setSourceState.mock.calls, s).muted);
 
-    setSourceMuted.mockClear();
+    setSourceState.mockClear();
     applyEngineSnapshot();
-    const fromSnapshot = sources.map((s) => lastMutedFor(setSourceMuted.mock.calls, s));
+    const fromSnapshot = sources.map((s) => lastSourceStateFor(setSourceState.mock.calls, s).muted);
 
     expect(fromSnapshot).toEqual(fromSubscriptions);
     // Pinned so a bug that happens to agree on both paths (e.g. solo ignored
     // by both) is still caught: pad is soloed and audible despite padMuted,
     // synth is muted despite synthMuted: false.
-    expect(fromSnapshot).toEqual([true, true, true, false, true]);
+    expect(fromSnapshot).toEqual([true, true, true, false, true, true]);
   });
 
   // Cross-layer regression guard, not coverage of this module: it exercises

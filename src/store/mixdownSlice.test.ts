@@ -3,6 +3,7 @@ import { OfflineAudioContext } from 'node-web-audio-api';
 import { useAppStore } from './store';
 import { SOURCE_BUSES } from './sourceBuses';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
+import { setOperationFailureSink } from '@/incidents/operationFailure';
 import { MIXDOWN_FAILURE_MESSAGE, wavFileName } from './mixdownSlice';
 
 // renderMixdown's capability probe reads `globalThis.OfflineAudioContext`, so
@@ -236,5 +237,37 @@ describe('exporting is session state', () => {
   test('it starts false', () => {
     expect(useAppStore.getState().exporting).toBe(false);
     expect(useAppStore.getState().mixdownProgress).toBeNull();
+  });
+});
+
+describe('mixdown incident reporting', () => {
+  const initialLoops = useAppStore.getState().loops;
+  afterEach(() => {
+    useAppStore.setState({ loops: initialLoops, exporting: false, mixdownProgress: null, projectNotice: null });
+  });
+
+  test('reports a render-failed as an incident but not an empty arrangement or a cancellation', async () => {
+    const incidents: string[] = [];
+    setOperationFailureSink((input) => incidents.push(input.summary));
+    const original = (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext;
+    try {
+      useAppStore.setState({ loops: [] });
+      await useAppStore.getState().exportMixdown();
+      expect(incidents).toEqual([]);
+
+      useAppStore.setState({ loops: initialLoops });
+      (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = class {
+        constructor() {
+          throw new Error('boom');
+        }
+      };
+      const result = await useAppStore.getState().exportMixdown();
+      expect(result.ok === false && result.reason.kind).toBe('render-failed');
+      expect(useAppStore.getState().projectNotice).toBe(MIXDOWN_FAILURE_MESSAGE['render-failed']);
+      expect(incidents).toEqual(['Unexpected failure during mixdown']);
+    } finally {
+      (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = original;
+      setOperationFailureSink(null);
+    }
   });
 });

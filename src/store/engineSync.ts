@@ -16,6 +16,8 @@ import { SOURCE_BUSES, SYNTH_PARAM_FIELD, SYNTH_PARAM_TARGETS, type SourceBus } 
 import { sourceTransitionTime } from './sourceTransition';
 import type { AppStore } from './types';
 import type { ActiveSynth } from '@/types/synth';
+import type { SourceBusState } from '../audio/masterRack';
+import type { SourceBusApplyMode } from '../audio/automation/sourceBusAutomation';
 
 /**
  * One-way bridge from the Zustand store into the audioEngine singleton,
@@ -142,18 +144,25 @@ function busAudible(s: AppStore, bus: SourceBus): boolean {
   return isTrackAudible(bus.solo, s.soloTracks, bus.selectMuted(s));
 }
 
-/** Preserve ordinary two-argument engine calls; only a song boundary carries time. */
-function pushSourceGain(bus: SourceBus, db: number): void {
-  const gain = faderDbToGain(db);
-  const time = sourceTransitionTime();
-  if (time === undefined) audioEngine.setSourceGain(bus.source, gain);
-  else audioEngine.setSourceGain(bus.source, gain, time);
+/** The complete state of one source bus, derived from one consistent store read. */
+function sourceState(s: AppStore, bus: SourceBus): SourceBusState {
+  return {
+    gain: faderDbToGain(bus.selectLevelDb(s)),
+    muted: !busAudible(s, bus),
+  };
 }
 
-function pushSourceMuted(bus: SourceBus, audible: boolean): void {
-  const time = sourceTransitionTime();
-  if (time === undefined) audioEngine.setSourceMuted(bus.source, !audible);
-  else audioEngine.setSourceMuted(bus.source, !audible, time);
+function sourceStateEqual(a: SourceBusState, b: SourceBusState): boolean {
+  return a.gain === b.gain && a.muted === b.muted;
+}
+
+function pushSourceState(
+  state: SourceBusState,
+  bus: SourceBus,
+  mode: SourceBusApplyMode,
+  time?: number,
+): void {
+  audioEngine.setSourceState(bus.source, state, time, mode);
 }
 
 /**
@@ -220,8 +229,7 @@ function applySliceState(): void {
   audioEngine.setMasterVolume(faderDbToGain(s.masterVolume));
   audioEngine.setMetronomeEnabled(s.metronomeActive);
   for (const bus of SOURCE_BUSES) {
-    audioEngine.setSourceGain(bus.source, faderDbToGain(bus.selectLevelDb(s)));
-    audioEngine.setSourceMuted(bus.source, !busAudible(s, bus));
+    pushSourceState(sourceState(s, bus), bus, 'settle');
   }
   // The Beat instrument: one patch — voices, trim and bus filter — and the
   // per-voice faders beside it. Both halves go through the same calls the
@@ -279,18 +287,19 @@ export function startEngineSync(): Stop {
   subs.push(useAppStore.subscribe((s) => s.masterVolume, (db) => audioEngine.setMasterVolume(faderDbToGain(db)), { fireImmediately: true }));
   subs.push(useAppStore.subscribe((s) => s.metronomeActive, (v) => audioEngine.setMetronomeEnabled(v), { fireImmediately: true }));
 
-  // synth + chords + bass + pad + sequencer buses
-  // The volume field is dB in the store and a linear gain in the engine. The
-  // conversion lives HERE, on both the snapshot and the subscription, which
-  // is why no engine setter signature had to change for DEV-386. faderDbToGain
-  // rather than dbToGain: a bus pulled to the bottom passes exactly nothing.
+  // synth + chords + bass + pad + FX + sequencer buses
+  // Each selector derives its complete gain/mute state from one store snapshot,
+  // so a combined edit cannot schedule a gain against the old mute value (or
+  // vice versa). faderDbToGain rather than dbToGain: a bus pulled to the
+  // bottom passes exactly nothing.
   for (const bus of SOURCE_BUSES) {
-    subs.push(useAppStore.subscribe(bus.selectLevelDb, (db) => pushSourceGain(bus, db), { fireImmediately: true }));
-    // Audibility, not the raw mute flag — solo beats mute. The selector returns
-    // a BOOLEAN, so the default === equality fires this listener only when the
-    // bus actually flips: a solo toggle re-runs five selectors and calls the
-    // engine only for the buses whose state really changed.
-    subs.push(useAppStore.subscribe((s) => busAudible(s, bus), (audible) => pushSourceMuted(bus, audible), { fireImmediately: true }));
+    subs.push(
+      useAppStore.subscribe(
+        (s) => sourceState(s, bus),
+        (state) => pushSourceState(state, bus, 'transition', sourceTransitionTime()),
+        { equalityFn: sourceStateEqual, fireImmediately: true },
+      ),
+    );
   }
 
   // The Beat instrument: the whole patch on one subscription, because
@@ -413,6 +422,10 @@ export function startEngineSync(): Stop {
       (flags, prevFlags) => {
         audioEngine.init();
         if (flags !== 0 && prevFlags === 0) {
+          const s = useAppStore.getState();
+          for (const bus of SOURCE_BUSES) {
+            pushSourceState(sourceState(s, bus), bus, 'settle');
+          }
           audioEngine.resetClock();
         }
       },

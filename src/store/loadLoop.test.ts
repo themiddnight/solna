@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
+import type { SourceBusState } from '../audio/masterRack';
+import type { SourceBusApplyMode } from '../audio/automation/sourceBusAutomation';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { loadLoop, LOAD_LOOP_RELEASE } from './loadLoop';
@@ -175,9 +177,9 @@ describe('loadLoop: a song advance', () => {
     });
 
     const order: string[] = [];
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockImplementation(
-      (source, muted, ...rest: unknown[]) => {
-        if (muted) order.push(`mute:${source}@${String(rest[0])}`);
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockImplementation(
+      (source: string, state: SourceBusState, time?: number) => {
+        if (state.muted) order.push(`mute:${source}@${String(time)}`);
       },
     );
     const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {
@@ -203,7 +205,7 @@ describe('loadLoop: a song advance', () => {
       expect(useAppStore.getState().activeLoopId).toBe(loopB.id);
     } finally {
       stopEngineSync();
-      setSourceMuted.mockRestore();
+      setSourceState.mockRestore();
       resetClock.mockRestore();
     }
   });
@@ -228,10 +230,10 @@ describe('loadLoop: mute and pad handling at a boundary', () => {
       playbackScope: { kind: 'song' },
     });
 
-    const fxMuteWrites: Array<{ muted: boolean; time: unknown }> = [];
-    const setSourceMuted = spyOn(audioEngine, 'setSourceMuted').mockImplementation(
-      (source, muted, ...rest: unknown[]) => {
-        if (source === 'fx') fxMuteWrites.push({ muted, time: rest[0] });
+    const fxMuteWrites: Array<{ muted: boolean; time: unknown; mode: unknown }> = [];
+    const setSourceState = spyOn(audioEngine, 'setSourceState').mockImplementation(
+      (source: string, state: SourceBusState, time?: number, mode?: SourceBusApplyMode) => {
+        if (source === 'fx') fxMuteWrites.push({ muted: state.muted, time, mode });
       },
     );
     try {
@@ -243,15 +245,15 @@ describe('loadLoop: mute and pad handling at a boundary', () => {
       // The old loop's final FX note may already be queued by the lookahead
       // scheduler. Opening at currentTime makes that muted note audible; the
       // bus must remain closed until the exact boundary instead.
-      expect(fxMuteWrites).toEqual([{ muted: false, time: 42.5 }]);
+      expect(fxMuteWrites).toEqual([{ muted: false, time: 42.5, mode: 'transition' }]);
 
       useAppStore.setState({ fxMuted: true });
       // The boundary context is synchronous and scoped to loadLoop's update;
       // a later user mute remains immediate rather than inheriting 42.5.
-      expect(fxMuteWrites.at(-1)).toEqual({ muted: true, time: undefined });
+      expect(fxMuteWrites.at(-1)).toEqual({ muted: true, time: undefined, mode: 'transition' });
     } finally {
       stopEngineSync();
-      setSourceMuted.mockRestore();
+      setSourceState.mockRestore();
     }
   });
 
