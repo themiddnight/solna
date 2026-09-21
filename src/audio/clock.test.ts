@@ -887,3 +887,17 @@ describe("activity marks and the resume-failure path", () => {
     expect(resumeAttempts).toBe(2);
   });
 });
+
+describe('scheduleAfterClockStep with no audio session', () => {
+  // A deferred task is STORE work (songMode's loadLoop advance), not an audio
+  // setter: with no session to dispatch a step it must still run, deferred to a
+  // microtask like any call made outside a clock dispatch, never be dropped.
+  test('the task still runs, deferred, when no session exists', async () => {
+    const engine = makeEngine();
+    let ran = 0;
+    engine.scheduleAfterClockStep(() => { ran += 1; });
+    expect(ran).toBe(0);
+    await Promise.resolve();
+    expect(ran).toBe(1);
+  });
+});

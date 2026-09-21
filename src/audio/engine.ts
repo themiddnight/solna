@@ -212,7 +212,17 @@ export class AudioEngine {
     return this.healthMonitor.recentSamples();
   }
 
-  scheduleAfterClockStep(task: () => void): void { this.session?.clock.scheduleAfterCurrentStep(task); }
+  /**
+   * The task is store-level work (songMode's loadLoop advance), not an audio
+   * setter, so it must never be dropped: with no session there is no clock
+   * dispatch in progress, and it defers to a microtask exactly as the clock
+   * itself does outside a dispatch.
+   */
+  scheduleAfterClockStep(task: () => void): void {
+    const clock = this.session?.clock;
+    if (clock) clock.scheduleAfterCurrentStep(task);
+    else queueMicrotask(task);
+  }
 
   /**
    * Tempo reaches TWO subsystems: the 16th grid, and every sync-rated LFO
