@@ -1,4 +1,5 @@
 import type { ChordQuality } from './musicCore';
+import type { FilterType } from './types/synth';
 
 /**
  * The four tabs, two per layer. The loop layer's split is a rule, not a
@@ -104,7 +105,8 @@ export type PadInterval = 1 | 4 | 5 | 8 | 12;
 /** Render order for the interval toggles, and the validation set for sanitize. */
 export const PAD_INTERVALS: readonly PadInterval[] = [1, 4, 5, 8, 12];
 
-export type FilterType = 'lowpass' | 'highpass' | 'bandpass';
+/** The Beat bus filter's responses: one fixed lane per member (masterRack BEAT_FILTER_TYPES), so no notch. */
+export type BeatFilterType = Exclude<FilterType, 'notch'>;
 
 /** The synth keyboard's input mode: how key presses are mapped to notes. */
 export type KeyboardMode = 'chromatic' | 'scale-locked' | 'chord';
@@ -341,7 +343,7 @@ export interface BeatVoices {
 /** The Beat-wide bus filter. `cutoff` is Hz; it drives both the dry and the send
  *  filter, exactly as the loop's `drumFilter*` fields do today. */
 export interface BeatFilterParams {
-  type: FilterType;
+  type: BeatFilterType;
   cutoff: number;
   resonance: number;
 }

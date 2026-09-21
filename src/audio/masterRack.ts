@@ -1,4 +1,4 @@
-import { MasterEffects, FilterType } from '../types';
+import { MasterEffects, BeatFilterType } from '../types';
 import { MAX_FADER_GAIN } from '../utils/gainUnits';
 import { random } from './rng';
 import { clampEffects, clampEffectValue } from './effectLimits';
@@ -53,7 +53,7 @@ export interface EngineHooks {
  * doubles as the click-free type switch the single-node path never had.
  */
 export interface BeatFilterLane {
-  type: FilterType;
+  type: BeatFilterType;
   filter: BiquadFilterNode;
   gain: GainNode;
 }
@@ -65,7 +65,7 @@ export interface SourceBusState {
 
 /** Every response type a Beat bus filter offers — one lane each. Matches the
  *  three-way switch on the Beat editor's filter panel. */
-const BEAT_FILTER_TYPES: readonly FilterType[] = ['lowpass', 'bandpass', 'highpass'];
+const BEAT_FILTER_TYPES: readonly BeatFilterType[] = ['lowpass', 'bandpass', 'highpass'];
 
 /** Seconds of crossfade when the Beat filter TYPE changes. */
 export const BEAT_FILTER_XFADE_SEC = 0.008;
@@ -258,7 +258,7 @@ export class MasterRack {
   private drumSendGate: GainNode | null = null;
   beatFilterCutoff = 12000;
   beatFilterResonance = 0.7;
-  beatFilterType: FilterType = 'lowpass';
+  beatFilterType: BeatFilterType = 'lowpass';
 
   // Per-source buses: one gain bus per source string ('synth', 'chord', 'bass', ...).
   // Voice gains connect here instead of straight to dry/effects, so a whole layer

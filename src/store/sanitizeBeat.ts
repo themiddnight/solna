@@ -35,7 +35,7 @@ import type {
   BeatVoiceId,
   BeatVoiceMix,
   BeatVoices,
-  FilterType,
+  BeatFilterType,
 } from '@/types';
 import { padStepRow } from '@/utils/patternAdapt';
 import { beatParamsFromPreset, beatPatchOf } from './beatPresets';
@@ -125,7 +125,7 @@ function unit(value: unknown, fallback: number): number {
 
 function sanitizeBeatFilter(value: unknown, fallback: BeatFilterParams): BeatFilterParams {
   const row = asRecord(value);
-  const type: FilterType =
+  const type: BeatFilterType =
     row.type === 'lowpass' || row.type === 'highpass' || row.type === 'bandpass'
       ? row.type
       : fallback.type;

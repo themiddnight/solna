@@ -25,7 +25,7 @@
  * tokens in InstantVibesBar.
  */
 import type {
-  FilterType,
+  BeatFilterType,
   PadInterval,
   PadMode,
   PadVoicing,
@@ -124,7 +124,7 @@ export interface VibeSpec {
    */
   beatFilterCutoff?: number;
   beatFilterResonance?: number;
-  beatFilterType?: FilterType;
+  beatFilterType?: BeatFilterType;
 
   // Chords
   /** Library reference into CHORD_PROGRESSIONS. */

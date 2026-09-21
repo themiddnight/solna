@@ -1,4 +1,4 @@
-import { type BeatVoices, MasterEffects, FilterType } from '../types';
+import { type BeatVoices, MasterEffects, BeatFilterType } from '../types';
 import { STEPS_PER_BAR } from '../utils/musicTheory';
 import { DEFAULT_METER_ID, getMeter as resolveMeter, type Meter } from '../utils/meter';
 import { DEFAULT_VELOCITY } from './constants';
@@ -261,7 +261,7 @@ export class AudioEngine {
     this.session?.drumSynth.setDrumKit(voices, outputTrimDb);
   }
 
-  setBeatFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
+  setBeatFilter(cutoff: number, resonance: number, type: BeatFilterType, time?: number): void {
     this.session?.drumSynth.setBeatFilter(cutoff, resonance, type, time);
   }
 

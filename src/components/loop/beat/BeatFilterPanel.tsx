@@ -1,10 +1,10 @@
 import { Knob } from '@/components/ui/Knob';
 import { Field } from '@/components/ui/Field';
 import { BEAT_FILTER_CONTROLS } from './beatControlSchema';
-import type { BeatFilterParams, FilterType } from '@/types';
+import type { BeatFilterParams, BeatFilterType } from '@/types';
 
-const FILTER_TYPES: readonly FilterType[] = ['lowpass', 'bandpass', 'highpass'];
-const FILTER_CODES: Record<FilterType, string> = {
+const FILTER_TYPES: readonly BeatFilterType[] = ['lowpass', 'bandpass', 'highpass'];
+const FILTER_CODES: Record<BeatFilterType, string> = {
   lowpass: 'LPF',
   bandpass: 'BPF',
   highpass: 'HPF',
@@ -39,7 +39,7 @@ export interface BeatFilterPanelProps {
  * draft/commit/cancel contract instead.
  */
 export function BeatFilterPanel({ filter, onDraft, onCommit, onCancel }: BeatFilterPanelProps) {
-  const setType = (type: FilterType) => {
+  const setType = (type: BeatFilterType) => {
     onDraft({ type });
     onCommit();
   };

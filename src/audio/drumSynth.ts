@@ -1,4 +1,4 @@
-import { type BeatHatParams, type BeatSnareParams, type BeatVoiceId, type BeatVoices, FilterType } from '../types';
+import { type BeatHatParams, type BeatSnareParams, type BeatVoiceId, type BeatVoices, BeatFilterType } from '../types';
 import { DEFAULT_VELOCITY, ENV_FLOOR, clampVelocity } from './constants';
 import { random } from './rng';
 import { BEAT_VOICE_IDS, DEFAULT_BEAT_VOICES } from '@/data/beatPresets';
@@ -313,7 +313,7 @@ export class DrumSynth {
    * pair of them while the rest of the bus kept its name would trade this
    * inconsistency for a worse one.
    */
-  setBeatFilter(cutoff: number, resonance: number, type: FilterType, time?: number): void {
+  setBeatFilter(cutoff: number, resonance: number, type: BeatFilterType, time?: number): void {
     const previousType = this.masterRack.beatFilterType;
     this.masterRack.beatFilterCutoff = cutoff;
     this.masterRack.beatFilterResonance = resonance;
