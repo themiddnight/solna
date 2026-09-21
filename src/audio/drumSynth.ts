@@ -912,9 +912,12 @@ export class DrumSynth {
       // is why neither has a `case` in this switch. See that guard's comment
       // for why.
       case 'openhat': {
-        // No delay tap: drums bypass delay and distortion entirely. The old
-        // unconditional gain.connect(delayNode) here was a stray with no kit
-        // parameter behind it.
+        // No delay tap: drums never reach master delay or distortion. The
+        // sequencer source bus feeds the dry path only (masterRack's
+        // SOURCES_WITHOUT_MASTER_SENDS), and reverb comes only from the
+        // authored per-voice reverbSend. The old unconditional
+        // gain.connect(delayNode) here was a stray with no kit parameter
+        // behind it.
         const h = k.openhat;
         this.chokeHats(now, OPENHAT_CHOKE_RELEASE);
         // The low band rings 1.8x longer than the high one (§2.2: 180 ms vs

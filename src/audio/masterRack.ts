@@ -82,6 +82,16 @@ export const BEAT_FILTER_XFADE_SEC = 0.008;
 const DISTORTION_SEND_SETTLE_MS = 250;
 
 /**
+ * Source buses that never feed the generic delay/reverb/distortion send
+ * gates. The Beat (`sequencer`) bus is dry only: drums reach reverb solely
+ * through the authored per-voice `reverbSend` -> `drumSendGate` path, and
+ * never reach master delay or distortion. Named here, rather than implied by
+ * the order setupMasterChain builds nodes in, so the rule survives a reorder
+ * of that method and applies to a render engine the same way.
+ */
+const SOURCES_WITHOUT_MASTER_SENDS: ReadonlySet<string> = new Set(['sequencer']);
+
+/**
  * A parallel-send gate: connects its gate node to its effect node on
  * `activate()`, and disconnects only after `releaseAfter(tailMs)`'s timer
  * fires with no intervening `activate()` — so an in-flight tail is never cut
@@ -249,8 +259,8 @@ export class MasterRack {
   drumSendFilterLanes: BeatFilterLane[] = [];
   /**
    * The Beat source fader/mute for authored drum reverb sends. Drum sends do
-   * not use getSourceBus('sequencer'): that bus fans out to the dry path and
-   * the generic master effects, while these sends must reach only reverb.
+   * not use getSourceBus('sequencer'): that bus feeds the dry path only (it is
+   * in SOURCES_WITHOUT_MASTER_SENDS), while these sends must reach reverb.
    * Mirroring the sequencer bus here keeps the authored send on that same
    * source control without putting a gate after the convolver, where muting
    * Beat would incorrectly erase a tail that was already ringing.
@@ -428,7 +438,8 @@ export class MasterRack {
   } {
     const ctx = this.ctx;
     if (!ctx) throw new Error('createSendGates called before init()');
-    // Send gates: every source bus connects here (getSourceBus), never
+    // Send gates: every source bus except SOURCES_WITHOUT_MASTER_SENDS
+    // connects here (getSourceBus), never
     // straight to the effect node. Cleared implicitly with the rest of the
     // graph — setupMasterChain only runs once per context in production (see
     // the comment at the top of that method) but a gate is cheap to recreate
@@ -548,7 +559,10 @@ export class MasterRack {
     this.dryGain = this.ctx.createGain();
     this.dryGain.gain.value = 1.0;
 
-    // Drum bus filter — routed through the sequencer source bus for volume and mute control
+    // Drum bus filter — routed through the sequencer source bus for volume and
+    // mute control. That bus feeds the dry path only: getSourceBus excludes it
+    // from the generic sends by name, so building it before or after the send
+    // gates below makes no difference.
     const busBank = this.buildBeatFilterBank(this.getSourceTap('sequencer'));
     this.drumBusFilter = busBank.input;
     this.drumBusFilterLanes = busBank.lanes;
@@ -910,8 +924,11 @@ export class MasterRack {
     return buffer;
   }
 
-  // Lazily create (and cache) the gain bus for a source, wired like the old
-  // per-voice routing: dry + conditionally delay/reverb/distortion.
+  // Lazily create (and cache) the gain bus for a source: dry always, plus the
+  // generic delay/reverb/distortion send gates for every source NOT in
+  // SOURCES_WITHOUT_MASTER_SENDS. The exclusion is by name, never by which
+  // gates happen to exist yet, so it holds whatever order the graph is built
+  // in — live and in a render engine alike.
   getSourceBus(source: string): GainNode {
     if (!this.ctx || !this.dryGain) throw new Error('AudioContext not initialized');
     let bus = this.sourceBuses.get(source);
@@ -920,9 +937,11 @@ export class MasterRack {
       const baseGain = this.sourceGains.get(source) ?? 1;
       bus.gain.value = this.sourceMuted.get(source) ? 0 : baseGain;
       bus.connect(this.dryGain);
-      if (this.delaySendGate) bus.connect(this.delaySendGate);
-      if (this.reverbSendGate) bus.connect(this.reverbSendGate);
-      if (this.distortionSendGate) bus.connect(this.distortionSendGate);
+      if (!SOURCES_WITHOUT_MASTER_SENDS.has(source)) {
+        if (this.delaySendGate) bus.connect(this.delaySendGate);
+        if (this.reverbSendGate) bus.connect(this.reverbSendGate);
+        if (this.distortionSendGate) bus.connect(this.distortionSendGate);
+      }
       this.sourceBuses.set(source, bus);
     }
     return bus;

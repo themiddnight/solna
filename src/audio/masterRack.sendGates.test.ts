@@ -3,6 +3,7 @@ import { INITIAL_EFFECTS } from '../store/initialState';
 import type { MasterEffects } from '../types';
 import { bindFakeCtx, makeEngine } from './testFakes';
 import { masterChainCtx } from './engineTestHelpers';
+import { createRenderEngine } from './engine';
 
 /** A complete effects patch without setReverbDecay's separately-owned key. */
 function fxWith(overrides: Partial<MasterEffects>): Omit<MasterEffects, 'reverbDecay'> {
@@ -169,6 +170,62 @@ describe('effect sends physically disconnect when idle', () => {
     expect(bus._connectTargets).not.toContain(rack.reverbNode);
     expect(bus._connectTargets).not.toContain(rack.delayNode);
     expect(bus._connectTargets).not.toContain(rack.distortionNode);
+  });
+});
+
+/**
+ * The Beat (`sequencer`) source bus is the one bus that never feeds the
+ * generic master sends: drums reach reverb only through the authored
+ * per-voice `drumSendGate`, and never reach delay or distortion. This used to
+ * hold only because setupMasterChain happened to create the sequencer bus
+ * BEFORE the send gates, so getSourceBus's `if (this.delaySendGate)` guards
+ * skipped. These tests rebuild the bus AFTER the gates exist, which is the
+ * order that would have leaked, in the live engine and in a render engine.
+ */
+describe('the Beat bus never feeds the generic master sends', () => {
+  function assertBeatBusExcluded(rack: any) {
+    // Drop the bus setupMasterChain built, so the next lookup creates it with
+    // every send gate already present.
+    rack.sourceBuses.delete('sequencer');
+    rack.sourceTaps.delete('sequencer');
+    expect(rack.delaySendGate).not.toBeNull();
+    expect(rack.reverbSendGate).not.toBeNull();
+    expect(rack.distortionSendGate).not.toBeNull();
+
+    const tap = rack.getSourceTap('sequencer');
+    const bus = rack.getSourceBus('sequencer');
+    expect(tap._connectTargets).toContain(bus);
+    expect(bus._connectTargets).toContain(rack.dryGain);
+    expect(bus._connectTargets).not.toContain(rack.delaySendGate);
+    expect(bus._connectTargets).not.toContain(rack.reverbSendGate);
+    expect(bus._connectTargets).not.toContain(rack.distortionSendGate);
+
+    // Every other source still fans out to all three gates.
+    const synth = rack.getSourceBus('synth');
+    expect(synth._connectTargets).toContain(rack.delaySendGate);
+    expect(synth._connectTargets).toContain(rack.reverbSendGate);
+    expect(synth._connectTargets).toContain(rack.distortionSendGate);
+  }
+
+  test('as built by setupMasterChain, the sequencer bus reaches only the dry path', () => {
+    const engine = makeEngine();
+    bindFakeCtx(engine, masterChainCtx());
+    // bindContext already ran setupMasterChain once, which is the production
+    // shape; a second explicit call would build over live buses.
+    const rack = (engine as any).masterRack;
+    const bus = rack.getSourceBus('sequencer');
+    expect(bus._connectTargets).toEqual([rack.dryGain]);
+  });
+
+  test('live engine: a sequencer bus created after the send gates still skips them', () => {
+    const engine = makeEngine();
+    bindFakeCtx(engine, masterChainCtx());
+    assertBeatBusExcluded((engine as any).masterRack);
+  });
+
+  test('render engine: a sequencer bus created after the send gates still skips them', () => {
+    const engine = createRenderEngine(masterChainCtx() as unknown as BaseAudioContext);
+    assertBeatBusExcluded((engine as any).masterRack);
   });
 });
 

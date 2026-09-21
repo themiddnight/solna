@@ -215,7 +215,7 @@ describe("drum voice details", () => {
     expect(strikes.map((e) => Number((e.t - t0).toFixed(3)))).toEqual([0, 0.01, 0.02, 0.03]);
   });
 
-  test('the open hat does not tap the delay', () => {
+  test('the open hat has no voice-level delay tap (the bus path is masterRack.sendGates.test.ts)', () => {
     const { engine, ctx } = freshEngine();
     const delayNode = fakeNode();
     (engine as any).masterRack.delayNode = delayNode;
@@ -223,7 +223,8 @@ describe("drum voice details", () => {
 
     engine.triggerDrum('openhat', 1.0);
 
-    // Drums bypass delay and distortion entirely (dsp-audio SKILL.md).
+    // Voice level only. The Beat bus is kept off the master delay/distortion
+    // sends by name in getSourceBus; masterRack.sendGates.test.ts pins that.
     for (const g of ctx._gains.slice(before)) {
       expect(g.connectedTo).not.toContain(delayNode);
     }

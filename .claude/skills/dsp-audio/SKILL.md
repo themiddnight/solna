@@ -15,8 +15,8 @@ Everything lives in one singleton: `src/audio/engine.ts` → `export const audio
 1. **Never call an engine setter from a component.** Add the value to a store slice and wire one
    subscription in `src/store/engineSync.ts`. eslint blocks `audio/engine` imports from
    `src/components/**`; the exempt list is the one in `eslint.config.js` (the read-only analyser
-   consumers — `AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/AmbientBackdrop.tsx`,
-   `ui/GainReductionMeter.tsx`, `ui/SourceMeter.tsx` — plus test files). That file is the list
+   consumers — `AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx`,
+   `ui/SourceMeter.tsx` — plus test files). That file is the list
    that binds; this one has drifted behind it before.
 2. **`src/audio/` must not import `src/store/` or `src/components/`.** The engine takes plain
    data (`ActiveSynth`, `MasterEffects`, `BeatParams`) and knows nothing about Zustand. The one
@@ -67,7 +67,7 @@ synth voice (one per bus): osc1/osc2 + sub (+ noise), each through its own level
                           |-> per-source LEVEL analyser (lazy, fftSize 2048)
                           |     [TAP: getSourceLevelAnalyser -> the mixer's per-layer SourceMeter]
                           |      |       |     \
-                        dry   delay   reverb  distortion
+                        dry   delay   reverb  distortion   (sends: every bus EXCEPT sequencer)
                                  |       |         |
 drums: osc/noise -> drumEnv -> drumBusFilter(bank) -> sequencer TAP -> sequencer bus -> dryGain
                             \_ (snare/clap/crash only) send gain (kit's
@@ -110,7 +110,7 @@ Key consequences:
   pre-dynamics, each with no onward output — so a reading reflects the mix the user made, not
   the post-squash output. `analyser` (fftSize 256) is the spectrum node `AudioVisualizer` draws;
   `levelAnalyser` (fftSize 2048) is what `getMasterLevelAnalyser()` returns and `useMeterLevel`
-  reads for `VuMeter` and `AmbientBackdrop`. They are NOT interchangeable, and because the tap
+  reads for `VuMeter`. They are NOT interchangeable, and because the tap
   ends both dynamics stages' reach, the `over` zone (≥ −1 dBFS) is reachable.
 - **Each Beat bus filter is a three-lane BANK, not one node.** `BiquadFilterNode.type` is a plain
   field, not an `AudioParam`, so it cannot be scheduled — and the offline mixdown schedules every
@@ -121,8 +121,13 @@ Key consequences:
   is already tracking) and crossfades the lane gains for a type change. Both banks are built by
   `buildBeatFilterBank`, which is what keeps the dry and send paths in lockstep. A repeat of the
   SAME type books no ramp, so a knob drag does not re-arm six gains per frame.
-- Drums bypass delay and distortion entirely — the dry path hits `drumBusFilter → dryGain` only.
-  The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
+- Drums never reach master delay or distortion, and reach reverb only through their authored
+  send. The dry bank `drumBusFilter` feeds `getSourceTap('sequencer')`, and the `sequencer` bus
+  feeds `dryGain` only: `getSourceBus` skips the generic `delaySendGate`/`reverbSendGate`/
+  `distortionSendGate` for every source named in `SOURCES_WITHOUT_MASTER_SENDS` (`masterRack.ts`).
+  The exclusion is BY NAME, so it holds whatever order the graph is built in, live and in a
+  render engine; `masterRack.sendGates.test.ts` rebuilds the bus after the gates to prove it.
+  There is no per-voice delay tap either. The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
   not a boolean) that feeds a second shared `drumSendFilter` — a mirror of `drumBusFilter` kept in
   lockstep by `setBeatFilter` — so the wet path is filtered too, then on to `reverbNode`.
 - `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at
@@ -174,7 +179,8 @@ Key consequences:
   is the poly groups per source, `mono` is the one shared group per mono source. A poly note-on
   always allocates a NEW voice (no note-name dedup); the per-source budget (`maxVoicesPerSource`)
   bounds the count and steals the oldest voice when it is exceeded.
-- `'bass'` is forced monophonic — a new bass note releases all other bass voices first.
+- Mono is per PATCH, not per bus: `common.voiceMode === 'mono'` sends a note-on down the mono
+  path (one shared group per source). Any bus, `'bass'` included, is poly when its patch says so.
 - Two players sounding the "same" note on one bus never collide: each holds its own `VoiceId`, so
   the live keyboard, the arp and the melody sequencer can never cut each other's notes short. A
   mono bus is the one deliberately SHARED voice — several players can hold notes on it and
@@ -237,9 +243,9 @@ Follow how distortion is wired — it is the smallest complete example.
    - add private node fields (`fooNode`, `fooGain`);
    - create them in `setupMasterChain()`, set `fooGain.gain.value` to a default, and
      `fooNode.connect(fooGain)` then `fooGain.connect(this.eqLowNode)`;
-   - add `if (this.fooNode) bus.connect(this.fooNode);` inside `getSourceBus()` so every source
-     feeds the new send (this is the step that is easy to forget — without it the effect is
-     wired but receives nothing);
+   - add a send gate and connect it inside `getSourceBus()`'s `SOURCES_WITHOUT_MASTER_SENDS`
+     guard, so every source except the Beat bus feeds the new send (this is the step that is
+     easy to forget — without it the effect is wired but receives nothing);
    - in `updateEffects()`, compute `const fooWet = fx.fooBypass ? 0 : fx.fooWet;` and apply with
      `setTargetAtTime(fooWet, this.ctx.currentTime, 0.05)`.
 3. `src/store/initialState.ts`: add the default to `INITIAL_EFFECTS`.
@@ -341,7 +347,7 @@ for the rest of the session.
 |---|---|
 | Nothing audible at all | No user click yet — `ctx` is null and every setter no-opped |
 | Knob does nothing until next note | Param not handled in `updateVoice` (subtractiveVoice.ts) — or deliberately deferred there, as `noiseEnabled`/`noiseColor` are |
-| New effect silent | Missing `bus.connect(this.fooNode)` in `getSourceBus()` |
+| New effect silent | Its send gate is not connected in `getSourceBus()` |
 | Note drones forever | A bridge dropped the `VoiceId` `triggerSynthNoteOn` returned, so no `triggerSynthNoteOff` can address the voice. There is NO wall-clock lifetime backstop — see `voiceManager.ts` rule 5 — so trace the bridge, not the manager |
 | Scheduled pattern notes vanish | Something called `updateSynthPatch`/`stopSource` on future voices and cancelled their ramps |
 | Clicks on mute | Bypassed the `setTargetAtTime(…, 0.01)` ramp in `setSourceMuted` |
