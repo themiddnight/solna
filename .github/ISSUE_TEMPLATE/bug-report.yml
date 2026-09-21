@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a problem with Solna
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **GitHub issues are public.** Anyone can read what you write here and attach. Review every file before uploading it.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A short description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      description: For example, Safari 18 on iPhone 15, or Chrome on macOS.
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Solna build
+      description: Filled in automatically when you use Project > Report a Bug.
+    validations:
+      required: true
+  - type: input
+    id: fingerprint
+    attributes:
+      label: Incident fingerprint
+      description: Optional. Helps maintainers find duplicate reports.
+  - type: input
+    id: recovery
+    attributes:
+      label: Recovery result
+      description: Optional. What the recovery prompt reported, if one appeared.
+  - type: markdown
+    attributes:
+      value: |
+        **Diagnostic attachment (optional).** Drag the exported incident JSON into any field above. It contains no project names, notes, chords, patterns, presets or tokens, but this issue is public, so open the file and review it before you upload.

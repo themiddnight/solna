@@ -500,6 +500,31 @@ export default tseslint.config(
     },
   },
   {
+    // Incident reporting: src/incidents/ is a privacy boundary. It takes
+    // already-sanitized structured input and must never reach into the store
+    // (an arbitrary state snapshot is exactly what a report must not contain),
+    // a component, or the live engine. Type-only imports from
+    // `@/audio/runtime/*` are allowed; the type-only distinction is kept by
+    // banning the engine module itself. Flat config REPLACES no-restricted-imports
+    // per file, so the tonal and taper bans are restated here.
+    files: ['src/incidents/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
+            { group: ['**/store/**', '@/store', '@/store/**'], message: 'incidents/ must not import store/: a report is built from sanitized arguments, never a state snapshot' },
+            { group: ['**/components/**'], message: 'incidents/ must not import components/' },
+            { group: ['**/audio/engine', '**/audio/engine.ts'], message: 'incidents/ must not import the audio engine' },
+            TAPER_CONVERSION_BAN,
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Music Core (DEV-394): sits below store/audio/components, parallel to
     // src/utils/ and src/data/ in the dependency graph — see
     // docs/superpowers/plans/2026-09-16-dev-395-music-domain-architecture-contract.md.
@@ -556,8 +581,8 @@ export default tseslint.config(
   {
     // Layering rule 3: components are dumb views — no direct audio/engine.
     // Exceptions: the read-only analyser consumers (AudioVisualizer, the
-    // transport VU meter in ui/VuMeter, the mixer's per-layer meters in
-    // ui/SourceMeter, AmbientBackdrop) and test files.
+    // transport VU meter in ui/VuMeter, and the mixer's per-layer meters in
+    // ui/SourceMeter) and test files.
     // Routing their per-frame reads through the store would mean a store
     // write every animation frame and a re-render of every subscriber.
     //
@@ -620,6 +645,7 @@ export default tseslint.config(
       'src/components/**/*.{ts,tsx}',
       'src/data/**/*.{ts,tsx}',
       'src/musicCore/**/*.{ts,tsx}',
+      'src/incidents/**/*.{ts,tsx}',
     ],
     rules: {
       'no-restricted-imports': ['error', { paths: [TONAL_IMPORT_BAN], patterns: [TONAL_SCOPED_PACKAGE_BAN, TAPER_CONVERSION_BAN] }],
@@ -719,12 +745,11 @@ export default tseslint.config(
   {
     files: [
       'src/components/AudioVisualizer.tsx',
-      'src/components/ui/AmbientBackdrop.tsx',
       'src/components/ui/VuMeter.tsx',
       // Reads audioEngine's DynamicsCompressorNode.reduction once a frame
       // through the shared meter scheduler. Routing that through the store
       // would be a store write per frame and a re-render of every subscriber —
-      // the same reason the three above are exempt.
+      // the same reason the two above are exempt.
       'src/components/ui/GainReductionMeter.tsx',
       // The Sound mixer's per-layer meters. Reads one post-fader analyser per
       // mix bus on the shared meter scheduler, for the same reason as the

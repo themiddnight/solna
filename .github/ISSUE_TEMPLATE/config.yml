@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reporting bugs in Solna
+    url: https://github.com/themiddnight/solna/blob/main/docs/reporting-bugs.md
+    about: What a report contains, what it never contains, and how to file one.
