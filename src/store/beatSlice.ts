@@ -4,7 +4,15 @@ import { getMeter } from '@/utils/meter';
 import { adaptStepRow, writeStepWindow } from '@/utils/patternAdapt';
 import { beatPresetById, defaultBeatState } from './beatPresets';
 import type { AppStore, BeatSlice } from './types';
-import type { BeatParams, BeatPattern, BeatPreset, BeatVoiceId, BeatVoiceMix, BeatVoices } from '@/types';
+import type {
+  BeatFilterParams,
+  BeatParams,
+  BeatPattern,
+  BeatPreset,
+  BeatVoiceId,
+  BeatVoiceMix,
+  BeatVoices,
+} from '@/types';
 
 type Set = StoreApi<AppStore>['setState'];
 
@@ -49,6 +57,45 @@ function paramsFromPreset(state: AppStore, id: string): BeatParams {
   return { basePresetId: preset.id, ...structuredClone(preset.patch) };
 }
 
+/** `setBeatPreset`'s write, pure, so a vibe can fold it into one `set()`. */
+export function beatPresetPatch(state: AppStore, presetId: string): Pick<AppStore, 'beatParams'> {
+  return { beatParams: paramsFromPreset(state, presetId) };
+}
+
+/** `updateBeatFilter`'s write: the filter only, over the patch installed now. */
+export function beatFilterPatch(
+  state: Pick<AppStore, 'beatParams'>,
+  patch: Partial<BeatFilterParams>,
+): Pick<AppStore, 'beatParams'> {
+  return { beatParams: { ...state.beatParams, filter: { ...state.beatParams.filter, ...patch } } };
+}
+
+/**
+ * `replaceBeatPattern`'s write. REPLACES, does not merge — a voice `rows` does
+ * not name is cleared, so picking a grid gives you that grid and never that
+ * grid plus leftovers. The clear goes through `writeStepWindow` like every
+ * other write, so only the ACTIVE window (read from `state.meterId`) changes
+ * and the wider-meter padding survives.
+ */
+export function replaceBeatPatternPatch(
+  state: Pick<AppStore, 'meterId' | 'beatPattern'>,
+  rows: Partial<Record<BeatVoiceId, readonly boolean[]>>,
+): Pick<AppStore, 'beatPattern'> {
+  const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+  const silent = new Array<boolean>(stepsPerBar).fill(false);
+  const next = {} as BeatPattern['rows'];
+  for (const voice of BEAT_VOICE_IDS) {
+    const row = rows[voice];
+    // A fresh array per voice, always: `silent` is read, never stored.
+    next[voice] = writeStepWindow(
+      state.beatPattern.rows[voice],
+      stepsPerBar,
+      row ? adaptStepRow(row, stepsPerBar) : silent,
+    );
+  }
+  return { beatPattern: { rows: next } };
+}
+
 export function createBeatSlice(set: Set): BeatSlice {
   /** One voice's params replaced; every other voice object keeps its identity. */
   const withVoice = (
@@ -77,8 +124,7 @@ export function createBeatSlice(set: Set): BeatSlice {
     // are "impossible by construction" (every caller picks from a rendered
     // list, and a vibe's id is pinned by `vibes.test.ts`) and "loud" — a silent
     // no-op would put the same wrong-sound class of bug back one level up.
-    setBeatPreset: (presetId) =>
-      set((state) => ({ beatParams: paramsFromPreset(state, presetId) })),
+    setBeatPreset: (presetId) => set((state) => beatPresetPatch(state, presetId)),
 
     // CLONED on the way in. The caller's object is often a library entry — a
     // factory preset today, a saved user preset from Task 5 — and installing
@@ -90,10 +136,7 @@ export function createBeatSlice(set: Set): BeatSlice {
     // The FILTER ONLY, laid over whatever patch is installed at the moment it
     // runs — see the docblock on `BeatSlice.updateBeatFilter` for why a vibe
     // cannot build this object itself from a state snapshot.
-    updateBeatFilter: (patch) =>
-      set((state) => ({
-        beatParams: { ...state.beatParams, filter: { ...state.beatParams.filter, ...patch } },
-      })),
+    updateBeatFilter: (patch) => set((state) => beatFilterPatch(state, patch)),
 
     updateBeatVoice: (voice, patch) =>
       set((state) => ({
@@ -133,26 +176,8 @@ export function createBeatSlice(set: Set): BeatSlice {
         return { beatParams: paramsFromPreset(state, basePresetId) };
       }),
 
-    // REPLACES, does not merge — a voice `rows` does not name is cleared, so
-    // picking a grid gives you that grid and never that grid plus leftovers.
-    // The clear goes through `writeStepWindow` like every other write, so only
-    // the ACTIVE window changes and the wider-meter padding survives.
-    replaceBeatPattern: (rows) =>
-      set((state) => {
-        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-        const silent = new Array<boolean>(stepsPerBar).fill(false);
-        const next = {} as BeatPattern['rows'];
-        for (const voice of BEAT_VOICE_IDS) {
-          const row = rows[voice];
-          // A fresh array per voice, always: `silent` is read, never stored.
-          next[voice] = writeStepWindow(
-            state.beatPattern.rows[voice],
-            stepsPerBar,
-            row ? adaptStepRow(row, stepsPerBar) : silent,
-          );
-        }
-        return { beatPattern: { rows: next } };
-      }),
+    // See `replaceBeatPatternPatch`: replaces, never merges.
+    replaceBeatPattern: (rows) => set((state) => replaceBeatPatternPatch(state, rows)),
 
     toggleBeatStep: (voice, step) =>
       set((state) => {

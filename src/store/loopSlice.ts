@@ -237,6 +237,20 @@ function reinsertLoop(set: Set, deleted: DeletedLoop): void {
   });
 }
 
+/**
+ * `setLoopTempName`'s write, pure. A blank/whitespace name returns `{}`:
+ * tempName's contract is "the app's label, never empty" (see the setter).
+ */
+export function loopTempNamePatch(
+  state: Pick<AppStore, 'loops'>,
+  id: string,
+  tempName: string,
+): Partial<Pick<AppStore, 'loops'>> {
+  const trimmed = tempName.trim();
+  if (!trimmed) return {};
+  return { loops: state.loops.map((r) => (r.id === id ? { ...r, tempName: trimmed } : r)) };
+}
+
 export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopCopy'> {
   return {
     loops: [createDefaultLoop()],
@@ -288,11 +302,8 @@ export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopC
       // must enforce it here too. A blank/whitespace call is a no-op rather
       // than writing '' and letting the label go blank at every render site
       // that consolidated onto loopLabel specifically to avoid that.
-      const trimmed = tempName.trim();
-      if (!trimmed) return;
-      set((state) => ({
-        loops: state.loops.map((r) => (r.id === id ? { ...r, tempName: trimmed } : r)),
-      }));
+      if (!tempName.trim()) return;
+      set((state) => loopTempNamePatch(state, id, tempName));
     },
 
     setLoopRepeatCount: (id, repeatCount) =>

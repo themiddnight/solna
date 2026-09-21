@@ -23,6 +23,14 @@ import { useAppStore } from './store';
 import { commitRestartAfterStop } from './stopAndRestart';
 import { captureActivePlayers } from './transportSlice';
 import { defaultTrackSynth } from './initialState';
+import { beatFilterPatch, beatPresetPatch, replaceBeatPatternPatch } from './beatSlice';
+import { chordsPatch } from './chordsSlice';
+import { loopTempNamePatch } from './loopSlice';
+import { loopMirrorPartial } from './loopSync';
+import { keyChangePatch } from './musicContextSlice';
+import { normalizePadIntervals } from './sanitize';
+import type { AppStore } from './types';
+import { clampBpm } from '../utils/musicTheory';
 
 /** A VibeSpec with its three library references turned into values. */
 export interface ResolvedVibe extends VibeSpec {
@@ -93,6 +101,191 @@ export function resolveVibeSynthParams(
 /** Same instant-but-clickless release the hard-stop button uses. */
 const VIBE_SWAP_RELEASE = 0.02;
 
+/** Every voice a vibe installs, resolved before any state is touched. */
+interface VibeVoices {
+  chord: ActiveSynth;
+  bass: ActiveSynth;
+  synth: ActiveSynth;
+  fx: ActiveSynth;
+  /** The pad's own settings and its resolved voice, carried together; null = no pad. */
+  pad: (NonNullable<ResolvedVibe['pad']> & { params: ActiveSynth }) | null;
+}
+
+/**
+ * A draft of the store threaded through the vibe's builders: `put` merges a
+ * patch into both the accumulated output and the draft, so every builder sees
+ * the effects of the ones before it exactly as the sequential setters did.
+ */
+interface VibeDraft {
+  readonly state: AppStore;
+  put(patch: Partial<AppStore>): void;
+}
+
+function createVibeDraft(state: AppStore): { draft: VibeDraft; out: Partial<AppStore> } {
+  const out: Partial<AppStore> = {};
+  let current = state;
+  const draft: VibeDraft = {
+    get state() {
+      return current;
+    },
+    put(patch) {
+      Object.assign(out, patch);
+      current = { ...current, ...patch };
+    },
+  };
+  return { draft, out };
+}
+
+/** 1. Context & BPM. */
+function putVibeContext(d: VibeDraft, vibe: ResolvedVibe): void {
+  d.put({ bpm: clampBpm(vibe.bpm) });
+  // MUST precede replaceBeatPatternPatch below: that builder adapts the
+  // incoming rows to whatever meter the draft holds when it runs, so setting
+  // the meter afterwards would leave the grid adapted to the OUTGOING vibe's
+  // bar length.
+  d.put({ meterId: vibe.meter });
+  // Every melody track follows the key, root first then scale — the same
+  // result as the two setters it replaces, in one patch.
+  d.put(keyChangePatch(d.state, { scaleRoot: vibe.scaleRoot, scaleType: vibe.scaleType }));
+  d.put({ selectedVibeId: vibe.id });
+  // A SNAPSHOT of the vibe's display name, on the loop being rewritten — not
+  // the id, and not a pointer to the entry. Applying a vibe is a bulk setter,
+  // not a declaration that the loop IS that genre: the user is free to keep
+  // the chords, swap the kit and end up somewhere else, and a stored id would
+  // go on claiming an identity the sound has left. Unconditional, so a loop
+  // with a user `name` still tracks the last vibe applied behind it.
+  d.put(loopTempNamePatch(d.state, d.state.activeLoopId, vibe.name));
+}
+
+/** 2. Beat (Sound + Pattern + Drum Filter). */
+function putVibeBeat(d: VibeDraft, vibe: ResolvedVibe): void {
+  // TWO INDEPENDENT WRITES, in this order. A vibe chooses a sound AND a
+  // rhythm, and they are separate state: `beatPresetPatch` installs the named
+  // preset's complete patch as `beatParams` and records it as the base, and
+  // `replaceBeatPatternPatch` writes the grid's rows. Neither implies the
+  // other — the grid's own `beatPresetId` is provenance nothing applies, so
+  // picking a grid in the sequencer still changes no sound, and a vibe naming
+  // a sound still cannot smuggle a rhythm in behind it.
+  //
+  // The pattern write REPLACES: a voice the grid does not name is cleared,
+  // so a vibe gives you that grid and never that grid plus the last one's
+  // leftovers. The clear goes through `writeStepWindow`, so only the active
+  // meter's window moves and wider-meter programming past it survives.
+  d.put(beatPresetPatch(d.state, vibe.beatPresetId));
+  d.put(replaceBeatPatternPatch(d.state, vibe.drumPattern));
+
+  // The filter override, AFTER the preset and never before it: the preset
+  // installs a complete patch including its own filter, so an override
+  // written first would be the thing the preset overwrote. Only the fields
+  // the vibe actually states are written — a vibe that names none leaves the
+  // preset's filter exactly as the preset voiced it.
+  const beatFilter = {
+    ...(vibe.beatFilterCutoff !== undefined && { cutoff: vibe.beatFilterCutoff }),
+    ...(vibe.beatFilterResonance !== undefined && { resonance: vibe.beatFilterResonance }),
+    ...(vibe.beatFilterType !== undefined && { type: vibe.beatFilterType }),
+  };
+  if (Object.keys(beatFilter).length > 0) d.put(beatFilterPatch(d.state, beatFilter));
+}
+
+/** 3–4. Chords and Bass: pattern, feel, octave, sound and Arp. */
+function putVibeAccompaniment(d: VibeDraft, vibe: ResolvedVibe, voices: VibeVoices): void {
+  d.put(chordsPatch(d.state, vibe.chords));
+  d.put({
+    chordRhythmId: vibe.chordRhythmId,
+    chordRhythmMode: 'preset',
+    chordFeel: vibe.chordFeel,
+    chordOctave: vibe.chordOctave,
+    chordSynthParams: voices.chord,
+    chordArpSettings: structuredClone(vibe.arp.chord),
+  });
+  d.put({
+    bassPatternId: vibe.bassPatternId,
+    bassPatternMode: 'preset',
+    bassFeel: vibe.bassFeel,
+    bassOctave: vibe.bassOctave,
+    bassSynthParams: voices.bass,
+    bassArpSettings: structuredClone(vibe.arp.bass),
+  });
+}
+
+/** The pad layer. */
+function putVibePad(d: VibeDraft, vibe: ResolvedVibe, pad: VibeVoices['pad']): void {
+  // A vibe without a pad mutes the layer and leaves the rest of its settings
+  // alone. Muting is reversible and resetting is not: Boom Bap -> Synthwave ->
+  // Boom Bap must not erase pad settings the user tuned by hand.
+  if (pad) {
+    d.put({
+      padSynthParams: pad.params,
+      padArpSettings: structuredClone(vibe.arp.pad),
+      padMode: pad.mode,
+      padOctave: pad.octave,
+      padVoicing: pad.voicing,
+      padDroneDegree: pad.droneDegree,
+      // Through normalizePadIntervals, exactly as setPadDroneIntervals writes.
+      padDroneIntervals: normalizePadIntervals(pad.droneIntervals),
+      // `VibeSpec.pad.volume` is an internal voicing constant (DEV-383's
+      // divergence 4) and stays LINEAR like the rest of that family —
+      // `padVolume` became a dB fader in DEV-386, so the conversion happens
+      // here at the store boundary rather than in `src/data/vibes.ts`, which
+      // may not call a resolver.
+      padVolume: gainToDb(toLinearGain(pad.volume)),
+    });
+  }
+  // The mute the vibe wants, stated directly rather than as a toggle.
+  d.put({ padMuted: !pad });
+}
+
+/** 5–6. Main Synth + FX sound presets, then Master Effects. */
+function putVibeVoicesAndEffects(d: VibeDraft, vibe: ResolvedVibe, voices: VibeVoices): void {
+  // Arp is written beside each patch rather than with it: they are two
+  // independent axes of a vibe (design doc, "A Vibe may set all three
+  // independently"), which keeps a preset load from ever re-arming the
+  // arpeggiator by accident. Cloned, so two loops given the same vibe cannot
+  // share one Arp object.
+  //
+  // A vibe supplies a VOICE, never NOTES: `fxMelodySteps` is deliberately not
+  // written here, exactly as `leadMelodySteps` is not (only the key change
+  // above moves them). Applying a vibe must never destroy something the user
+  // wrote.
+  d.put({
+    synthParams: voices.synth,
+    synthArpSettings: structuredClone(vibe.arp.synth),
+    fxSynthParams: voices.fx,
+    fxArpSettings: structuredClone(vibe.arp.fx),
+  });
+  d.put({ effects: { ...d.state.effects, ...vibe.effects } });
+}
+
+/**
+ * Everything a vibe writes, as ONE patch over `state`. Pure: builders run in
+ * the order the old sequential setters did, each over a draft that already
+ * holds the ones before it, so the final state is the same while subscribers
+ * (engineSync included) see a single write instead of about thirty-five.
+ * Exported for tests.
+ */
+export function vibeContentPatch(
+  state: AppStore,
+  vibe: ResolvedVibe,
+  voices: VibeVoices,
+): Partial<AppStore> {
+  const { draft, out } = createVibeDraft(state);
+  putVibeContext(draft, vibe);
+  putVibeBeat(draft, vibe);
+  putVibeAccompaniment(draft, vibe, voices);
+  putVibePad(draft, vibe, voices.pad);
+  putVibeVoicesAndEffects(draft, vibe, voices);
+  return out;
+}
+
+/**
+ * A raw `setState` bypasses the slices' mirroring `set`, so the loops[]
+ * mirror is folded in here exactly as `createLoopMirroringSet` does it —
+ * building on `patch.loops` when the patch carries one (the temp-name write).
+ */
+function withMirror(state: AppStore, patch: Partial<AppStore>): Partial<AppStore> {
+  return { ...patch, ...(loopMirrorPartial(state, patch) ?? {}) };
+}
+
 export function applyVibeToStore(vibe: ResolvedVibe) {
   const store = useAppStore.getState();
 
@@ -101,14 +294,13 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   // still the rule: `resolveVibe` above DOES throw on an unknown progression,
   // grid or effect chain, and a swap that writes half a vibe is the failure
   // all of that ordering exists to prevent.
-  const finalChordSynthParams = resolveVibeSynthParams(vibe.chordPresetId, 'chord');
-  const finalBassSynthParams = resolveVibeSynthParams(vibe.bassPresetId, 'bass');
-  const finalSynthParams = resolveVibeSynthParams(vibe.synthPresetId, 'synth');
-  const finalFxSynthParams = resolveVibeSynthParams(vibe.fxPresetId, 'fx');
-  // The pad's own settings and its resolved voice, carried together so the
-  // write block below reads one object instead of a vibe field and a parallel
-  // nullable params variable that must be null-checked in lockstep with it.
-  const pad = vibe.pad ? { ...vibe.pad, params: resolveVibeSynthParams(vibe.pad.presetId, 'pad') } : null;
+  const voices: VibeVoices = {
+    chord: resolveVibeSynthParams(vibe.chordPresetId, 'chord'),
+    bass: resolveVibeSynthParams(vibe.bassPresetId, 'bass'),
+    synth: resolveVibeSynthParams(vibe.synthPresetId, 'synth'),
+    fx: resolveVibeSynthParams(vibe.fxPresetId, 'fx'),
+    pad: vibe.pad ? { ...vibe.pad, params: resolveVibeSynthParams(vibe.pad.presetId, 'pad') } : null,
+  };
 
   // 0. Atomic swap: cut everything still scheduled BEFORE writing the new
   //    chords and patterns, otherwise the old progression's queued voices
@@ -134,117 +326,16 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
     audioEngine.stopSource(source, VIBE_SWAP_RELEASE);
   }
 
-  // 1. Context & BPM
-  store.setBpm(vibe.bpm);
-  // MUST precede replaceBeatPattern below: that action adapts the incoming rows
-  // to whatever meter is active when it runs, so setting the meter afterwards
-  // would leave the grid adapted to the OUTGOING vibe's bar length.
-  store.setMeter(vibe.meter);
-  store.setScaleRoot(vibe.scaleRoot);
-  store.setScaleType(vibe.scaleType);
-  store.setSelectedVibeId(vibe.id);
-  // A SNAPSHOT of the vibe's display name, on the loop being rewritten — not
-  // the id, and not a pointer to the entry. Applying a vibe is a bulk setter,
-  // not a declaration that the loop IS that genre: the user is free to keep
-  // the chords, swap the kit and end up somewhere else, and a stored id would
-  // go on claiming an identity the sound has left. Unconditional, so a loop
-  // with a user `name` still tracks the last vibe applied behind it.
-  store.setLoopTempName(store.activeLoopId, vibe.name);
-
-  // 2. Beat (Sound + Pattern + Drum Filter)
-  //
-  // TWO INDEPENDENT WRITES, in this order. A vibe chooses a sound AND a
-  // rhythm, and they are separate state: `setBeatPreset` installs the named
-  // preset's complete patch as `beatParams` and records it as the base, and
-  // `replaceBeatPattern` writes the grid's rows. Neither implies the other —
-  // the grid's own `beatPresetId` is provenance nothing applies, so picking a
-  // grid in the sequencer still changes no sound, and a vibe naming a sound
-  // still cannot smuggle a rhythm in behind it.
-  //
-  // `replaceBeatPattern` REPLACES: a voice the grid does not name is cleared,
-  // so a vibe gives you that grid and never that grid plus the last one's
-  // leftovers. The clear goes through `writeStepWindow`, so only the active
-  // meter's window moves and wider-meter programming past it survives.
-  store.setBeatPreset(vibe.beatPresetId);
-  store.replaceBeatPattern(vibe.drumPattern);
-
-  // The filter override, AFTER the preset and never before it: `setBeatPreset`
-  // installs a complete patch including that preset's own filter, so an
-  // override written first would be the thing the preset overwrote. Only the
-  // fields the vibe actually states are written — a vibe that names none
-  // leaves the preset's filter exactly as the preset voiced it.
-  const beatFilter = {
-    ...(vibe.beatFilterCutoff !== undefined && { cutoff: vibe.beatFilterCutoff }),
-    ...(vibe.beatFilterResonance !== undefined && { resonance: vibe.beatFilterResonance }),
-    ...(vibe.beatFilterType !== undefined && { type: vibe.beatFilterType }),
-  };
-  if (Object.keys(beatFilter).length > 0) store.updateBeatFilter(beatFilter);
-
-  // 3. Chords & Rhythm Pattern & Feel (Tight/Loose) & Sound Preset
-  store.setChords(vibe.chords);
-  store.setChordRhythmId(vibe.chordRhythmId);
-  store.setChordRhythmMode('preset');
-  store.setChordFeel(vibe.chordFeel);
-  store.setChordOctave(vibe.chordOctave);
-  store.setChordSynthParams(finalChordSynthParams);
-  store.setChordArpSettings(structuredClone(vibe.arp.chord));
-
-  // 4. Bass Pattern & Feel (Tight/Loose) & Sound Preset
-  store.setBassPatternId(vibe.bassPatternId);
-  store.setBassPatternMode('preset');
-  store.setBassFeel(vibe.bassFeel);
-  store.setBassOctave(vibe.bassOctave);
-  store.setBassSynthParams(finalBassSynthParams);
-  store.setBassArpSettings(structuredClone(vibe.arp.bass));
-
-  // A vibe without a pad mutes the layer and leaves the rest of its settings
-  // alone. Muting is reversible and resetting is not: Boom Bap -> Synthwave ->
-  // Boom Bap must not erase pad settings the user tuned by hand.
-  if (pad) {
-    store.setPadSynthParams(pad.params);
-    store.setPadArpSettings(structuredClone(vibe.arp.pad));
-    store.setPadMode(pad.mode);
-    store.setPadOctave(pad.octave);
-    store.setPadVoicing(pad.voicing);
-    store.setPadDroneDegree(pad.droneDegree);
-    store.setPadDroneIntervals(pad.droneIntervals);
-    // `VibeSpec.pad.volume` is an internal voicing constant (DEV-383's divergence 4)
-    // and stays LINEAR like the rest of that family — `padVolume` became a dB fader
-    // in DEV-386, so the conversion happens here at the store boundary rather than
-    // in `src/data/vibes.ts`, which may not call a resolver.
-    store.setPadVolume(gainToDb(toLinearGain(pad.volume)));
-  }
-  // Mute is a toggle, not a setter, so it is expressed as "the state the vibe
-  // wants" and only touched when it differs — read live, because the setters
-  // above may have run in between.
-  const wantMuted = !pad;
-  if (useAppStore.getState().padMuted !== wantMuted) store.togglePadMuted();
-
-  // 5. Main Synth + FX Sound Presets
-  //
-  // Arp is written beside each patch rather than with it: they are two
-  // independent axes of a vibe (design doc, "A Vibe may set all three
-  // independently"), and the two setters keep a preset load from ever
-  // re-arming the arpeggiator by accident. Cloned, so two loops given the
-  // same vibe cannot share one Arp object.
-  store.setSynthParams(finalSynthParams);
-  store.setSynthArpSettings(structuredClone(vibe.arp.synth));
-  // A vibe supplies a VOICE, never NOTES: `fxMelodySteps` is deliberately not
-  // written here, exactly as `leadMelodySteps` is not. Applying a vibe must
-  // never destroy something the user wrote.
-  store.setFxSynthParams(finalFxSynthParams);
-  store.setFxArpSettings(structuredClone(vibe.arp.fx));
-
-  // 6. Master Effects
-  store.setEffects({
-    ...store.effects,
-    ...vibe.effects,
-  });
+  // 1–6. The vibe's content, in ONE write — after the cut above, so nothing
+  // of the old vibe is left queued when the new progression lands. engineSync
+  // therefore sees the final state once: the meter reaches the engine with
+  // the new grid, and both are read on the next bar.
+  useAppStore.setState((s) => withMirror(s, vibeContentPatch(s, vibe, voices)));
 
   // Restart what was running, in ONE set() that also puts the scope back —
   // see commitRestartAfterStop for the rule and its no-op guard. Both playback
   // hooks arm on `step % stepsPerBar === 0` for the ACTIVE meter, which was
-  // just set above, so the restart lands on the next bar by construction — no
+  // just written above, so the restart lands on the next bar by construction — no
   // alignment code needed here.
   //
   // A vibe rewrites the CURRENT loop and never moves activeLoopId, so it
@@ -253,8 +344,8 @@ export function applyVibeToStore(vibe: ResolvedVibe) {
   // replaces set no scope at all, which is why clicking a vibe mid-playback
   // used to leave every player 'playing' under `none`.
   //
-  // activeLoopId is read live rather than captured because the setters above
-  // do not touch it — the value is the same either way.
+  // activeLoopId is read live rather than captured because the write above
+  // does not touch it — the value is the same either way.
   commitRestartAfterStop(scopeBefore, useAppStore.getState().activeLoopId, wasActive);
 }
 

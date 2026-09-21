@@ -450,8 +450,6 @@ describe('applyVibeToStore transport handling', () => {
   function withOrderTracking<T>(order: string[], playCalls: string[], run: () => T): T {
     const originals = {
       hardStopAll: useAppStore.getState().hardStopAll,
-      setBpm: useAppStore.getState().setBpm,
-      setEffects: useAppStore.getState().setEffects,
       play: useAppStore.getState().play,
     };
 
@@ -460,17 +458,6 @@ describe('applyVibeToStore transport handling', () => {
         order.push('hardStopAll');
         originals.hardStopAll();
       },
-      // First vibe-state write in the function body (step 1).
-      setBpm: (bpm) => {
-        order.push('setBpm');
-        originals.setBpm(bpm);
-      },
-      // Last vibe-state write in the function body (step 6, right before
-      // the restart calls).
-      setEffects: (effects) => {
-        order.push('setEffects');
-        originals.setEffects(effects);
-      },
       play: (module) => {
         order.push(`play:${module}`);
         playCalls.push(module);
@@ -478,7 +465,10 @@ describe('applyVibeToStore transport handling', () => {
       },
     });
 
+    // The vibe's content is ONE write now (vibeContentPatch), so it is
+    // observed as the notification that changes the chords or the effects.
     const unsubscribe = useAppStore.subscribe((state, prev) => {
+      if (state.chords !== prev.chords || state.effects !== prev.effects) order.push('content');
       for (const module of ['sequencer', 'chords', 'lead'] as const) {
         const field = `${module}Player` as const;
         if (state[field] === 'playing' && prev[field] !== 'playing') {
@@ -493,8 +483,6 @@ describe('applyVibeToStore transport handling', () => {
       unsubscribe();
       useAppStore.setState({
         hardStopAll: originals.hardStopAll,
-        setBpm: originals.setBpm,
-        setEffects: originals.setEffects,
         play: originals.play,
       });
     }
@@ -517,12 +505,12 @@ describe('applyVibeToStore transport handling', () => {
     // vibe first and cut audio afterward (or not at all).
     expect(order[0]).toBe('hardStopAll');
     const hardStopIndex = order.indexOf('hardStopAll');
-    const setBpmIndex = order.indexOf('setBpm');
-    const setEffectsIndex = order.indexOf('setEffects');
+    const contentIndex = order.indexOf('content');
     const restartIndex = order.indexOf('restart:chords');
-    expect(hardStopIndex).toBeLessThan(setBpmIndex);
+    expect(hardStopIndex).toBeLessThan(contentIndex);
     expect(restartIndex).toBeGreaterThan(-1);
-    expect(setEffectsIndex).toBeLessThan(restartIndex);
+    expect(contentIndex).toBeLessThan(restartIndex);
+    expect(order.filter((e) => e === 'content')).toEqual(['content']);
 
     // Chords was active, so it comes back; the Beat was not, so it stays put
     // — and nothing restarted it.
@@ -709,44 +697,11 @@ describe('vibe meters', () => {
     // synthwave's kick step 12 — inside both a 14- and a 16-step window —
     // survives either call order (confirmed by manually swapping the two
     // calls: this assertion still passed). The real ordering pin is the
-    // call-order recorder in the next test.
+    // wider-meter padding test in vibes.atomic.test.ts.
     useAppStore.getState().setMeter('7/8');
     applyVibeToStore(RESOLVED_VIBES[1]);
     expect(useAppStore.getState().meterId).toBe('4/4');
     expect(useAppStore.getState().beatPattern.rows.kick[12]).toBe(true);
-  });
-
-  test('setMeter runs before replaceBeatPattern — the order the drum grid depends on', () => {
-    // Order-pin via a call recorder (same technique as `focusSynthTarget` in
-    // synthControl.test.ts), rather than relying on drum-cell data to expose
-    // a reorder: replaceBeatPattern reads the ACTIVE meter to decide
-    // how to window the incoming rows, so if setMeter ran after it, the grid
-    // would be adapted against the OUTGOING vibe's bar length. This directly
-    // observes which of the two ran first, independent of any one vibe's
-    // pattern shape.
-    const order: string[] = [];
-    const originals = {
-      setMeter: useAppStore.getState().setMeter,
-      replaceBeatPattern: useAppStore.getState().replaceBeatPattern,
-    };
-    useAppStore.setState({
-      setMeter: (id) => {
-        order.push('setMeter');
-        originals.setMeter(id);
-      },
-      replaceBeatPattern: (rows) => {
-        order.push('replaceBeatPattern');
-        originals.replaceBeatPattern(rows);
-      },
-    });
-
-    try {
-      applyVibeToStore(RESOLVED_VIBES[0]);
-    } finally {
-      useAppStore.setState({ setMeter: originals.setMeter, replaceBeatPattern: originals.replaceBeatPattern });
-    }
-
-    expect(order).toEqual(['setMeter', 'replaceBeatPattern']);
   });
 
   test("each vibe's rhythm and bass pools stay inside its own meter", () => {

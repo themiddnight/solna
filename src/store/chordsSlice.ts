@@ -12,8 +12,55 @@ import {
 } from './loop';
 import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { AppStore, ChordsSlice } from './types';
+import type { ChordItem } from '../types';
 
 type Set = StoreApi<AppStore>['setState'];
+
+/**
+ * `setChords`'s write, pure, so a vibe can fold it into one `set()`: the new
+ * chords AND both custom lanes re-clamped against them, because a chord
+ * boundary and a hold that may not cross it are one fact.
+ */
+export function chordsPatch(
+  state: Pick<
+    AppStore,
+    | 'meterId'
+    | 'customChordRhythm'
+    | 'customChordHoldSteps'
+    | 'customChordLoopLength'
+    | 'customBassPattern'
+    | 'customBassHoldSteps'
+    | 'customBassLoopLength'
+  >,
+  chords: ChordItem[],
+): Partial<AppStore> {
+  const stepsPerBar = getMeter(state.meterId).stepsPerBar;
+  const chord = reclampCustomPattern({
+    chords,
+    stepsPerBar,
+    values: state.customChordRhythm,
+    holds: state.customChordHoldSteps,
+    loopLength: state.customChordLoopLength,
+    empty: false,
+  });
+  const bass = reclampCustomPattern<BassStepChoice>({
+    chords,
+    stepsPerBar,
+    values: state.customBassPattern,
+    holds: state.customBassHoldSteps,
+    loopLength: state.customBassLoopLength,
+    empty: 'rest',
+  });
+  return {
+    chords,
+    customChordLoopLength: chord.loopLength,
+    customChordRhythm: chord.values,
+    customChordHoldSteps: chord.holds,
+    customBassLoopLength: bass.loopLength,
+    customBassPattern: bass.values,
+    customBassHoldSteps: bass.holds,
+  };
+}
 
 /**
  * Chords slice. `setChordOctave` writes only the octave: `ChordItem` carries
@@ -35,35 +82,7 @@ export function createChordsSlice(set: Set): ChordsSlice {
     chordMuted: false,
     chordVolume: DEFAULT_BUS_TRIM_DB,
 
-    setChords: (chords) =>
-      set((state) => {
-        const stepsPerBar = getMeter(state.meterId).stepsPerBar;
-        const chord = reclampCustomPattern({
-          chords,
-          stepsPerBar,
-          values: state.customChordRhythm,
-          holds: state.customChordHoldSteps,
-          loopLength: state.customChordLoopLength,
-          empty: false,
-        });
-        const bass = reclampCustomPattern<BassStepChoice>({
-          chords,
-          stepsPerBar,
-          values: state.customBassPattern,
-          holds: state.customBassHoldSteps,
-          loopLength: state.customBassLoopLength,
-          empty: 'rest',
-        });
-        return {
-          chords,
-          customChordLoopLength: chord.loopLength,
-          customChordRhythm: chord.values,
-          customChordHoldSteps: chord.holds,
-          customBassLoopLength: bass.loopLength,
-          customBassPattern: bass.values,
-          customBassHoldSteps: bass.holds,
-        };
-      }),
+    setChords: (chords) => set((state) => chordsPatch(state, chords)),
     setChordRhythmId: (chordRhythmId) => set({ chordRhythmId }),
     setChordRhythmMode: (chordRhythmMode) => set({ chordRhythmMode }),
     // Stored at a fixed MAX width (non-destructive, drum-row style): the UI
