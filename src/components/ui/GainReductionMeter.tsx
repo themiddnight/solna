@@ -19,7 +19,7 @@ export interface GainReductionMeterProps {
  * net is actually doing, in dB, so "on" is visible rather than a claim.
  *
  * Reads audioEngine directly (layering rule 3 exemption, alongside
- * AudioVisualizer / VuMeter / AmbientBackdrop). The value must NOT enter a
+ * AudioVisualizer / VuMeter). The value must NOT enter a
  * zustand slice: all four tab views stay mounted, so a store write per frame
  * would re-render every one of them.
  *

@@ -41,10 +41,9 @@ export function nextMeterId(prefix: string): string {
  * ticks forever — and all four tab views stay mounted, so "forever" includes every tab the user
  * is not looking at.
  *
- * A caller with genuinely nothing to gate on — `components/ui/AmbientBackdrop.tsx`, mounted
- * once outside the tab views — still comes through here and simply omits the element, which is
- * what keeps the tier written once rather than once as `tier` and again as a `TIER_INTERVAL_MS`
- * lookup. What is enforced is narrower and worth more: `attachTickMeter` makes
+ * A caller with genuinely nothing to gate on still comes through here and explicitly omits the
+ * element, which keeps the tier written once rather than once as `tier` and again as a
+ * `TIER_INTERVAL_MS` lookup. What is enforced is narrower and worth more: `attachTickMeter` makes
  * `visibilityElement` REQUIRED, so a caller that has an element and forgets it is a compile
  * error, and a caller with genuinely nothing to observe has to write `null` on purpose.
  */

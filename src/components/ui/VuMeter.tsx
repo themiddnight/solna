@@ -14,7 +14,7 @@ export interface VuMeterProps {
  * dedicated level analyser (post-fader, pre-dynamics) on the shared meter scheduler.
  *
  * It reads `audioEngine` directly — the layering rule 3 exemption it has always held, alongside
- * AudioVisualizer and AmbientBackdrop. `useMeterLevel` itself takes the analyser as a parameter
+ * AudioVisualizer. `useMeterLevel` itself takes the analyser as a parameter
  * and imports nothing from `audio/`, so the exemption stops here and the list does not grow.
  *
  * `isPlaying` selects the tier rather than tearing the registration down: `offscreen` never
