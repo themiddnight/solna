@@ -166,6 +166,34 @@ function pushSourceState(
 }
 
 /**
+ * Every bus's complete state AND its sends, settled at one instant — the
+ * snapshot pass and a transport start from full stop both need exactly this.
+ * Sends read no audibility (R160): the bus they tap is already zeroed by mute
+ * and solo, so a muted or unsoloed track sends nothing.
+ */
+function settleSourceBuses(s: AppStore): void {
+  for (const bus of SOURCE_BUSES) {
+    pushSourceState(sourceState(s, bus), bus, 'settle');
+    audioEngine.setSourceSends(bus.source, s.trackSends[bus.source], undefined, 'settle');
+  }
+}
+
+/**
+ * One subscription per bus on its own `trackSends` row. `setTrackSends`
+ * replaces only the row it writes, so the default `Object.is` compare fires
+ * for that bus alone. `sourceTransitionTime()` puts a song seam's new sends on
+ * the boundary where that seam's fader and mute changes land.
+ */
+function subscribeTrackSends(): Array<() => void> {
+  return SOURCE_BUSES.map((bus) =>
+    useAppStore.subscribe(
+      (s) => s.trackSends[bus.source],
+      (sends) => audioEngine.setSourceSends(bus.source, sends, sourceTransitionTime(), 'transition'),
+      { fireImmediately: true },
+    ));
+}
+
+/**
  * Every Beat voice's fader, as the engine's linear per-voice gain.
  *
  * ONE of the two mute layers, and the other one is `planBeatStep`, which
@@ -228,9 +256,7 @@ function applySliceState(): void {
   // an exact 0 — a bus a user pulled all the way down passes nothing.
   audioEngine.setMasterVolume(faderDbToGain(s.masterVolume));
   audioEngine.setMetronomeEnabled(s.metronomeActive);
-  for (const bus of SOURCE_BUSES) {
-    pushSourceState(sourceState(s, bus), bus, 'settle');
-  }
+  settleSourceBuses(s);
   // The Beat instrument: one patch — voices, trim and bus filter — and the
   // per-voice faders beside it. Both halves go through the same calls the
   // subscriptions below use, so an engine settled by the snapshot and one
@@ -301,6 +327,7 @@ export function startEngineSync(): Stop {
       ),
     );
   }
+  subs.push(...subscribeTrackSends());
 
   // The Beat instrument: the whole patch on one subscription, because
   // `beatParams` is replaced as a unit by every writer (a preset pick, a vibe,
@@ -422,10 +449,7 @@ export function startEngineSync(): Stop {
       (flags, prevFlags) => {
         audioEngine.init();
         if (flags !== 0 && prevFlags === 0) {
-          const s = useAppStore.getState();
-          for (const bus of SOURCE_BUSES) {
-            pushSourceState(sourceState(s, bus), bus, 'settle');
-          }
+          settleSourceBuses(useAppStore.getState());
           audioEngine.resetClock();
         }
       },
