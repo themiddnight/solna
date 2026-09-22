@@ -16,6 +16,10 @@ declare module 'bun:test' {
     (name: string, fn: () => void): void;
     skip(name: string, fn: () => void): void;
     todo(name: string, fn?: () => void): void;
+    /** One parameterized test per row of `cases`, named from the printf-style `name`. */
+    each<T extends readonly unknown[]>(
+      cases: readonly (readonly [...T])[]
+    ): (name: string, fn: (...args: T) => void | Promise<void>) => void;
   }
   export const test: TestFn;
   export function beforeAll(fn: () => void | Promise<void>): void;
