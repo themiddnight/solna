@@ -447,15 +447,15 @@ Verified unless marked *(uncertain)*.
 
 ### 5.3 Organic-growth smells
 
-10. **`utils/musicTheory.ts` is two modules.** Pitch/scale/chord/Roman/reharmonization (`:41-548`,
-    `:602-643`) plus transport timing (`STEPS_PER_BAR :570`, `MIN/MAX_BPM :573-574`, `clampBpm :581`,
-    `stepDurationSec :587`, `barDurationSec :592`) plus `noteFrequency :596`, and a re-export of Music
-    Core names (`:33`, incl. `CHORD_QUALITY_ALIASES as TONAL_CHORD_ALIASES`). `ENGINE_MUSIC_DOMAIN_BAN`'s
-    `allowImportNames` (`eslint.config.js:153-158`) exists to split this file by name after the fact.
-    Music Core symbols are reachable by two routes (`@/musicCore` and `@/utils/musicTheory`).
-11. **"meter" means two things in `utils/`.** `utils/timeSignature.ts` is time signatures (`MeterId`,
-    `METERS`); `meterLevel/meterScale/meterZones/meterColor/meterScheduler/meterAttach.ts` are level
-    meters. Seven files, one prefix, two unrelated domains.
+10. **`utils/musicTheory.ts` was two modules. Fixed (DEV-426):** transport timing moved to
+    `utils/tempo.ts`, so `musicTheory.ts` is the music domain (pitch/scale/chord/Roman/
+    reharmonization, `noteFrequency`) plus its re-export of Music Core names. Because the split is
+    now by file, `ENGINE_MUSIC_DOMAIN_BAN` bans `musicTheory` outright instead of allowlisting its
+    timing names, and the engine imports `utils/tempo` for the timing it needs. Music Core symbols
+    are still reachable by two routes (`@/musicCore` and `@/utils/musicTheory`).
+11. **"meter" meant two things in `utils/`. Fixed (DEV-426):** the time-signature table is
+    `utils/timeSignature.ts`, so the `meter*` prefix now belongs to the level meters alone
+    (`meterLevel/meterScale/meterZones/meterColor/meterScheduler/meterAttach.ts`).
 12. **Library lookups scattered across three folders.** `drumGridById` (`audio/drumGrids.ts:16`, 24-line
     file), `progressionById` (`audio/chordProgressions.ts:15`), `requireEffectChain`
     (`audio/effectChains.ts:31`), `beatPresetById` (`store/beatPresets.ts:28`), `presetById`

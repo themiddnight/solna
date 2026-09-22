@@ -121,8 +121,9 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 - ~~Per-track FX~~ **Done** in DEV-423 ([ADR-0037](../../decisions/0037-per-track-sends.md)): every
   track, drums included, has reverb/delay/distortion sends; the per-voice `reverbSend` became a
   multiplier of the Beat track's reverb send.
-- Everything in the smells list below, plus D3 and D-cyc — see the plan's "Deferred" section for
-  the full list. (A5's hook half and moving the controllers out of the grids are Fixed, DEV-422.)
+- D3 and D-cyc remain deferred. The smells list below was worked through in DEV-426: each item is
+  now marked fixed or waived with a reason, so nothing there is waiting on an unwritten decision.
+  (A5's hook half and moving the controllers out of the grids are Fixed, DEV-422.)
 
 ### Organic-growth smells (refactor candidates)
 

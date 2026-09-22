@@ -502,9 +502,10 @@ on a discrete destination. Only buses a walk event reached (`sourcesWithEvents`,
   note-off (`chordPlayback.ts`'s `playChordLegato`/`playChordLegatoWithEngine`). The chord-card
   and pattern previews use the `chord`/`bass` buses, while library previews use `preview`.
 - **F12 — Dead-looking code.**
-  - `AudioEngine.getByteFrequencyData`/`getByteTimeDomainData` (`engine.ts:170-176`) and their
-    `MasterRack` twins (`:1275-1285`) have no callers, tests included.
-  - `isInitialized` is written (`engine.ts:108`, `:442`) and never read.
+  - `AudioEngine.getByteFrequencyData`/`getByteTimeDomainData` and their `MasterRack` twins had no
+    callers, tests included: **fixed (DEV-426)** — removed; `AudioVisualizer` reads the analyser node
+    the rack hands it.
+  - `isInitialized` was written and never read: **fixed (DEV-426)** — removed.
   - The `__…ForTests` methods and the private "compatibility alias" getters (`engine.ts:101-107`,
     `:262-266`) exist only for tests.
   - A docblock is duplicated at `masterRack.ts:874-875` and `drumPlayback.ts:25-37`.
