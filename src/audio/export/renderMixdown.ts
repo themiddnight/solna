@@ -1,12 +1,12 @@
 /**
  * The offline mixdown renderer.
  *
- * Binds a throwaway engine to an `OfflineAudioContext`, applies the snapshot
- * through the engine's own public setters, walks the arrangement driving the
- * SAME pure step functions the live clock drives, and hands back an encoded
- * WAV. The realtime singleton, the shared clock and the transport are not
- * involved and are not disturbed: an export is a side effect on a file, not
- * on the session.
+ * Binds a throwaway engine to an `OfflineAudioContext`, applies master state
+ * through the engine's own public setters, and performs `walkSongTimeline`
+ * item by item — the timeline (`plan/songTimeline.ts`) is where the
+ * arrangement becomes events, not this file. The realtime singleton, the
+ * shared clock and the transport are not involved and are not disturbed: an
+ * export is a side effect on a file, not on the session.
  *
  * Imports only src/data/, src/utils/ and src/audio/ — no store, no component,
  * not even a type: the eslint block covering src/audio/** has no
@@ -28,29 +28,24 @@
  *    gets its params at trigger time, which is where they come from anyway.
  */
 import { createRenderEngine, type AudioEngine } from '../engine';
-import { emitStepEvents, playFullHoldChord } from '../playback/chordPlayback';
-import { planPadArm } from '../playback/plan/padPlan';
-import { planChordStep } from '../playback/plan/chordPlan';
-import { planMelodyStep, type MelodyPlanSnapshot } from '../playback/plan/melodyPlan';
 import {
-  mixdownFxTrack,
-  mixdownLeadTrack,
-  padSnapshotForLoop,
   songTrackVoice,
   type MixdownBeatVoiceGain,
   type MixdownBusState,
-  type MixdownLoop,
   type MixdownSnapshot,
 } from '../playback/plan/songSnapshot';
-import { buildLoopVoices, planArrangement, type ArrangementPlan } from '../playback/plan/songTimeline';
+import {
+  planArrangement,
+  walkSongTimeline,
+  type ArrangementPlan,
+  type SongWalkItem,
+  type TimelineEvent,
+} from '../playback/plan/songTimeline';
 import { MIXDOWN_SEED, getRandomSource, setRandomSource, withSeededRandom } from '../rng';
-import { DEFAULT_VELOCITY } from '../constants';
 import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
-import { TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import { getMeter } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
 import { applyBeatParams } from '../beatAdapter';
-import { planBeatStep } from '../playback/plan/beatPlan';
 import type { BeatParams } from '@/types';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 
@@ -204,162 +199,51 @@ function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): v
 }
 
 /**
- * One melody track's material at one PASS-RELATIVE step, at an explicit
- * absolute time.
- *
- * This used to be a transcription of the live hook's clock callback — the same
- * three-function chain written twice, free to diverge. Both now call
- * `planMelodyStep`; what is left here is the render's half: the time, the patch
- * and the engine.
+ * Plays one walk event exactly as the pre-timeline renderer did: the same
+ * engine call, the same arguments. Patch and bus come from songTrackVoice;
+ * the release is computed at perform time from the patch.
  */
-function scheduleMelodyStep(
-  engine: AudioEngine,
-  loop: MixdownLoop,
-  trackId: 'lead' | 'fx',
-  track: MelodyPlanSnapshot,
-  stepInPass: number,
-  stepsPerBar: number,
-  tickDur: number,
-  time: number,
-): void {
-  const { params, source } = songTrackVoice(loop, trackId);
-  const planned = planMelodyStep(track, { stepInLoop: stepInPass, stepsPerBar, tickDurSec: tickDur });
-  for (const note of planned) {
-    const start = time + note.startOffsetSec;
-    const voiceId = engine.triggerSynthNoteOn(
-      noteFrequency(note.note), params, DEFAULT_VELOCITY, start, source, 1, 'sequencer',
-    );
-    if (voiceId) {
-      engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(params), start + note.holdSec);
-    }
+function performTimelineEvent(engine: AudioEngine, snapshot: MixdownSnapshot, e: TimelineEvent): void {
+  if (e.kind === 'drum') {
+    engine.triggerDrum(e.voice, e.velocity, e.timeSec);
+    return;
   }
+  const { params, source } = songTrackVoice(snapshot.loops[e.loopIndex], e.track);
+  const voiceId = engine.triggerSynthNoteOn(
+    noteFrequency(e.noteName), params, e.velocity, e.startSec, source, 1, 'sequencer',
+  );
+  if (voiceId) engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(params), e.endSec);
 }
 
+/**
+ * Performs the song walk item by item. Never collect the walk first (R288):
+ * the planners (arp 'random') and the engine (drum noise offsets, lazy noise
+ * and sample-and-hold buffers) draw from one seeded stream, and only
+ * performing each item before resuming the walk keeps today's interleaving —
+ * and so the WAV — unchanged.
+ */
 async function scheduleArrangement(
   engine: AudioEngine,
   snapshot: MixdownSnapshot,
   plan: ArrangementPlan,
+  walk: Generator<SongWalkItem, void, undefined>,
   signal?: AbortSignal,
 ): Promise<{ cancelled: boolean }> {
-  const stepDur = stepDurationSec(snapshot.bpm);
-  const tickDur = stepDur / TICKS_PER_SIXTEENTH;
-  const { stepsPerBar, meterId } = snapshot;
   const loopAutomation = planLoopAudioAutomation(snapshot, plan);
   let stepsSinceYield = 0;
-
-  for (let passIndex = 0; passIndex < plan.passes.length; passIndex += 1) {
-    const pass = plan.passes[passIndex];
-    const loop = snapshot.loops[pass.loopIndex];
-    applyLoopAudioState(engine, loopAutomation[passIndex]);
-    const voices = buildLoopVoices(loop, meterId, snapshot.bpm, stepsPerBar);
-    // A chordless loop dwells its bar(s) and plays no chord, bass or pad: the
-    // guard below reads this once per pass and skips that whole block, so the
-    // walk never dereferences the chord arrays (which are empty for it).
-    const chordless = loop.chords.length === 0;
-    // Built once per pass, not once per step: the walk runs for every step of
-    // every repeat, and two fresh objects per step is garbage the render pays
-    // for and nobody reads.
-    const leadTrack = mixdownLeadTrack(loop);
-    const fxTrack = mixdownFxTrack(loop);
-    const padSnapshot = padSnapshotForLoop(loop, snapshot.bpm, stepsPerBar);
-
-    for (let i = 0; i < pass.dwellSteps; i += 1) {
-      // Pass-relative, so repeats 2..n reset the chord plan exactly as a live
-      // loop restart does. See planArrangement's docblock: the dwell already
-      // counts the repeats, so this is NOT a repeat loop.
-      const stepInPass = i % pass.passSteps;
-      const step = pass.startStep + i;
-      const time = step * stepDur;
-      const stepInBar = stepInPass % stepsPerBar;
-      const barInPass = Math.floor(stepInPass / stepsPerBar);
-
-      // The Beat, through the SAME pure decision the live stepper uses: one
-      // function answers "what sounds at this step" for both, so an export can
-      // never disagree with what the grid played. The per-voice mute is
-      // honoured inside it; solo is not, and must not be — solo is a
-      // session-only monitoring gesture and never reaches an export.
-      for (const event of planBeatStep({ pattern: loop.beatPattern, mix: loop.beatMix }, { stepInBar })) {
-        engine.triggerDrum(event.voice, event.velocity, time);
-      }
-
-      if (!chordless) {
-        const chordIndex = voices.chordsByBar[barInPass];
-        const plan = voices.plans[chordIndex];
-        const stepsIntoChord = stepInPass - voices.chordStartStep[chordIndex];
-        const chordSteps = plan.totalBars * stepsPerBar;
-        const chordEnd = time + (chordSteps - stepsIntoChord) * stepDur;
-        const isLastBar = Math.floor(stepsIntoChord / stepsPerBar) === plan.totalBars - 1;
-
-        // The full holds arm once, on the chord's own first step. Both lanes
-        // report empty events when they hold, so the per-step emit below is a
-        // no-op for them rather than a branch.
-        if (stepsIntoChord === 0 && plan.chordFullHold) {
-          playFullHoldChord(
-            plan.chordFullHold.notes,
-            loop.chordSynthParams,
-            time,
-            plan.chordFullHold.holdSec,
-            'chord',
-            engine,
-          );
-        }
-        if (stepsIntoChord === 0 && plan.bassFullHold) {
-          const voiceId = engine.triggerSynthNoteOn(
-            noteFrequency(plan.bassFullHold.noteName), loop.bassSynthParams, plan.bassFullHold.velocity,
-            time, 'bass', 1, 'sequencer',
-          );
-          if (voiceId) {
-            engine.triggerSynthNoteOff(
-              voiceId,
-              synthReleaseSeconds(loop.bassSynthParams),
-              time + plan.bassFullHold.holdSec,
-            );
-          }
-        }
-
-        // The SAME step decision the live scheduler makes, at the same
-        // progression-relative step.
-        const events = planChordStep(plan, {
-          progressionStep: stepInPass,
-          step,
-          isLastBar,
-          stepsPerBar,
-          stepDurSec: stepDur,
-          chordArp: loop.chordArpSettings,
-          bassArp: loop.bassArpSettings,
-          chordFeel: loop.chordFeel,
-          bassFeel: loop.bassFeel,
-        });
-        emitStepEvents(events.chord, loop.chordSynthParams, 'chord', time, chordEnd, engine);
-        emitStepEvents(events.bass, loop.bassSynthParams, 'bass', time, chordEnd, engine);
-
-        // Pad, through the SAME planner the live hook arms with. `chordIndex`
-        // carries what `isLoopStart` used to: the pad block only runs at
-        // `stepsIntoChord === 0`, and chord 0 starts at step 0 of the pass, so
-        // `chordIndex === 0` there is exactly the old `stepInPass === 0`.
-        if (stepsIntoChord === 0) {
-          const arm = planPadArm(padSnapshot, { chordIndex });
-          if (arm) {
-            playFullHoldChord(arm.notes, loop.padSynthParams, time, arm.holdSec, 'pad', engine);
-          }
-        }
-      }
-
-      // Melody tracks run whether or not the loop has chords: a lead over a
-      // chordless loop is a real thing, and the grid's own loop length is what
-      // decides its material. No `stepInBar < stepsPerBar` guard here —
-      // `stepInBar` IS a modulo by `stepsPerBar`, so such a guard is a
-      // tautology, and the melody's own windowing already happens inside
-      // leadActivePosAt/leadSoundingNotes.
-      scheduleMelodyStep(engine, loop, 'lead', leadTrack, stepInPass, stepsPerBar, tickDur, time);
-      scheduleMelodyStep(engine, loop, 'fx', fxTrack, stepInPass, stepsPerBar, tickDur, time);
-
+  for (let next = walk.next(); !next.done; next = walk.next()) {
+    const item = next.value;
+    if (item.kind === 'pass') {
+      applyLoopAudioState(engine, loopAutomation[item.passIndex]);
+    } else if (item.kind === 'stepEnd') {
       stepsSinceYield += 1;
       if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {
         stepsSinceYield = 0;
         await yieldPreservingRandomStream();
         if (signal?.aborted) return { cancelled: true };
       }
+    } else {
+      performTimelineEvent(engine, snapshot, item);
     }
   }
   return { cancelled: false };
@@ -482,7 +366,7 @@ export async function renderMixdown(
     const scheduleResult = await withSeededRandom(MIXDOWN_SEED, async () => {
       const engine = createRenderEngine(ctx);
       applyMasterState(engine, snapshot);
-      return scheduleArrangement(engine, snapshot, plan, signal);
+      return scheduleArrangement(engine, snapshot, plan, walkSongTimeline(snapshot, plan), signal);
     });
     if (scheduleResult.cancelled) {
       return { ok: false, reason: { kind: 'cancelled' } };

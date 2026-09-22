@@ -34,11 +34,12 @@ export function emitStepEvents(
   chordEnd: number,
   /**
    * The engine to play on. Defaults to the singleton, so every live call site
-   * is unchanged; the offline renderer passes its own render engine. The
-   * parameter exists rather than a copy of this function existing in the
-   * renderer, because the clamp below is one rule — a strum's later notes can
-   * start past `chordEnd` at high bpm — and a second copy would be the copy
-   * no live test exercises.
+   * is unchanged; this parameter exists so a test can pass a fake engine
+   * instead of a second copy of this function. The offline renderer no
+   * longer calls this directly — it performs song-timeline events built by
+   * `plan/songTimeline.ts`, which shares the same clamp rule through
+   * `stepNoteWindow` (a strum's later notes can start past `chordEnd` at
+   * high bpm).
    */
   engine: AudioEngine = audioEngine,
 ): void {
