@@ -249,7 +249,7 @@ export type MixdownRenderProgress =
 export type MixdownProgressReporter = (progress: MixdownRenderProgress) => void;
 
 /** A progress observer must never be able to turn a valid render into a failure. */
-function safeProgressReporter(reporter?: MixdownProgressReporter): MixdownProgressReporter {
+export function safeProgressReporter(reporter?: MixdownProgressReporter): MixdownProgressReporter {
   return (progress) => {
     try {
       reporter?.(progress);
