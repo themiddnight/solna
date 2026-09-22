@@ -100,6 +100,15 @@
   --font-sans: "Figtree", "Anuphan", sans-serif;
 }
 
+/* `md` is moved down from Tailwind's 48rem (768px) to the smallest tablet in
+   portrait: iPad mini 6/7 is 744 CSS px wide, so at the default it got the
+   phone layout. `md`..`lg` is therefore the tablet range, 744..1024.
+   useLayoutMode's LAYOUT_MODE_QUERY must name the same width; a test pins
+   the two together. */
+@theme {
+  --breakpoint-md: 46.5rem;
+}
+
 @theme {
   --color-key-white: var(--key-white);
   --color-key-white-content: var(--key-white-content);

@@ -158,7 +158,7 @@ export const Header = React.memo(function Header() {
               view={view}
               activeTab={activeTab}
               onSelect={setActiveTab}
-              labelClassName={layer === 'song' ? 'truncate sm:inline' : undefined}
+              labelClassName={layer === 'song' ? 'truncate hidden lg:inline' : undefined}
             />
           ))}
         </nav>

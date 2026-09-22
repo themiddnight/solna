@@ -173,9 +173,11 @@ export const TRANSPORT_FIELD_SHELL =
 /**
  * The transport pill's caption. Lowercase where `GROUP_LABEL` is uppercase:
  * "BPM" and "Meter" are already caps as words, so the transform buys nothing
- * and the tracking it carries costs width the row does not have.
+ * and the tracking it carries costs width the row does not have. Hidden
+ * below `lg`: from `sm` the bar is one row, and at a 744px tablet the two
+ * captions are the width that row is short by.
  */
-export const TRANSPORT_FIELD_LABEL = 'text-[10px] text-base-content/50 hidden sm:inline px-1';
+export const TRANSPORT_FIELD_LABEL = 'text-[10px] text-base-content/50 hidden lg:inline px-1';
 
 /**
  * The badge a view header carries beside its title. `ViewHeader` renders it,

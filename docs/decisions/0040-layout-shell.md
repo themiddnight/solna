@@ -12,8 +12,8 @@ the dialogs; the Header's tools were inline JSX with two kinds of layer gate (in
 
 ## Decision
 
-- `useLayoutMode()` — `useSyncExternalStore` over one `(min-width: 48rem)` MediaQueryList,
-  Tailwind v4's default `md`, server snapshot desktop, created lazily.
+- `useLayoutMode()` — `useSyncExternalStore` over one `(min-width: 46.5rem)` MediaQueryList,
+  the `md` breakpoint as `index.css` sets it, server snapshot desktop, created lazily.
 - `Workspace` keeps the coordinators, the root `div`, `PlaybackHost` (first child of the root) and
   the three dialogs, and renders `DesktopShell` or `MobileShell`.
 - The shells own `Header`, `InstantVibesBar`, `<main>`, `BottomInputDock`, `UpdateBanner`,
@@ -40,7 +40,7 @@ the dialogs; the Header's tools were inline JSX with two kinds of layer gate (in
 ## Consequences
 
 A layout switch remounts the frame: UI state inside it (scroll, open menus, a drag in progress,
-meter history) resets, audio does not stop (R040), nothing committed is lost. Crossing 48rem is a
+meter history) resets, audio does not stop (R040), nothing committed is lost. Crossing `md` is a
 rotation or a resize, so this is rare. Two consequences of that remount:
 
 - A note held on the on-screen keyboard would hang, because the remounted `KeyCap` never gets its
@@ -52,6 +52,12 @@ rotation or a resize, so this is rare. Two consequences of that remount:
 
 R014's first level moved from `App.tsx` to
 `shell/LayerPages.tsx`. U7's theme half is closed. The golden and `bun run verify` did not change.
+
+**Amended (md at 744px):** `index.css` moves `md` from Tailwind's 48rem to `--breakpoint-md: 46.5rem`,
+the iPad mini 6/7 portrait width, so the smallest tablet gets the desktop frame and `md`..`lg`
+is the tablet range (744..1024). `LAYOUT_MODE_QUERY` moved with it; a test pins the two equal.
+Rejected: a separate `tablet:` breakpoint, which left the frame switch and the tablet layouts at
+two different widths.
 
 **Amended by [ADR-0041](0041-mobile-frame.md):** DEV-431 diverged `MobileShell`; a tool's
 `Component` takes an optional `variant` (`bar` | `row`).
@@ -65,7 +71,7 @@ list).
 ## Rules this implies
 
 - **R315** — The layout mode is `useLayoutMode()` (`components/shell/useLayoutMode.ts`): viewport
-  width at Tailwind's `md`, never persisted, never a slice, no user override; nothing else reads
+  width at `md` (46.5rem as `index.css` sets it), never persisted, never a slice, no user override; nothing else reads
   the viewport to pick a frame.
 - **R316** — `Workspace` owns everything that must survive a layout switch — the coordinators,
   `PlaybackHost` and the app-level dialogs; a shell (`DesktopShell`, `MobileShell`) owns only the

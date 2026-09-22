@@ -60,7 +60,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 
 ## Layout shell
 
-- The layout mode is `useLayoutMode()` (`components/shell/useLayoutMode.ts`): viewport width at Tailwind's `md`, never persisted, never a slice, no user override; nothing else reads the viewport to pick a frame. <!-- R315 -->
+- The layout mode is `useLayoutMode()` (`components/shell/useLayoutMode.ts`): viewport width at `md`, which `index.css` sets to 46.5rem (744px, iPad mini portrait) rather than Tailwind's 48rem, and `LAYOUT_MODE_QUERY` names the same width; never persisted, never a slice, no user override; nothing else reads the viewport to pick a frame. <!-- R315 -->
 - `Workspace` owns everything that must survive a layout switch — the coordinators, `PlaybackHost` and the app-level dialogs; a shell (`DesktopShell`, `MobileShell`) owns only the visible frame and never mounts one of those. <!-- R316 -->
 - A Header tool is a `HEADER_TOOLS` row (`components/header/headerTools.ts`) whose `layers` is its only availability gate; a new tool is a row, never JSX in `Header.tsx`, and never gates itself on the layer. <!-- R317 -->
 - Mobile navigation is `MobileTabBar` (`components/shell/MobileTabBar.tsx`): the `VIEW_ORDER` tabs, each calling `setActiveTab`; the tab implies the layer (`layerForTab`); the mobile frame has no layer switch, no second navigation state and no route logic of its own. <!-- R318 -->

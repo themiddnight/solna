@@ -20,7 +20,7 @@ function ExportTrigger({ trigger, onOpen }: { trigger: ExportTriggerView; onOpen
         <Download className="w-4 h-4" />
       )}
       {trigger.text !== null && (
-        <span className={trigger.busy ? 'tabular-nums' : 'hidden sm:inline'}>{trigger.text}</span>
+        <span className={trigger.busy ? 'tabular-nums' : 'hidden lg:inline'}>{trigger.text}</span>
       )}
     </button>
   );

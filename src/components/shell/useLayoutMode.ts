@@ -4,11 +4,11 @@ import { useSyncExternalStore } from 'react';
 export type LayoutMode = 'desktop' | 'mobile';
 
 /**
- * Tailwind v4's default `md` breakpoint (48rem; `src/index.css` sets no
- * `--breakpoint-md`), so the mode flips at exactly the edge every `md:` class
- * already uses. A test pins the CSS side.
+ * The `md` breakpoint as `src/index.css` sets it (46.5rem, the iPad mini's
+ * 744px portrait width, not Tailwind's default 48rem), so the mode flips at
+ * exactly the edge every `md:` class already uses. A test pins the two together.
  */
-export const LAYOUT_MODE_QUERY = '(min-width: 48rem)';
+export const LAYOUT_MODE_QUERY = '(min-width: 46.5rem)';
 
 type MediaQuery = Pick<MediaQueryList, 'matches' | 'addEventListener' | 'removeEventListener'>;
 type MatchMedia = (query: string) => MediaQuery;

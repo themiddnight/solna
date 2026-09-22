@@ -16,9 +16,10 @@ export function LoopCopyButton({ variant = 'bar' }: ToolVariantProps) {
       onClick={() => copyLoopSection()}
       className="btn btn-sm btn-ghost gap-1.5 text-xs font-semibold"
       title="Copy this loop's sections"
+      aria-label="Copy loop"
     >
       <Copy className="w-3.5 h-3.5" />
-      <span className="hidden sm:inline">Copy</span>
+      <span className="hidden lg:inline">Copy</span>
     </button>
   );
 }
