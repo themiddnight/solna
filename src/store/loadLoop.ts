@@ -190,7 +190,7 @@ function crossLoopSeam(
   // `Object.is` selector already IS that "did we actually leave" check, so
   // there is nothing left for this call site to gate.
   // Rewinding the grid is what re-arms every scheduler onto the new loop:
-  // useChordPlayback's rewindChordOnClockReset sees the step go backwards and
+  // useChordClockPlayback's rewindChordOnClockReset sees the step go backwards and
   // restarts the progression at chord 0, while the lead and drum steppers arm
   // bar-relative and so enter on step 0. No player transition is involved.
   audioEngine.resetClock(atBoundary);

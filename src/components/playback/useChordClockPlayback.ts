@@ -1,30 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "@/store/store";
-import {
-  emitStepEvents,
-  playFullHoldChord,
-  scheduleWholeChord,
-} from "@/audio/playback/chordPlayback";
-import { buildChordEvents, chordPlanPosition } from "@/audio/playback/plan/chordEvents";
-import type { RhythmPattern } from "@/data/chordRhythms";
-import {
-  cycleHoldScale,
-  fullHoldDuration,
-  isFullHoldBassCycle,
-  isFullHoldRhythmCycle,
-} from "@/audio/chordRhythms";
-import type { PlaybackPatternCycle } from "@/audio/chordRhythms";
-import {
-  isApproachToken,
-  resolveBassSteps,
-} from "@/audio/bassPatterns";
-import type { BassPattern } from "@/data/bassPatterns";
-import {
-  STEPS_PER_BAR,
-  generateBlockChordNotes,
-  stepDurationSec,
-  barDurationSec,
-} from "@/utils/musicTheory";
+import { emitStepEvents, playFullHoldChord } from "@/audio/playback/chordPlayback";
+import { chordPlanPosition } from "@/audio/playback/plan/chordEvents";
+import { STEPS_PER_BAR, stepDurationSec } from "@/utils/musicTheory";
 import {
   ACCOMPANIMENT_SOURCES,
   HARD_STOP_RELEASE,
@@ -39,9 +17,9 @@ import { getMeter } from "@/utils/meter";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
 import type { PlayerState } from "@/store/types";
 import type { ChordItem } from "@/types";
-import type { ActiveSynth } from "@/types/synth";
 import { synthReleaseSeconds } from "@/utils/synthPatch";
 import { publishStepAt, resetStep } from "@/components/playbackStep";
+import { playingChord } from "@/components/playingChord";
 import { planPadArm } from "@/audio/playback/plan/padPlan";
 import {
   planChordArm,
@@ -245,188 +223,9 @@ export function chordStepAction(
   return 'play';
 }
 
-// Master playback loop hook. Moved here from audio/playback/chordPlayback.ts
-// (layering rule 1: audio/ must not import store/) — the hook reads store
-// state, so it is a component-layer concern; the engine is reached only
-// through the audio-layer bridge in playbackEngine.ts (layering rule 3).
-
-/** Everything this module reads out of the store, in one shape. */
-interface ChordPlaybackState {
-  chords: ChordItem[];
-  bpm: number;
-  chordSynthParams: ActiveSynth;
-  chordOctave: number;
-  chordFeel: number;
-  bassSynthParams: ActiveSynth;
-  bassOctave: number;
-  bassFeel: number;
-  scaleRoot: string;
-  scaleType: string;
-  playerState: PlayerState;
-}
-
-function useChordPlaybackState(): ChordPlaybackState {
-  const chords = useAppStore((s) => s.chords);
-  const bpm = useAppStore((s) => s.bpm);
-  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const chordOctave = useAppStore((s) => s.chordOctave);
-  const chordFeel = useAppStore((s) => s.chordFeel);
-  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  const bassOctave = useAppStore((s) => s.bassOctave);
-  const bassFeel = useAppStore((s) => s.bassFeel);
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
-  // padSynthParams is deliberately NOT subscribed here: only `.release` is
-  // ever read, and only at the soft-stop, which reads it live from getState()
-  // exactly as armPad does. Subscribing would re-render this hook on every
-  // frame of a pad knob drag for a value nothing renders.
-  const playerState = useAppStore((s) => s.chordsPlayer);
-  return { chords, bpm, chordSynthParams, chordOctave, chordFeel, bassSynthParams, bassOctave, bassFeel, scaleRoot, scaleType, playerState };
-}
-
-/**
- * The chord layer's audition player: a card's hold-to-preview, and the
- * auto-preview that fires when a chord is picked.
- *
- * Pattern previews only. These are driven by a timer rather than the shared
- * clock, so they still lay the whole cycle down in one call; the transport
- * path arms an ArmedChordPlan and emits it step by step instead.
- *
- * The caller hands in the RESOLVED cycle, not a pattern: a preset's cycle is
- * one bar and a custom lane's is its own `loopLength * stepsPerBar`, and the
- * timer the caller loops at must be that same length. Deriving the walk from
- * the one-bar preview chord instead scheduled a single step for every preset.
- */
-function useChordPatternPreview({
-  bpm,
-  chordSynthParams,
-  chordOctave,
-  chordFeel,
-}: ChordPlaybackState) {
-  return useCallback(
-    (chord: ChordItem, startTime: number, cycle: PlaybackPatternCycle<RhythmPattern>) => {
-      initPlaybackEngine();
-
-      const stepsPerBar = activeStepsPerBar();
-      const barDur = barDurationSec(bpm, stepsPerBar);
-      const notes = generateBlockChordNotes(
-        chord.quality,
-        chord.root,
-        chordOctave,
-      );
-      const stepDur = stepDurationSec(bpm);
-      // Feel may only TIGHTEN a span the user drew, so the cycle's own custom
-      // flag picks the scale — the same rule the transport lane follows.
-      const holdScale = cycleHoldScale(cycle.custom, chordFeel);
-
-      if (isFullHoldRhythmCycle(cycle)) {
-        // A preset cycle is one bar, so this is the whole-chord fast path; a
-        // custom span covering the cycle is a span and stays on the walk below.
-        playFullHoldChord(
-          notes,
-          chordSynthParams,
-          startTime,
-          fullHoldDuration(cycle.cycleSteps / stepsPerBar, barDur, holdScale),
-          "chord",
-        );
-        return;
-      }
-
-      scheduleWholeChord(
-        buildChordEvents(cycle.pattern, notes, stepDur, holdScale),
-        chordSynthParams,
-        "chord",
-        startTime,
-        stepDur,
-        cycle.cycleSteps,
-        cycle.cycleSteps,
-      );
-    },
-    [bpm, chordSynthParams, chordOctave, chordFeel],
-  );
-}
-
-/**
- * The bass line's audition player, the bass half of the same preview pair.
- *
- * `chordContext` is what lets a caller audition against a progression other
- * than the one in the store (the library's own preview); omitted, it falls back
- * to the live `chords`, which is what the card's hold-to-preview passes.
- */
-function useBassPatternPreview({
-  chords,
-  bassOctave,
-  scaleRoot,
-  scaleType,
-  bpm,
-  bassSynthParams,
-  bassFeel,
-}: ChordPlaybackState) {
-  return useCallback(
-    (
-      chord: ChordItem,
-      startTime: number,
-      cycle: PlaybackPatternCycle<BassPattern>,
-      chordContext?: ChordItem[],
-    ) => {
-      initPlaybackEngine();
-      const stepsPerBar = activeStepsPerBar();
-      const barDur = barDurationSec(bpm, stepsPerBar);
-      const context = chordContext ?? chords;
-      const chordIdx = Math.max(0, context.indexOf(chord));
-      const stepDur = stepDurationSec(bpm);
-      const holdScale = cycleHoldScale(cycle.custom, bassFeel);
-      const resolveWithHold = (scale: number) =>
-        resolveBassSteps(
-          cycle.pattern,
-          context,
-          chordIdx,
-          bassOctave,
-          scaleRoot,
-          scaleType,
-          bpm,
-          scale,
-        );
-
-      if (isFullHoldBassCycle(cycle)) {
-        const rootEvent = resolveWithHold(1)[0];
-        if (rootEvent) {
-          const voiceId = playbackNoteOn(
-            rootEvent.noteName,
-            bassSynthParams,
-            rootEvent.velocity,
-            startTime,
-            "bass",
-          );
-          playbackNoteOff(
-            voiceId,
-            synthReleaseSeconds(bassSynthParams),
-            startTime + fullHoldDuration(cycle.cycleSteps / stepsPerBar, barDur, holdScale),
-          );
-        }
-        return;
-      }
-
-      scheduleWholeChord(
-        resolveWithHold(holdScale).map((ev) => ({
-          step: ev.step,
-          noteName: ev.noteName,
-          velocity: ev.velocity,
-          timeOffset: 0,
-          hold: ev.holdSec,
-          lastBarOnly: isApproachToken(ev.token),
-        })),
-        bassSynthParams,
-        "bass",
-        startTime,
-        stepDur,
-        cycle.cycleSteps,
-        cycle.cycleSteps,
-      );
-    },
-    [chords, bassOctave, scaleRoot, scaleType, bpm, bassSynthParams, bassFeel],
-  );
-}
+// The transport half of the Chords player (DEV-422): mounted once, by
+// PlaybackHost. Reads the store, reaches the engine only through the
+// audio-layer bridge in playbackEngine.ts (layering rule 3).
 
 /**
  * The mutable state the two subscriptions below share: where the scheduler is,
@@ -663,17 +462,23 @@ function useChordClock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, chords]);
 }
-
-export function useChordPlayback() {
-  const state = useChordPlaybackState();
-  const { chords, chordSynthParams, bassSynthParams, playerState } = state;
+/**
+ * The Chords player's clock controller: arms a chord on each bar line, emits
+ * chord, bass and pad, soft-stops on the bar line and hard-stops all three
+ * sources. The playing chord goes out through `playingChord` (R313), the
+ * step through `playbackStep`, the transport readout through
+ * `setPlayheadChord`.
+ */
+export function useChordClockPlayback(): void {
+  const chords = useAppStore((s) => s.chords);
+  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
+  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
+  // padSynthParams is deliberately NOT subscribed here: only `.release` is
+  // ever read, and only at the soft-stop, which reads it live from getState()
+  // exactly as armPad does. Subscribing would re-render this hook on every
+  // frame of a pad knob drag for a value nothing renders.
+  const playerState = useAppStore((s) => s.chordsPlayer);
   const isPlaying = playerState !== 'stopped';
-
-  const [playingIndex, setPlayingIndex] = useState<number | null>(null);
-  const [activeChordId, setActiveChordId] = useState<string | null>(null);
-
-  const playChordWithRhythm = useChordPatternPreview(state);
-  const playBassWithPattern = useBassPatternPreview(state);
 
   const scheduler = useChordScheduler();
   const releasesRef = useChordReleases(
@@ -684,15 +489,13 @@ export function useChordPlayback() {
   // Both subscriptions clear the same three pieces of chord UI — the beat
   // markers, the highlighted card, and the transport's chord readout.
   const clearChordUi = useCallback(() => {
-    setPlayingIndex(null);
+    playingChord.set(null);
     resetStep('chords');
-    setActiveChordId(null);
     useAppStore.getState().setPlayheadChord(null);
   }, []);
 
   const showChord = useCallback((index: number, chord: ChordItem) => {
-    setPlayingIndex(index);
-    setActiveChordId(chord.id);
+    playingChord.set({ index, chordId: chord.id });
   }, []);
 
   useChordStopHandler(scheduler, clearChordUi);
@@ -704,6 +507,4 @@ export function useChordPlayback() {
     clearChordUi,
     showChord,
   });
-
-  return { playChordWithRhythm, playBassWithPattern, playingIndex, setPlayingIndex, activeChordId, setActiveChordId, isPlaying };
 }

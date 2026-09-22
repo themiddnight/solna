@@ -9,7 +9,8 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useAppStore } from '@/store/store';
 import { usePlayheadBeat } from '@/components/playheadBeat';
-import { useChordPlayback } from './useChordPlayback';
+import { useChordAudition } from './useChordAudition';
+import { playingChord } from '@/components/playingChord';
 import {
   resolvePlaybackBassCycle,
   resolvePlaybackRhythmCycle,
@@ -73,7 +74,13 @@ export function useChordViewState() {
   const customBassHoldSteps = useAppStore((s) => s.customBassHoldSteps);
   const customBassLoopLength = useAppStore((s) => s.customBassLoopLength);
   const bpm = useAppStore((s) => s.bpm);
-  const playback = useChordPlayback();
+  const audition = useChordAudition();
+  const isPlaying = useAppStore((s) => s.chordsPlayer !== 'stopped');
+  // A held card's highlight. The clock's chord arrives through `playingChord`;
+  // the two are last-writer-wins, as they were when both wrote one id, so a
+  // publish (a new chord, or a clear) drops the held card's id.
+  const [activeChordId, setActiveChordId] = useState<string | null>(null);
+  useEffect(() => playingChord.subscribe(() => setActiveChordId(null)), []);
 
   // Stable identity so SortableContext's contextValue (which lists `items` in
   // its own dep array) doesn't change on every render — an inline
@@ -133,7 +140,7 @@ export function useChordViewState() {
     chords, setChords, playheadBeat, playheadChordIndex, playheadChordStartBeat, meterId,
     scaleRoot, scaleType, spellingKey, chordSynthParams, rhythmId, chordOctave,
     bassPatternId, chordRhythmMode, customChordRhythm, bassPatternMode, customBassPattern, bpm,
-    playback, chordIds, chordCycle, bassCycle,
+    audition, isPlaying, activeChordId, setActiveChordId, chordIds, chordCycle, bassCycle,
   };
 }
 
@@ -344,8 +351,7 @@ export type ProgressionHarmonize = ReturnType<typeof useProgressionHarmonize>;
  * strike at once and sustain — no rhythm pattern, no scheduled note-offs.
  */
 export function useHeldChordPreview(state: ChordViewState) {
-  const { chordOctave, chordSynthParams, playback } = state;
-  const { setActiveChordId } = playback;
+  const { chordOctave, chordSynthParams, setActiveChordId } = state;
 
   const handlePreviewMouseDown = (
     e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent,
@@ -408,7 +414,7 @@ export type HeldChordPreview = ReturnType<typeof useHeldChordPreview>;
  */
 export function usePatternPreviews(state: ChordViewState) {
   const { bpm, scaleRoot, scaleType, chordCycle, bassCycle } = state;
-  const { playChordWithRhythm, playBassWithPattern } = state.playback;
+  const { playChordWithRhythm, playBassWithPattern } = state.audition;
   const chordPatternPreviewStopRef = useRef<(() => void) | null>(null);
   const bassPatternPreviewStopRef = useRef<(() => void) | null>(null);
 

@@ -128,7 +128,7 @@ describe('a plan folds each chord and bass cycle by its own resolved width', () 
   };
   // The one subtraction the clock callback makes, before it publishes: the
   // clock step minus the step the run armed on. The arming state that supplies
-  // the origin is pinned in useChordPlayback.test.ts; what is under test here
+  // the origin is pinned in useChordClockPlayback.test.ts; what is under test here
   // is what the two lanes do with the number it produces.
   const progressionStepAt = (step: number, origin = 0): number => step - origin;
   const inPlan = (step: number, origin = 0) =>

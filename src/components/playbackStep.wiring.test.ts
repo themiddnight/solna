@@ -46,7 +46,7 @@ const WIRINGS: Array<{
   {
     player: 'chords',
     producer: {
-      file: 'src/components/loop/chord/useChordPlayback.ts',
+      file: 'src/components/playback/useChordClockPlayback.ts',
       regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
@@ -175,7 +175,7 @@ describe('playbackStep producer/consumer wiring', () => {
  */
 describe('the chords producer publishes a progression-relative step', () => {
   const producerSource = (): string =>
-    readFileSync(join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'), 'utf8');
+    readFileSync(join(process.cwd(), 'src/components/playback/useChordClockPlayback.ts'), 'utf8');
 
   test('publishes `progressionStep`, not the clock step or a bar remainder', () => {
     const match = producerSource().match(/publishStepAt\(\s*'chords',\s*([^,]+),/);

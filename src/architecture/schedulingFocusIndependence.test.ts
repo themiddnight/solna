@@ -8,7 +8,7 @@
  * by touching whether the clock actually walks a step. The four hooks that
  * ACTUALLY schedule audio — `useSequencerPlayback`, `useLeadStepPublisher`
  * (the lead/fx step producer), `useLeadPlayback` (the lead/fx note
- * scheduler) and `useChordPlayback` (chord and bass) — must therefore never
+ * scheduler) and `useChordClockPlayback` (chord and bass) — must therefore never
  * read `focusTrack`/`segmentForFocus` and must never call
  * `useSegmentGatedStep`/`shouldSubscribeToStep`: any of those would make a
  * segment's audio audible only while that segment happens to be the one on
@@ -37,7 +37,7 @@ const SCHEDULING_HOOKS = [
   'src/components/playback/useSequencerPlayback.ts',
   'src/components/loop/lead/useLeadStepPublisher.ts',
   'src/components/loop/lead/useLeadPlayback.ts',
-  'src/components/loop/chord/useChordPlayback.ts',
+  'src/components/playback/useChordClockPlayback.ts',
 ] as const;
 
 /**
@@ -71,7 +71,7 @@ describe('scheduling hooks stay independent of Pattern-segment focus', () => {
    * include (or silently drop) a file mid-refactor. `subscribePlaybackClock`
    * is what every one of the four calls to actually receive step ticks
    * (`useLeadStepPublisher` publishes a step off it; `useSequencerPlayback`,
-   * `useLeadPlayback` and `useChordPlayback` schedule audio off it), so its
+   * `useLeadPlayback` and `useChordClockPlayback` schedule audio off it), so its
    * presence is the check for "this file really is a scheduler" — unlike
    * `publishStepAt`, which `useLeadPlayback` deliberately does NOT call (its
    * step producer is the separate `useLeadStepPublisher`, per DEV-378).

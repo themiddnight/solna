@@ -29,7 +29,7 @@ describe('Chord View quick-save roman summary spelling', () => {
  * always closed, so a Lead-synth knob edit or vibe reroll no longer needs to
  * re-render the always-mounted `ChordView`. `ChordViewState` has no exported
  * pure entry point to call the hook outside a render (it composes
- * `useAppStore`, `useChordPlayback` and several `useMemo`s), so this is a
+ * `useAppStore`, `useChordAudition` and several `useMemo`s), so this is a
  * type-level guard: if `synthParams` were ever re-added to the hook's
  * returned object, this assignment would stop compiling under `bun run
  * lint`, the same technique `CustomPatternTimeline.test.tsx` uses for its

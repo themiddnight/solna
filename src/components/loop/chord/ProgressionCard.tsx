@@ -9,6 +9,7 @@ import { formatChordLabel } from '@/utils/musicTheory';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { ChordQuality } from '@/musicCore';
 import { markDiagnosticRender } from '@/diagnostics/renderCounts';
+import { usePlayingChord } from '@/components/playingChord';
 import type {
   ChordPalette,
   ChordViewState,
@@ -269,7 +270,8 @@ function SortableProgression({ state, editor, previews }: SortableProgressionPro
     chords, chordIds, scaleRoot, scaleType, meterId, playheadBeat,
     playheadChordIndex, playheadChordStartBeat, chordOctave,
   } = state;
-  const { playingIndex, activeChordId } = state.playback;
+  const { activeChordId } = state;
+  const playing = usePlayingChord();
   const { sensors, handleDragEnd } = editor;
 
   return (
@@ -280,7 +282,9 @@ function SortableProgression({ state, editor, previews }: SortableProgressionPro
             const startBar = chords
               .slice(0, idx)
               .reduce((sum, c) => sum + (c.bars || 1), 1);
-            const isActive = playingIndex === idx || activeChordId === chord.id;
+            const isActive =
+              (playing !== null && (playing.index === idx || playing.chordId === chord.id))
+              || activeChordId === chord.id;
             const beatsPerBar = beatsPerBarFor(meterId);
             const activeBeat =
               playheadChordIndex === idx

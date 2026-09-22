@@ -224,7 +224,7 @@ export function shouldSubscribeToStep(focus: MixLayerId, segment: PatternSegment
  *
  * This gates ONLY the visual subscription. It has no connection to and no
  * effect on the players that actually schedule audio
- * (`useLeadPlayback`/`useSequencerPlayback`/chord-bass playback) — those
+ * (`useLeadPlayback`/`useSequencerPlayback`/`useChordClockPlayback`) — those
  * subscribe to the clock directly and are unaffected by `focusTrack`, so a
  * segment the user has navigated away from keeps sounding exactly as before.
  */

@@ -2,10 +2,10 @@
  * The chord-comp rhythm library: 21 one-bar patterns of block and strum hits.
  *
  * Named CHORD_RHYTHMS, not RHYTHM_PATTERNS: the table is chord-comp only
- * (useChordPlayback is its one consumer) and "rhythm pattern" reads as if it
- * might cover drums, which it does not. `pattern` with no qualifier has come to
- * mean "a thing from a library", which is the one meaning a name in a folder
- * full of libraries cannot carry.
+ * (the chord playback and audition hooks are its consumers) and "rhythm
+ * pattern" reads as if it might cover drums, which it does not. `pattern`
+ * with no qualifier has come to mean "a thing from a library", which is the
+ * one meaning a name in a folder full of libraries cannot carry.
  *
  * `block()` and `strum()` sit directly above the table on purpose — see the
  * same note on `step()` in ./chordProgressions.ts. `strum(4, 'up')` hides three

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useChordClockPlayback } from './useChordClockPlayback';
 import { useSequencerPlayback } from './useSequencerPlayback';
 
 /**
@@ -20,6 +21,7 @@ import { useSequencerPlayback } from './useSequencerPlayback';
  * selectors; each controller re-renders the host on its own store reads.
  */
 export const PlaybackHost = React.memo(function PlaybackHost(): null {
+  useChordClockPlayback();
   useSequencerPlayback();
   return null;
 });

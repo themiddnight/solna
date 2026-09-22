@@ -176,7 +176,7 @@ export const ChordView = React.memo(function ChordView() {
         pasteButton={<ModulePasteButton groups={['chord-progression']} />}
       />
 
-      <AccompanimentModules previews={patternPreviews} isPlaying={state.playback.isPlaying} />
+      <AccompanimentModules previews={patternPreviews} isPlaying={state.isPlaying} />
 
       {/* Full Chord Preset Library Sidebar Drawer */}
       <Suspense

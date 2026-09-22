@@ -8,7 +8,7 @@ import {
   resetChordArming,
   rewindChordOnClockReset,
   type ChordArming,
-} from './useChordPlayback';
+} from './useChordClockPlayback';
 import { useAppStore } from '@/store/store';
 
 const BAR = 16;
@@ -245,10 +245,10 @@ describe('activeStepsPerBar', () => {
   });
 });
 
-describe('useChordPlayback shares the one HARD_STOP_RELEASE', () => {
+describe('useChordClockPlayback shares the one HARD_STOP_RELEASE', () => {
   test('declares no local copy and still uses the shared constant', () => {
     const source = readFileSync(
-      join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useChordClockPlayback.ts'),
       'utf8',
     );
     expect(source).not.toMatch(/^const HARD_STOP_RELEASE/m);
@@ -256,7 +256,7 @@ describe('useChordPlayback shares the one HARD_STOP_RELEASE', () => {
   });
 });
 
-describe('useChordPlayback stops only its own voices, not the whole bus', () => {
+describe('useChordClockPlayback stops only its own voices, not the whole bus', () => {
   test('uses playbackStopOwnedVoices, not the whole-bus playbackStopSource', () => {
     // A whole-bus stop on 'chord'/'bass'/'pad' would cut a keyboard or arp
     // note sharing that bus — the same bug per-voice provenance fixed for
@@ -264,7 +264,7 @@ describe('useChordPlayback stops only its own voices, not the whole bus', () => 
     // so both its hard-stop and soft-stop paths must go through the
     // owner-scoped wrapper instead of the whole-bus one.
     const source = readFileSync(
-      join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useChordClockPlayback.ts'),
       'utf8',
     );
     expect(source).not.toMatch(/\bplaybackStopSource\(/);
@@ -272,14 +272,14 @@ describe('useChordPlayback stops only its own voices, not the whole bus', () => 
   });
 });
 
-describe('useChordPlayback routes emission through the shared chord planner', () => {
+describe('useChordClockPlayback routes emission through the shared chord planner', () => {
   test('calls planChordStep and never reintroduces the raw event builders inline', () => {
     // Nothing else pins that the LIVE controller still routes through the
     // planner rather than a reintroduced inline eventsForCycleStep/
     // arpEventsForStep call — those two must only ever be called from inside
     // chordPlan.ts, never from the controller directly.
     const source = readFileSync(
-      join(process.cwd(), 'src/components/loop/chord/useChordPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useChordClockPlayback.ts'),
       'utf8',
     );
     expect(source).toContain('planChordStep(plan, {');

@@ -4,10 +4,10 @@ import type { VoiceId } from "../synth/voiceId";
 import { noteFrequency } from "@/utils/musicTheory";
 
 // Engine bridge for the component-layer playback hooks (layering rules 1+3):
-// the store-reading hooks (useChordPlayback, useSequencerPlayback) moved out
-// of audio/ into components/, and they reach the engine only through this
-// module — audio/ owns the engine, components own store reads and the clock
-// subscription.
+// the store-reading hooks (useChordClockPlayback, useSequencerPlayback —
+// mounted by PlaybackHost) moved out of audio/ into components/, and they
+// reach the engine only through this module — audio/ owns the engine,
+// components own store reads and the clock subscription.
 
 export function initPlaybackEngine(): void {
   audioEngine.init();
