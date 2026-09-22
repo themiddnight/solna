@@ -14,7 +14,7 @@ import { ProjectLoading } from '../ProjectLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useLiveStore } from '../ui/useLiveStore';
 import { Wordmark } from '../ui/Wordmark';
-import { DriveFileBrowserModal } from './DriveFileBrowserModal';
+import { DriveFileBrowserModal, type DriveFileBrowserModalProps } from './DriveFileBrowserModal';
 
 // Compile-time guard: production builds fold `import.meta.env.DEV` to false, so the
 // dynamic import (and its chunk) never ships. Incident reports are the only production surface.
@@ -476,47 +476,34 @@ function useProjectFileCommands({
   };
 }
 
-/** The dropdown's rows: three sections, with Save's label and the Drive account placed. */
-function ProjectMenuSections({
-  driveAvailable,
-  driveSignedIn,
-  sourceKind,
-  driveUser,
-  onChoose,
-}: {
-  driveAvailable: boolean;
+interface UseProjectMenu {
+  sections: readonly ProjectMenuSection[];
+  choose: (action: ProjectMenuAction) => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onPickFile: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  confirming: ReplacingAction | null;
+  exporting: boolean;
+  onConfirmReplace: () => void;
+  cancelConfirm: () => void;
+  browser: ProjectBrowseMode | null;
   driveSignedIn: boolean;
-  sourceKind: ProjectSource['kind'];
-  driveUser: DriveUserProfile | null;
-  onChoose: (action: ProjectMenuAction) => void;
-}) {
-  return (
-    <>
-      {visibleMenuSections(driveAvailable, driveSignedIn, sourceKind, driveUser).map((section, i) => (
-        <Fragment key={section.heading ?? `section-${i}`}>
-          {section.heading !== null && (
-            <li className="menu-title">
-              {section.heading}
-              {section.subtitle && (
-                <span className="block truncate text-xs font-normal text-base-content/50">{section.subtitle}</span>
-              )}
-            </li>
-          )}
-          {section.rows.map(({ action, label, icon: Icon }) => (
-            <li key={action}>
-              <button type="button" id={`project-menu-${action}`} onClick={() => onChoose(action)}>
-                <Icon className="w-4 h-4" aria-hidden="true" />
-                {label}
-              </button>
-            </li>
-          ))}
-        </Fragment>
-      ))}
-    </>
-  );
+  projectName: AppStore['projectName'];
+  closeBrowser: () => void;
+  connectDrive: () => void;
+  listDrive: DriveFileBrowserModalProps['onList'];
+  openDriveFile: (fileId: string) => void;
+  saveAsDriveFile: (name: string) => void;
+  pending: string | null;
+  diagnosticsOpen: boolean;
+  closeDiagnostics: () => void;
 }
 
-export function ProjectMenu({ textClassName }: { textClassName?: string }) {
+/**
+ * The project menu's state and commands, called once per frame (R268): the
+ * desktop dropdown and the mobile menu sheet render the same rows and the
+ * same dialogs from it. Which dialog is open is local UI state.
+ */
+function useProjectMenu(): UseProjectMenu {
   const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
   const [browser, setBrowser] = useState<ProjectBrowseMode | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -532,24 +519,15 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const connectDrive = useLiveStore((s) => s.connectDrive);
   const newProject = useLiveStore((s) => s.newProject);
 
-  const {
-    runSave,
-    runSaveAs,
-    runOpenLocal,
-    runOpenFromDrive,
-    runSaveAsToDrive,
-    listDrive,
-    onPickFile,
-    disconnectDrive,
-  } = useProjectFileCommands({ setPending, setBrowser, fileInputRef });
+  const commands = useProjectFileCommands({ setPending, setBrowser, fileInputRef });
 
   const choose = (action: ProjectMenuAction) =>
     runMenuAction(action, {
       confirm: setConfirming,
-      save: () => void runSave(),
-      saveAs: () => void runSaveAs(),
+      save: () => void commands.runSave(),
+      saveAs: () => void commands.runSaveAs(),
       browseSaveAs: () => setBrowser('save-as'),
-      disconnectDrive: () => void disconnectDrive(),
+      disconnectDrive: () => void commands.disconnectDrive(),
       diagnostics: () => setDiagnosticsOpen(true),
       reportBug: () => reportManualIncident(),
     });
@@ -558,11 +536,120 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
     const action = confirming;
     setConfirming(null);
     if (action === null) return;
-    if (action === 'open') void runOpenLocal();
+    if (action === 'open') void commands.runOpenLocal();
     if (action === 'open-drive') setBrowser('open');
     if (action === 'new') newProject();
   };
 
+  return {
+    sections: visibleMenuSections(driveAvailable, driveSignedIn, projectSource.kind, driveUser),
+    choose,
+    fileInputRef,
+    onPickFile: commands.onPickFile,
+    confirming,
+    exporting,
+    onConfirmReplace,
+    cancelConfirm: () => setConfirming(null),
+    browser,
+    driveSignedIn,
+    projectName,
+    closeBrowser: () => setBrowser(null),
+    connectDrive: () => void connectDrive(),
+    listDrive: commands.listDrive,
+    openDriveFile: (fileId) => void commands.runOpenFromDrive(fileId),
+    saveAsDriveFile: (name) => {
+      setBrowser(null);
+      void commands.runSaveAsToDrive(name);
+    },
+    pending,
+    diagnosticsOpen,
+    closeDiagnostics: () => setDiagnosticsOpen(false),
+  };
+}
+
+/** The dropdown's rows: three sections, with Save's label and the Drive account placed. */
+/** The menu's rows, as the dropdown and the mobile sheet both render them. */
+function ProjectMenuSections({
+  sections,
+  onChoose,
+  rowClassName,
+}: {
+  sections: readonly ProjectMenuSection[];
+  onChoose: (action: ProjectMenuAction) => void;
+  rowClassName?: string;
+}) {
+  return (
+    <>
+      {sections.map((section, i) => (
+        <Fragment key={section.heading ?? `section-${i}`}>
+          {section.heading !== null && (
+            <li className="menu-title">
+              {section.heading}
+              {section.subtitle && (
+                <span className="block truncate text-xs font-normal text-base-content/50">{section.subtitle}</span>
+              )}
+            </li>
+          )}
+          {section.rows.map(({ action, label, icon: Icon }) => (
+            <li key={action}>
+              <button type="button" id={`project-menu-${action}`} className={rowClassName} onClick={() => onChoose(action)}>
+                <Icon className="w-4 h-4" aria-hidden="true" />
+                {label}
+              </button>
+            </li>
+          ))}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/** Everything a row can open: the file input, the confirm, the Drive browser, the pending overlay, Diagnostics. */
+function ProjectMenuEffects({ menu }: { menu: UseProjectMenu }) {
+  return (
+    <>
+      <input
+        ref={menu.fileInputRef}
+        type="file"
+        accept={PROJECT_FILE_ACCEPT}
+        aria-label="Open a .solna project file"
+        className="hidden"
+        onChange={(e) => void menu.onPickFile(e)}
+      />
+      {menu.confirming !== null && (
+        <ConfirmDialog
+          title={CONFIRM_COPY[menu.confirming].title}
+          message={replaceConfirmMessage(menu.exporting)}
+          confirmLabel={CONFIRM_COPY[menu.confirming].label}
+          onConfirm={menu.onConfirmReplace}
+          onCancel={menu.cancelConfirm}
+        />
+      )}
+      {menu.browser !== null && (
+        <DriveFileBrowserModal
+          open
+          mode={menu.browser}
+          signedIn={menu.driveSignedIn}
+          initialName={defaultSaveName(menu.projectName)}
+          onClose={menu.closeBrowser}
+          onConnect={menu.connectDrive}
+          onList={menu.listDrive}
+          onOpenFile={menu.openDriveFile}
+          onSaveAs={menu.saveAsDriveFile}
+        />
+      )}
+      {menu.pending !== null && <ProjectLoading overlay label={menu.pending} />}
+      {DiagnosticPanel && menu.diagnosticsOpen && (
+        <React.Suspense fallback={<ProjectLoading overlay label="Loading diagnostics…" />}>
+          <DiagnosticPanel open onClose={menu.closeDiagnostics} />
+        </React.Suspense>
+      )}
+    </>
+  );
+}
+
+export function ProjectMenu({ textClassName }: { textClassName?: string }) {
+  const menu = useProjectMenu();
   return (
     <div className="dropdown">
       <Wordmark textClassName={textClassName} ariaLabel="Project menu" chevron />
@@ -575,53 +662,9 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
         tabIndex={0}
         className="dropdown-content menu menu-sm z-50 mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
       >
-        <ProjectMenuSections
-          driveAvailable={driveAvailable}
-          driveSignedIn={driveSignedIn}
-          sourceKind={projectSource.kind}
-          driveUser={driveUser}
-          onChoose={choose}
-        />
+        <ProjectMenuSections sections={menu.sections} onChoose={menu.choose} />
       </ul>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={PROJECT_FILE_ACCEPT}
-        aria-label="Open a .solna project file"
-        className="hidden"
-        onChange={(e) => void onPickFile(e)}
-      />
-      {confirming !== null && (
-        <ConfirmDialog
-          title={CONFIRM_COPY[confirming].title}
-          message={replaceConfirmMessage(exporting)}
-          confirmLabel={CONFIRM_COPY[confirming].label}
-          onConfirm={onConfirmReplace}
-          onCancel={() => setConfirming(null)}
-        />
-      )}
-      {browser !== null && (
-        <DriveFileBrowserModal
-          open
-          mode={browser}
-          signedIn={driveSignedIn}
-          initialName={defaultSaveName(projectName)}
-          onClose={() => setBrowser(null)}
-          onConnect={() => void connectDrive()}
-          onList={listDrive}
-          onOpenFile={(fileId) => void runOpenFromDrive(fileId)}
-          onSaveAs={(name) => {
-            setBrowser(null);
-            void runSaveAsToDrive(name);
-          }}
-        />
-      )}
-      {pending !== null && <ProjectLoading overlay label={pending} />}
-      {DiagnosticPanel && diagnosticsOpen && (
-        <React.Suspense fallback={<ProjectLoading overlay label="Loading diagnostics…" />}>
-          <DiagnosticPanel open onClose={() => setDiagnosticsOpen(false)} />
-        </React.Suspense>
-      )}
+      <ProjectMenuEffects menu={menu} />
     </div>
   );
 }
