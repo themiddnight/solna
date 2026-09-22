@@ -53,7 +53,7 @@ flowchart TB
     Rack["MasterRack (god object)<br/>source buses → reverb/delay/distortion sends (not the Beat bus) → master → comp → limiter"]
     Voices["synth/ voiceManager · drumSynth"]
     Logic["root-level music/pattern logic<br/>leadMelody · chordRhythms · bassPatterns …"]
-    Exp["export/renderMixdown"]
+    Exp["export/renderMixdown · renderMidi"]
   end
 
   Domain["data/ · musicCore/ · utils/ · types"]

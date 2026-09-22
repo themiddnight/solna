@@ -299,6 +299,7 @@ for `*.tsx`.
 | 13 | 745-764 | 4 analyser components + `**/*.test.ts(x)` | **`no-restricted-imports: off` entirely** | — |
 | 14 | 765-782 | `audio/leadStepRecord.ts`, `audio/bassPatterns.ts` | — | regex literal ban + `Math.random` |
 | 15 | 783-793 | `loop/lead/melodyGrid.ts`, `ui/Keyboard.tsx`, `utils/musicTheory.ts` | — | regex literal ban |
+| 16 | — | `export/renderMidi.ts`, `export/smfWriter.ts` | block 1 + engine/DSP modules; `./renderMixdown` type-only | — |
 
 **Claimed vs enforced:**
 
@@ -328,7 +329,8 @@ for `*.tsx`.
   file each for audio→store and store→components; components→`audio/engine` has no fixture there
   (data purity has its own `src/data/dataLayerPurity.test.ts`).
 - **Knip (`knip.json`)**: entry `src/main.tsx` + 5 scripts; project excludes tests, the
-  `{engineTestHelpers,testFakes,*Fixture,*Fixtures}` helpers and `src/data/trimTable.ts`;
+  `{engineTestHelpers,testFakes,smfTestReader,*Fixture,*Fixtures}` helpers and
+  `src/data/trimTable.ts`;
   `includeEntryExports: true`. Both scans report zero findings today. Because the default graph
   counts tests as consumers and the production scan checks only files/dependencies, **exports used
   only by tests are invisible to both** (e.g. `src/utils/meterScheduler.ts:218,233,237,240`

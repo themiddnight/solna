@@ -109,7 +109,8 @@ the walk-based renderer performs the same calls in the same order as the code it
 ## Rules this implies
 
 - **R287** — `buildSongTimeline`/`walkSongTimeline` in `plan/songTimeline.ts` is the one place an
-  arrangement becomes timed events; `renderMixdown.ts` only applies pass automation and performs
+  arrangement becomes timed events; `renderMidi.ts` likewise consumes `walkSongTimeline` and calls
+  no lane planner (ADR-0036); `renderMixdown.ts` only applies pass automation and performs
   walk items, and calls no lane planner (`planArrangement` only sizes the context).
 - **R288** — The renderer consumes `walkSongTimeline` incrementally, performing each item before
   resuming the walk; never collect the timeline before performing it. The walk's per-step emit

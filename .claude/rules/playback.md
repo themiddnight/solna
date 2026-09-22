@@ -66,7 +66,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ([ADR-0027](../../docs/decisions/0027-planned-then-performed-playback.md))
 
-- `buildSongTimeline`/`walkSongTimeline` in `plan/songTimeline.ts` is the one place an arrangement becomes timed events; `renderMixdown.ts` only applies pass automation and performs walk items, and calls no lane planner (`planArrangement` only sizes the context). <!-- R287 -->
+- `buildSongTimeline`/`walkSongTimeline` in `plan/songTimeline.ts` is the one place an arrangement becomes timed events; `renderMidi.ts` likewise consumes `walkSongTimeline` and calls no lane planner (ADR-0036); `renderMixdown.ts` only applies pass automation and performs walk items, and calls no lane planner (`planArrangement` only sizes the context). <!-- R287 -->
 - The renderer consumes `walkSongTimeline` incrementally, performing each item before resuming the walk; never collect the timeline before performing it. The walk's per-step emit order (drums, chord hold, bass hold, chord, bass, pad, lead, FX) is part of the contract. <!-- R288 -->
 - No runtime import path from `src/audio/playback/plan/` reaches `audio/engine` or `playbackEngine`; `src/architecture/playbackPlannerImportGraph.test.ts` walks the graph. <!-- R289 -->
 - Drums are planned by `planBeatStep` (`plan/beatPlan.ts`) for both the live stepper and the timeline; no caller decides drum voices or velocity itself. <!-- R290 -->
@@ -93,7 +93,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - A lane field in only one snapshot builder <!-- R234 -->
 - Positional scalars after a planner's snapshot <!-- R235 -->
 - Exporting a planner type no second file names <!-- R236 -->
-- A lane planner call or engine-independent event decision inside `renderMixdown.ts` <!-- R287 -->
+- A lane planner call or engine-independent event decision inside `renderMixdown.ts` or `renderMidi.ts` <!-- R287 -->
 - Collecting the song walk into an array before performing it, or reordering its per-step emit order <!-- R288 -->
 - A runtime import from `plan/` that reaches `audio/engine` or `playbackEngine` <!-- R289 -->
 - Deciding drum voices or velocity outside `planBeatStep` <!-- R290 -->

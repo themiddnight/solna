@@ -4,6 +4,8 @@ paths:
   - "src/store/mixdownSnapshot.ts"
   - "src/components/export/**"
   - "src/components/Header.tsx"
+  - "src/audio/export/renderMidi.ts"
+  - "src/audio/export/smfWriter.ts"
 ---
 
 # Export
@@ -23,6 +25,16 @@ The export feature: one session-only job, kinds as data, one runner, one dialog.
 
 ([ADR-0035](../../docs/decisions/0035-export-feature.md))
 
+## MIDI
+
+- MIDI export is built only from `walkSongTimeline`; `renderMidi.ts` calls no lane planner and re-derives no arp, rhythm, strum or hold. <!-- R296 -->
+- A timeline event is exported iff the WAV makes it audible by routing: its loop's bus row is unmuted with gain > 0 (drums: and the voice's `beatVoiceGains` > 0). Solo never reaches it. <!-- R297 -->
+- A MIDI note number comes from `noteMidi` (`@/musicCore`) applied to the timeline's ROOTS name in `renderMidi.ts`; `TimelineEvent` never carries Hz or a note number, and nothing converts Hz to MIDI. <!-- R298 -->
+- `GM_DRUM_NOTE` and `MIDI_TIME_SIGNATURE` are `Record`s over `BeatVoiceId` and `MeterId`; they and `MIDI_LANES` live beside the MIDI builder, not in `src/data/`. <!-- R299 -->
+- On one channel and pitch at most one note sounds: a same-tick duplicate merges, a later start cuts the earlier note; note-offs precede note-ons at equal ticks. <!-- R300 -->
+
+([ADR-0036](../../docs/decisions/0036-midi-export-from-song-timeline.md))
+
 ## Prohibited
 
 - Export state in a persisted key or a project body, or a second "busy" predicate <!-- R291 -->
@@ -30,3 +42,8 @@ The export feature: one session-only job, kinds as data, one runner, one dialog.
 - Editing the runner, the slice, the Header or the export UI to add a kind <!-- R293 -->
 - A kind that downloads, writes a notice, reports an incident or touches `exportJob` <!-- R294 -->
 - Cancelling a job when the dialog closes, or export logic in `Header.tsx` <!-- R295 -->
+- A lane planner call, or a re-derived arp, rhythm, strum or hold, in `renderMidi.ts` <!-- R296 -->
+- Exporting a muted or zero-gain lane or drum voice, or letting solo reach the MIDI <!-- R297 -->
+- A MIDI number or Hz on `TimelineEvent`, or a Hz → MIDI conversion <!-- R298 -->
+- The GM map, meter table or lane table in `src/data/`, or as a non-`Record` table <!-- R299 -->
+- Two sounding instances of one pitch on one channel, or a note-on before a note-off at one tick <!-- R300 -->

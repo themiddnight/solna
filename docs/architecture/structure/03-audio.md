@@ -40,7 +40,7 @@ physical lines pass it.
 | `idleSuspend.ts` | Pure predicate `shouldSuspendWhenIdle`, plus `IDLE_SUSPEND_MS = 30_000` (`:22`) | as named | none |
 | `diagnostics.ts` | Diagnostic snapshot types and `audioLatencySnapshot` | as named | none (imports `runtime/healthMonitor`) |
 | `constants.ts` | `DEFAULT_VELOCITY = 0.8`, `ENV_FLOOR`, `clampVelocity` | as named | none |
-| `rng.ts` | Swappable `random()` source, `mulberry32`, `withSeededRandom`, `MIXDOWN_SEED` | as named | none |
+| `rng.ts` | Swappable `random()` source, `mulberry32`, `withSeededRandom`, `MIXDOWN_SEED`, `yieldPreservingRandomStream` | as named | none |
 | `voiceOwner.ts` | `VOICE_OWNERS` / `VoiceOwner` (`live`, `arp`, `sequencer`, `preview`) | as named | none |
 
 ### 1.2 Music and pattern logic in `audio/` (no Web Audio nodes)
@@ -95,6 +95,9 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
 | `runtime/health.ts` | Pure state machine `idle → healthy → suspected → unhealthy` from the audio-to-wall clock ratio (`advanceAudioHealth`) |
 | `runtime/policy.ts`, `runtime/profile.ts` | Thresholds (ratio 0.75–1.25, 3 suspicious samples, 1 s interval, 2.5 s max gap), plus iOS WebKit detection (`policy.ts:13-33`) |
 | `export/renderMixdown.ts` | Offline arrangement render to WAV (§4) |
+| `export/renderMidi.ts` | Song timeline → SMF: lane/GM/meter tables, audibility, the overlap rule, a seeded walk (§4) |
+| `export/smfWriter.ts` | Pure SMF format-1 byte encoder |
+| `export/smfTestReader.ts` | Test-only SMF parser; excluded from the production Knip graph |
 | `export/mixdownFixture.ts` | Test fixture builders. No non-test importer; lives beside production code |
 | `automation/sourceBusAutomation.ts` | `applySourceBusAutomation`: `settle` vs `transition` ramps for bus gains |
 | `testFakes.ts`, `engineTestHelpers.ts` | Fake `AudioContext`/nodes for tests. Non-test files in the production folder |
@@ -356,6 +359,18 @@ Offline guards:
   (`audioSession.ts:69-72`), so the render engine never arms idle suspend or click buffers.
 - `MasterRack` send gates still use wall-clock `setTimeout` for disconnects (`masterRack.ts:117`,
   `:806`) even on an offline context **(uncertain impact; wet sends at 0 only)**.
+
+### MIDI (`export/renderMidi.ts`)
+
+A second, engine-free consumer of the same `walkSongTimeline` (ADR-0036): a seeded walk with no
+`AudioContext` and no lane planner, so the MIDI and the WAV cannot disagree about what plays when.
+For each `note`/`drum` item, `eventAudible` re-checks the loop's `'sequencer'`/source bus row
+(mute and gain, plus the Beat voice's gain for drums) the same way the renderer's audibility check
+does, `noteMidi` resolves the ROOTS name to a MIDI number at this boundary only, and
+`resolveNoteOverlaps` enforces one sounding instance per `(channel, note)`. `songMidiFile` then
+assembles the conductor and lane tracks into an `SmfFile`, and `encodeSmf` (`smfWriter.ts`) writes
+the bytes. The walk yields the same way the WAV renderer does, through `rng.ts`'s
+`yieldPreservingRandomStream` (§1.1) — the one function this export shares with the renderer.
 
 ---
 
