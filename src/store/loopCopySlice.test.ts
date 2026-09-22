@@ -191,4 +191,25 @@ describe('applyLoopCopy — target IS the active loop', () => {
     expect(after.loops.find((loop) => loop.id === 'loop-target')!.name).toBe('Verse');
     expect(after.loops.find((loop) => loop.id === 'loop-source')!.name).toBe('Chorus');
   });
+
+  test('a key-only copy into the active loop moves the key and leaves chords and melodies alone', () => {
+    const active = createDefaultLoop();
+    const other = { ...createDefaultLoop(), id: 'loop-src', scaleRoot: 'C', scaleType: 'Major' };
+    useAppStore.setState({ loops: [active, other], activeLoopId: active.id, ...loopStatePatch(active), autoReharmonize: true });
+    const chordsBefore = useAppStore.getState().chords;
+    const leadBefore = useAppStore.getState().leadMelodySteps;
+    useAppStore.getState().applyLoopCopy(active.id, other.id, ['key']);
+    const s = useAppStore.getState();
+    expect(s.scaleRoot).toBe('C');
+    expect(s.chords).toEqual(chordsBefore);
+    expect(s.leadMelodySteps).toEqual(leadBefore);
+  });
+
+  test('a chord-progression copy into the active loop clears the reharmonized badge', () => {
+    const active = createDefaultLoop();
+    const other = { ...createDefaultLoop(), id: 'loop-src' };
+    useAppStore.setState({ loops: [active, other], activeLoopId: active.id, ...loopStatePatch(active), reharmonizedIndicator: true });
+    useAppStore.getState().applyLoopCopy(active.id, other.id, ['chord-progression']);
+    expect(useAppStore.getState().reharmonizedIndicator).toBe(false);
+  });
 });

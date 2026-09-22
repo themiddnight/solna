@@ -54,7 +54,14 @@ export function createLoopCopySlice(set: Set, get: Get): Pick<LoopSlice, 'applyL
       // accompaniment -> write the flat slices -> commitRestartAfterStop) is
       // exactly the protocol for that. Reimplementing any part of it here
       // would create a second place that has to stay correct.
-      set({ loops });
+      // Chords copied in were replaced wholesale, not harmonized: the badge
+      // must not claim otherwise. (A key-only copy moves the key and leaves
+      // chords and melodies alone — R144.)
+      set(
+        selected.includes('chord-progression')
+          ? { loops, reharmonizedIndicator: false }
+          : { loops },
+      );
       loadLoop(targetId);
     },
   };

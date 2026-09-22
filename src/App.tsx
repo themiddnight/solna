@@ -26,6 +26,7 @@ import { useSongModeSync } from './store/songMode';
 import { useFocusPanelSync } from './store/focusPanelSync';
 import { useSoloNavClear } from './store/soloNav';
 import { useVibeNavClear } from './store/vibeNav';
+import { useReharmonizeNavClear } from './store/reharmonizeNav';
 import { useServiceWorkerUpdate } from './pwa/useServiceWorkerUpdate';
 import { isSongLayer } from './types';
 
@@ -117,6 +118,9 @@ function Workspace() {
   // focus", so it clears on any activeLoopId change, whoever the writer —
   // see store/vibeNav.ts.
   useVibeNavClear();
+  // The reharmonized badge describes the active loop's chords; it clears on
+  // a loop change or project install — see store/reharmonizeNav.ts.
+  useReharmonizeNavClear();
 
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
   const { keyboardProps, drumProps } = useInputDeck();
