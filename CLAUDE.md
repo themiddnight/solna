@@ -137,12 +137,12 @@ in a `## Prohibited` checklist derived from its own rules):
 |---|---|
 | `boundaries-and-gates.md` | ESLint severity policy, Knip graphs, import-ban mechanics, analyser exemption, `src/incidents/`, the utils→store constant inversion |
 | `data-layer.md` | `src/data/` purity, what belongs there, `utils/` placement |
-| `music-domain.md` | Music Core, tonal confinement, chord-quality registry, spelling, derived chord notes, reharmonization, Roman numerals |
+| `music-domain.md` | Music Core, tonal confinement, chord-quality registry, spelling, derived chord notes, reharmonization, Roman numerals, key change |
 | `vibes-and-grids.md` | Vibes as data, the one drum-grid library, provenance, the dice |
 | `beat.md` | The Beat instrument's three fields, voices, presets, `check:drums` |
 | `pattern-grids.md` | Fixed-width storage, the three step layouts, span editing, custom Chord/Bass patterns |
 | `melody-tracks.md` | Lead/FX via `MELODY_TRACKS`, record arm, key changes, borrowed rows |
-| `loops-and-solo.md` | Atomic loop delete + undo, session-only solo, audibility |
+| `loops-and-solo.md` | Loop content and defaults, atomic loop delete + undo, session-only solo, audibility |
 | `synth-voices.md` | `VoiceId`/owner, the frequency boundary, polyphony gain, voice lifetime, shared live/offline render |
 | `synth-patch.md` | Engine-tagged complete patches, presets, arp beside the patch, units in field names |
 | `persistence.md` | Persist write path, validation not migration, storage zones, project slot, autosave, Drive token |

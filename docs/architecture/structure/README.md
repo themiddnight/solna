@@ -127,7 +127,7 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 ### Organic-growth smells (refactor candidates)
 
 - **Misplaced logic.** `audio/` root holds about 8 files that build no audio (`leadMelody.ts` is 548 lines and is imported by `store/types.ts`). Preset lookups are spread across `audio/`, `store/` and `utils/`, which gives 8 duplicate filenames. Mixdown orchestration and the theme live in `Header.tsx`. (A6, D5, U7)
-- **Duplicated shapes.** The per-loop field list is written out in 5+ places, and slice defaults duplicate `createDefaultLoop`. (S7)
+- **Duplicated shapes.** The per-loop field list is written out in 5+ places, and slice defaults duplicate `createDefaultLoop`. (S7) **Fixed on `refactor/dev-424-loop-content`:** `LoopContent` is bound to `LOOP_FLAT_KEYS` and slice defaults read `createDefaultLoopContent()`; `sanitizeLoops` still validates field by field on purpose and `LOOP_COPY_GROUPS` stays a test-pinned partition.
 - **Large files.** `MasterRack` (1,286 lines, with 23 external field accesses from `DrumSynth`), `SortableLoopCard.tsx` (886), `PresetLibrary.tsx` (798), `useInputDeck.ts` (776), `useChordPlayback.ts` (710). (A7, U)
 - **Naming.**
   - `utils/meter.ts` is time signature, while `meterLevel` and `meterScale` are level meters.

@@ -93,8 +93,10 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
   what a **scale** change needs, and it is only correct on chords already in `root` — feeding it
   chords from another key collapses distinct chords onto one degree. `reharmonizeProgressionToScale`
   was the two operations conflated and is gone.
-- `ChordView.applyKeyScaleChange(chords, from, to, chordsReplaced)` picks between them:
-  transpose, snap, or transpose-then-snap, and does nothing at all when the chords were just replaced.
+- Key change is `changeKey` (`src/store/keyChange.ts`) — melodies always follow; chords
+  transpose (root) then snap (type) when the session toggle `autoReharmonize` is on; a vibe
+  passes `harmonizeChords: false` so content already built in the new key is left alone.
+  `harmonizeChordsToKey` is the chord half: transpose-then-snap in one call.
 - `ChordItem` has no `notes` field — it never stores pitches, only `{id, root, quality, bars,
   bassNote?}`. Every reader derives pitches at the point of use via
   `generateBlockChordNotes(quality, root, octave)`, never by reading a stored array. Never add a
@@ -107,12 +109,13 @@ scale-aware; only the chord tools, the bass engine and the scale-locked keyboard
 - Display only: `formatChordQuality` / `formatChordLabel` (`'maj'` → `''`, `'min7'` → `'m7'`). Stored
   `ChordItem.quality` tokens stay untouched.
 
-`ChordView.tsx` composes these: a per-degree quick-add row (`Triads` / `7th Chords` toggle), a borrowed-chord
-row, and an `autoReharmonize` effect (`applyKeyScaleChange`) that transposes on a root change, snaps on a
-scale change, and does nothing when the chords were just replaced wholesale. Turning the `autoReharmonize`
-toggle ON does not itself rewrite the chords — it only starts applying that effect to *future* key/scale
-changes, so it can't reproduce the old scramble. The explicit "Re-harmonize" button is the only path that
-snaps on demand; that is its deliberate, user-requested job.
+`ChordView.tsx` composes a per-degree quick-add row (`Triads` / `7th Chords` toggle) and a borrowed-chord
+row; `useProgressionHarmonize` reads the store's `reharmonizedIndicator` for the badge. The key-change
+harmonize itself lives in the store, not a component effect (`changeKey`, above): turning the
+`autoReharmonize` toggle ON does not itself rewrite the chords — it only gates whether the *next* key/scale
+change's `set()` also harmonizes chords, so it can't reproduce the old scramble. The explicit "Re-harmonize"
+button is a separate, on-demand path that snaps regardless of the toggle; that is its deliberate,
+user-requested job.
 `ChordItem.bassNote` is an optional slash-bass override consumed by the bass engine.
 
 ## The progression library

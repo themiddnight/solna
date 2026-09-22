@@ -84,6 +84,7 @@ actually implements either interface.
 | `leadRecord.ts` `startMelodyRecordBridges` | A live-clock collector, the record-arm sync, and one recorder per melody track (subscribes to the note-input bus and calls `record*` / `set*NoteLength`) | the second effect of `useEngineSync()` (`engineSync.ts:462`) | `leadClockActive`; the `focus`+`layer`+`activeLoopId` signature (`leadRecord.ts:261-315`); `subscribeNoteInput` | `recordingTrack`, `*MelodySteps`, `*MelodyOctave` |
 | `soloNav.ts` | Clears `soloTracks` on a layer or `activeLoopId` change | `useSoloNavClear()` `App.tsx:111` | `{layer, activeLoopId}`, `shallow` (`soloNav.ts:49-98`) | `soloTracks` |
 | `vibeNav.ts` | Clears `selectedVibeId` on any `activeLoopId` change | `useVibeNavClear()` `App.tsx:119` | `activeLoopId` (`vibeNav.ts:32-40`) | `selectedVibeId` |
+| `reharmonizeNav.ts` | Clears the `reharmonizedIndicator` badge on an `activeLoopId` change or a project install (the same-loop-id-collides-across-projects case `soloNav.ts` also guards against) | `useReharmonizeNavClear()` `App.tsx` | `{activeLoopId, projectInstallCount}`, `shallow` | `reharmonizedIndicator` |
 | `focusPanelSync.ts` | `inputPanelMode` follows `focusTrack` (drum → pads) | `useFocusPanelSync()` `App.tsx:115` | `focusTrack`, `fireImmediately` (`:39-50`) | `inputPanelMode` |
 | `songMode.ts` | Song-layer coordinator: enters or leaves song scope, subscribes to the playback clock while a song plays, and schedules `loadLoop(id, {atBoundary})` at each boundary | `useSongModeSync()` `App.tsx:106` | `{tab, activeLoopId, playerStatesKey, playbackScope}` (`:285-307`); `subscribePlaybackClock` | direct `useAppStore.setState` (`:114`, `:137`), `songLoopIndex`; calls `loadLoop` |
 | `audioRecovery.ts` | Audio health → recovery modal state; recovery = recreate session → `applyEngineSnapshot` → validate | `useEffect(() => startAudioRecoveryBridge())` `App.tsx:152` | `audioEngine.subscribeHealth` | its own vanilla store; `hardStopAll`; the incident store |
@@ -94,7 +95,7 @@ actually implements either interface.
 | Module | Role | Touches the engine directly? |
 |---|---|---|
 | `loadLoop.ts` | Atomic loop switch: hard-stop + cut + load the flat patch + restart, or the seamless `atBoundary` path (`:65-150`) | **yes**: `dropVoicesScheduledFrom`, `stopSource`, `resetClock` |
-| `vibes.ts` `applyVibeToStore` | Installs a resolved vibe in **one atomic `set()`** (**Fixed on `fix/structure-audit-bugs`:** it made about 40 sequential setter calls), with the key change from `keyChangePatch` | **yes**: `stopSource` |
+| `vibes.ts` `applyVibeToStore` | Installs a resolved vibe in **one atomic `set()`** (**Fixed on `fix/structure-audit-bugs`:** it made about 40 sequential setter calls), with the key change from `changeKey` (**Fixed on `refactor/dev-424-loop-content`:** `store/keyChange.ts`, `harmonizeChords: false`) | **yes**: `stopSource` |
 | `synthPresetInstall.ts` | Cuts the bus, then installs a preset (`:77-92`) | **yes**: `stopSource` (`:56`) |
 | `synthPatchPreview.ts`, `effectsPreview.ts`, `beatPreview.ts` | Draft previews that bypass the store | **yes**: `updateSynthPatch` / `updateEffects` / `applyBeatParams` |
 | `stopAndRestart.ts` | `commitRestartAfterStop` — the restart decision after a stop (`:47-64`) | no (direct `useAppStore.setState`, `:60`) |
@@ -109,6 +110,8 @@ actually implements either interface.
 `sourceBuses.ts` (the `SOURCE_BUSES` table plus the `SYNTH_*_FIELD` maps), `melodyTracks.ts`,
 `navSignature.ts`, `levelUnits.ts` (fader dB ↔ gain), `initialState.ts` (defaults),
 `beatPresets.ts`, `loop.ts` (loop keys, identity and custom-pattern span arithmetic),
+`loopDefaults.ts` (`createDefaultLoopContent()`, the one per-loop default source),
+`keyChange.ts` (`changeKey`/`harmonizeChordsToKey`, the pure key-change write),
 `loopCopy.ts` (`LOOP_COPY_GROUPS`), sanitizers (`sanitize.ts`, `sanitizeSynth.ts`,
 `sanitizeBeat.ts`), project I/O (`projectFormat.ts`, `projectFile.ts`, `projectSource.ts`,
 `projectStore.ts`, `projectStoreIdb.ts`), Drive (`driveAuth.ts`, `driveClient.ts`,
@@ -239,9 +242,11 @@ sequenceDiagram
   "the active loop being edited". Global (non-loop) content is `bpm`, `meterId`, `masterVolume`
   and `effects`.
 - **Key list.** `LOOP_FLAT_KEYS` (`loop.ts:20-78`) is the one enumeration used by the mirror,
-  by `loopStatePatch` (`loop.ts:467`) and by `PROJECT_LOOP_KEYS`. It is not tied to
-  `LoopStatePatch` at compile time: `loopStatePatch` casts (`loop.ts:477`). The link is held only
-  by tests (`loopCopy.test.ts:20` asserts that `LOOP_COPY_GROUPS` partitions the key list).
+  by `loopStatePatch` (`loop.ts:467`) and by `PROJECT_LOOP_KEYS`. **Fixed on
+  `refactor/dev-424-loop-content`:** `LoopContent` is now `Pick<Loop, LoopFlatKey>`, bound to
+  `LOOP_FLAT_KEYS` at compile time, so `loopStatePatch` returns a type that cannot drift from the
+  key list; `loopCopy.test.ts` still separately asserts that `LOOP_COPY_GROUPS` partitions the
+  key list.
 - **Flat → loops[] (write path).** `createLoopMirroringSet` (`loopSync.ts:66-88`) resolves each
   partial and, if any `LOOP_FLAT_KEYS` value changed by reference, appends a
   `loops: loops.map(active → {...loop, ...loopStatePatch(post-state)})` to the **same** `set()`.
@@ -309,6 +314,9 @@ sequenceDiagram
    (`musicContextSlice.ts:19-34`); `fxMelodySteps` keeps its old pitches. Whether that is
    intended is **(uncertain)**; no comment explains the asymmetry.
    **Fixed on `fix/structure-audit-bugs`:** `keyChangePatch` (`musicContextSlice.ts`) moves every `MELODY_TRACKS` row.
+   **Fixed on `refactor/dev-424-loop-content`:** renamed to `changeKey` (`store/keyChange.ts`), a pure
+   function every setter applies inside its own `set()`; behavior unchanged — every `MELODY_TRACKS`
+   row still moves.
 8. **Sharp-spelled identity.** CLAUDE.md: "everything generated, computed or persisted is
    `ROOTS`-spelled". MIDI note-on names come from `midiToFlatName` (`midiInput.ts:266`, i.e.
    `Note.fromMidi`, `musicCore/tonalAdapter.ts:38-39`). They pass unchanged through
@@ -336,6 +344,9 @@ sequenceDiagram
    Minor'` (`musicContextSlice.ts:10-11` vs `loopSlice.ts:32-33`), chord/bass defaults
    (`chordsSlice.ts:20-29`, `bassSlice.ts:18-26` vs `loopSlice.ts:40-54`), lead defaults
    (`leadSlice.ts:334-339` vs `loopSlice.ts:57-62`).
+   **Fixed on `refactor/dev-424-loop-content`:** `createDefaultLoopContent()` (`loopDefaults.ts`) is
+   now the single source of per-loop defaults; slice factories take a `defaults` parameter read from
+   it instead of repeating literals.
 3. **Non-atomic multi-step writes.** `applyVibeToStore` makes about 40 separate setter calls
    (`vibes.ts:138-258`). Each is its own `set` → mirror → persist serialise → every subscriber,
    and engineSync sees intermediate states. The pairs `setScaleRoot` then `setScaleType` also
