@@ -462,6 +462,7 @@ function useChordClock({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, chords]);
 }
+
 /**
  * The Chords player's clock controller: arms a chord on each bar line, emits
  * chord, bass and pad, soft-stops on the bar line and hard-stops all three

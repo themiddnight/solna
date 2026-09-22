@@ -27,17 +27,9 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 - The playback step, playhead beat and playing chord travel through the module pub/subs `src/components/playbackStep.ts`, `playheadBeat.ts` and `playingChord.ts`, never a slice. <!-- R017 --> ([ADR-0001](../../docs/decisions/0001-always-mounted-views.md))
 - One `audioEngine` singleton; every engine setter no-ops until `init()` creates the `AudioContext`. <!-- R030 -->
-- The controllers in `components/playback/` (`useChordClockPlayback`, `useLeadPlayback`, `useLeadStepPublisher`, `useSequencerPlayback`, `useArpPlayback`), `useInputDeck`, `usePlayheadSync` and the pub/subs live in `components/` and reach audio via `audio/playback/playbackEngine`, never `audio/engine`. <!-- R039 -->
+- The controllers in `components/playback/` (`useChordClockPlayback`, `useLeadPlayback`, `useLeadStepPublisher`, `useSequencerPlayback`, `useArpPlayback`), `useInputDeck`, `usePlayheadSync` and the pub/subs live in `components/` and reach audio through `audio/playback/*` facades (`playbackEngine`, `startArpClock`, …), never `audio/engine`. <!-- R039 -->
 
 ([ADR-0002](../../docs/decisions/0002-four-layer-import-architecture.md))
-
-## PlaybackHost
-
-- Transport controllers are mounted once, in `PlaybackHost`: a lane sounds because the host is mounted, never because its grid is. <!-- R040 -->
-- `PlaybackHost` (`components/playback/PlaybackHost.tsx`) is the only mount of the transport controllers (`useLeadPlayback`, `useLeadStepPublisher`, `useChordClockPlayback`, `useSequencerPlayback`), each called there in clock-listener order; a view never calls one. <!-- R312 -->
-- The playing chord travels through `components/playingChord.ts`, never a slice; the chord view's held-card id is local state reset on every publish. <!-- R313 -->
-
-([ADR-0039](../../docs/decisions/0039-playback-host.md))
 
 - `createRenderEngine(ctx)` is the one open door: a throwaway engine on a caller context; `renderMixdown.ts` never touches `audioEngine`; its snapshot is assembled by `store/mixdownSnapshot.ts`. <!-- R031 -->
 - Realtime-only concerns narrow through `realtimeCtx()` and stay out of the offline path. <!-- R208 -->
@@ -49,6 +41,14 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - The Chord publisher emits a progression-relative absolute step; each reader folds it by its own cycle; a producer never folds. <!-- R131 -->
 
 ([ADR-0012](../../docs/decisions/0012-pattern-storage-and-step-layouts.md))
+
+## PlaybackHost
+
+- Transport controllers are mounted once, in `PlaybackHost`: a lane sounds because the host is mounted, never because its grid is. <!-- R040 -->
+- `PlaybackHost` (`components/playback/PlaybackHost.tsx`) is the only mount of the transport controllers (`useLeadPlayback`, `useLeadStepPublisher`, `useChordClockPlayback`, `useSequencerPlayback`), each called there in clock-listener order; a view never calls one. <!-- R312 -->
+- The playing chord travels through `components/playingChord.ts`, never a slice; the chord view's held-card id is local state reset on every publish. <!-- R313 -->
+
+([ADR-0039](../../docs/decisions/0039-playback-host.md))
 
 ## Clock and engine bridge
 

@@ -34,7 +34,7 @@ flowchart TB
     LoopViews["Loop layer: SoundView · PatternView<br/>(Lead · FX · Accompaniment · Beat)"]
     SongViews["Song layer: ArrangeView · EffectsRackView"]
     Dock["BottomInputDock<br/>focus chip · keyboard · drum pads"]
-    Ctrls["Controller hooks mounted by PlaybackHost<br/>useChordClockPlayback · useLeadPlayback · useLeadStepPublisher · useSequencerPlayback<br/>useInputDeck · usePlayheadSync · playbackStep + playheadBeat + playingChord"]
+    Ctrls["Controller hooks mounted by PlaybackHost<br/>useChordClockPlayback · useLeadPlayback · useLeadStepPublisher · useSequencerPlayback<br/>useInputDeck (useArpPlayback wrapper) · usePlayheadSync · playbackStep + playheadBeat + playingChord"]
     Meters["Meter components (analyser reads)"]
   end
 
@@ -47,7 +47,7 @@ flowchart TB
   end
 
   subgraph Audio["audio/"]
-    PB["playback/ — playbackEngine (name → Hz, owner)<br/>synthPlayback · chordPlayback · arpPlayback (React hook)"]
+    PB["playback/ — playbackEngine (name → Hz, owner)<br/>synthPlayback · chordPlayback · startArpClock"]
     Plan["playback/plan/ — planners<br/>(chordPlan loads engine via chordPlayback)"]
     Eng["engine singleton"]
     Rack["MasterRack (god object)<br/>source buses → reverb/delay/distortion sends (not the Beat bus) → master → comp → limiter"]
