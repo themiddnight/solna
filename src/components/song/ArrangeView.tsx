@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { KeyRound, Plus } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -28,11 +28,14 @@ import { getMeter } from '@/utils/meter';
 import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
 import { useTimedToast } from '../ui/useTimedToast';
+import { KeyChangeDialog } from './KeyChangeDialog';
 import { LoopCopyDialog } from './LoopCopyDialog';
 import { LoopUndoToast } from './LoopUndoToast';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
+import { LOOP_UNDO_MS } from './loopUndo';
+import { keyChangeToastMessage, useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
 
 /** Stable identity for the closed-dialog case — see the `labels` memo below. */
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -223,9 +226,6 @@ function useArrangeDrag(loops: Loop[]) {
   return { sensors, handleDragEnd };
 }
 
-/** How long a loop delete stays undoable. */
-const LOOP_UNDO_MS = 5000;
-
 /**
  * Delete with Undo. `deleteLoopLive` never stops a running transport: deleting
  * the loop it is playing loads the fallback in `deleteLoop`'s own single write,
@@ -353,21 +353,40 @@ function useLoopCardActions() {
 type LoopCardActions = ReturnType<typeof useLoopCardActions>;
 
 /** The Arrange header: the loop count, and the Add Loop action. */
-function ArrangeHeader({ loopCount, onAdd }: { loopCount: number; onAdd: () => void }) {
+function ArrangeHeader({
+  loopCount,
+  onAdd,
+  onChangeKey,
+}: {
+  loopCount: number;
+  onAdd: () => void;
+  onChangeKey: () => void;
+}) {
   return (
     <ViewHeader
       view="arrange"
       badge={`${loopCount} loop${loopCount === 1 ? '' : 's'}`}
       actions={
-        <button
-          id="btn-arrange-add"
-          type="button"
-          onClick={onAdd}
-          className="btn btn-sm btn-primary gap-1.5"
-        >
-          <Plus className="w-4 h-4" />
-          Add Loop
-        </button>
+        <div className="flex gap-2">
+          <button
+            id="btn-arrange-change-key"
+            type="button"
+            onClick={onChangeKey}
+            className="btn btn-sm btn-ghost gap-1.5"
+          >
+            <KeyRound className="w-4 h-4" />
+            Change key…
+          </button>
+          <button
+            id="btn-arrange-add"
+            type="button"
+            onClick={onAdd}
+            className="btn btn-sm btn-primary gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            Add Loop
+          </button>
+        </div>
       }
     />
   );
@@ -502,6 +521,7 @@ export const ArrangeView = React.memo(function ArrangeView() {
   const currentStep = useArrangePlayhead({ isPlaying, cycleSteps, playingId });
   const { sensors, handleDragEnd } = useArrangeDrag(loops);
   const actions = useLoopCardActions();
+  const keyChange = useLoopKeyChangeUndo();
 
   // The mirrored per-loop field write rebuilds `loops` (and every loop
   // object in it) on every knob/fader change to the active loop, so keying
@@ -531,7 +551,11 @@ export const ArrangeView = React.memo(function ArrangeView() {
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto flex flex-col gap-3">
-      <ArrangeHeader loopCount={loops.length} onAdd={() => addLoop()} />
+      <ArrangeHeader
+        loopCount={loops.length}
+        onAdd={() => addLoop()}
+        onChangeKey={keyChange.openKeyChange}
+      />
 
       <ArrangeLoopList
         loops={loops}
@@ -548,8 +572,23 @@ export const ArrangeView = React.memo(function ArrangeView() {
         actions={actions}
       />
 
-      {actions.deletedLoop && (
-        <LoopUndoToast label={loopLabel(actions.deletedLoop.loop)} onUndo={actions.onUndoDelete} />
+      {(actions.deletedLoop || keyChange.keyChangeUndo) && (
+        <div className="toast toast-bottom toast-center z-30 animate-fade-in">
+          {actions.deletedLoop && (
+            <LoopUndoToast
+              message={`${loopLabel(actions.deletedLoop.loop)} deleted`}
+              buttonId="btn-undo-loop-delete"
+              onUndo={actions.onUndoDelete}
+            />
+          )}
+          {keyChange.keyChangeUndo && (
+            <LoopUndoToast
+              message={keyChangeToastMessage(keyChange.keyChangeUndo)}
+              buttonId="btn-undo-key-change"
+              onUndo={keyChange.onUndoKeyChange}
+            />
+          )}
+        </div>
       )}
 
       {actions.copyTargetId !== null && (
@@ -559,6 +598,15 @@ export const ArrangeView = React.memo(function ArrangeView() {
           labels={labels}
           onApply={actions.onApplyCopy}
           onClose={actions.closeCopy}
+        />
+      )}
+
+      {keyChange.keyChangeOpen && (
+        <KeyChangeDialog
+          loops={loops}
+          activeLoopId={activeLoopId}
+          onApply={keyChange.onApplyKeyChange}
+          onClose={keyChange.closeKeyChange}
         />
       )}
     </div>

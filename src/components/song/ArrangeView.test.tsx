@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/store';
 import { ArrangeView, buildEditRoute, editLoop } from './ArrangeView';
 import { loopIdKeyOf } from './loopIdKey';
 import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
+import { keyChangeToastMessage } from './useLoopKeyChangeUndo';
 
 // editLoop -> loadLoop mutates the shared singleton store (flat slices,
 // activeLoopId, player states). bun runs every test file in one process
@@ -151,6 +152,25 @@ describe('ArrangeView', () => {
     // dialog, held by copyTargetId, and it is closed until a card asks.
     expect(html).not.toContain('btn-loop-copy-apply');
     expect(html).not.toContain('select-loop-copy-source');
+  });
+});
+
+describe('ArrangeView key change', () => {
+  test('the Arrange header offers Change key… beside Add Loop', () => {
+    const html = renderToString(<ArrangeView />);
+    expect(html).toContain('id="btn-arrange-change-key"');
+    expect(html.indexOf('btn-arrange-change-key')).toBeLessThan(html.indexOf('btn-arrange-add'));
+  });
+
+  test('the key change toast counts loops', () => {
+    expect(keyChangeToastMessage({ snapshots: [{ loopId: 'a', content: {} as never }] })).toBe(
+      'Key changed on 1 loop'
+    );
+    expect(
+      keyChangeToastMessage({
+        snapshots: [1, 2, 3].map((i) => ({ loopId: `l${i}`, content: {} as never })),
+      })
+    ).toBe('Key changed on 3 loops');
   });
 });
 
