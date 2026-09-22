@@ -105,7 +105,6 @@ export class AudioEngine {
   private get clock() { return this.session?.clock ?? null; }
   private get synthManager() { return this.session?.synthManager ?? null; }
   private get lfoBank() { return this.session?.lfoBank ?? null; }
-  private isInitialized = false;
 
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -179,14 +178,6 @@ export class AudioEngine {
   /** Render-only: an extra edge off a source bus's output (stems, R307). No-op before a context. */
   connectSourceStem(source: string, target: AudioNode): void {
     this.session?.masterRack.connectSourceStem(source, target);
-  }
-
-  getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {
-    this.session?.masterRack.getByteFrequencyData(array);
-  }
-
-  getByteTimeDomainData(array: Uint8Array<ArrayBuffer>): void {
-    this.session?.masterRack.getByteTimeDomainData(array);
   }
 
   getCompressorReduction(): number { return this.session?.masterRack.getCompressorReduction() ?? 0; }
@@ -463,7 +454,6 @@ export class AudioEngine {
       }
     }
     this.markActivity();
-    this.isInitialized = true;
   }
 
   /**

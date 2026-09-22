@@ -1369,16 +1369,4 @@ export class MasterRack {
   connectSourceStem(source: string, target: AudioNode): void {
     this.getSourceBus(source).connect(target);
   }
-
-  getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {
-    if (this.analyser) {
-      this.analyser.getByteFrequencyData(array);
-    }
-  }
-
-  getByteTimeDomainData(array: Uint8Array<ArrayBuffer>): void {
-    if (this.analyser) {
-      this.analyser.getByteTimeDomainData(array);
-    }
-  }
 }

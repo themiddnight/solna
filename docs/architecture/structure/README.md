@@ -139,8 +139,8 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
   - 229 cross-folder `../` imports remain despite the `@/` rule.
   - (D4, D6-D8)
 - **Dead or stale code.**
-  - `getByteFrequencyData`/`getByteTimeDomainData` and `isInitialized` are unused.
-  - The unused `KEYBOARD_NOTES` re-export.
+  - `getByteFrequencyData`/`getByteTimeDomainData` and `isInitialized`: **fixed (DEV-426)** — removed from the engine and the rack; `AudioVisualizer` reads the analyser node directly.
+  - The `KEYBOARD_NOTES` re-export in `loop/SoundView.tsx` reads as dead inside `src/`, but `scripts/check-key-bindings.ts` imports it: it is the gate's historical path, kept on purpose (DEV-426).
   - Six copies of a toast timer (`ui/useTimedToast.ts` now exists; only `InstantVibesBar` moved onto it).
   - Stale comments. (The skill's stale `AmbientBackdrop.tsx` entry is fixed on this branch.)
   - (A8, U8)

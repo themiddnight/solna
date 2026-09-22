@@ -20,9 +20,9 @@ section of `docs/superpowers/plans/2026-09-21-structure-audit-fixes.md`.
 
 | id | item (today's path) | effort | risk | why |
 |---|---|---|---|---|
-| A8a | `engine.getByteFrequencyData` / `getByteTimeDomainData` (`src/audio/engine.ts`) have no caller — `AudioVisualizer` and `masterRack` call the analyser node directly | S | none | real dead code; Knip can't see class methods |
+| A8a | `getByteFrequencyData` / `getByteTimeDomainData` on both `src/audio/engine.ts` and `src/audio/masterRack.ts` have no caller — `AudioVisualizer` reads the analyser node directly | S | none | real dead code; Knip can't see class methods |
 | A8b | `private isInitialized` in `src/audio/engine.ts` is written, never read | S | none | dead field |
-| A8c | `export { KEYBOARD_NOTES } from "../ui/Keyboard"` in `src/components/loop/SoundView.tsx` — re-export with no importer | S | none | dead re-export; also removes a `../` hop |
+| ~~A8c~~ | `export { KEYBOARD_NOTES }` in `src/components/loop/SoundView.tsx` — **not dead**: `scripts/check-key-bindings.ts` (the `check:keys` gate) imports it. Dropped from the fix list during implementation; the audit line saying it is unused was corrected instead. | — | — | my list was wrong, the code is right |
 | A8d | toast timers: `useTimedToast.ts` exists but only `InstantVibesBar` uses it; `ChordPresetLibrary`, `SynthPresetLibrary`, `synthPresetBrowser`, `useChordView` still hand-roll one | M | low | one timer implementation, each site keeps its own copy of the bug otherwise |
 | D4a | `src/utils/meter.ts` is time signature, while `meterLevel`/`meterScale` are level meters | S | low | rename the time-signature one (e.g. `timeSignature.ts`); mechanical, import-only churn |
 | D4b | `src/utils/musicTheory.ts` (645 lines) mixes theory and timing | M | low | split timing helpers out; the file is the one people grep first |
