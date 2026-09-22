@@ -567,7 +567,6 @@ export function useProjectMenu(): UseProjectMenu {
   };
 }
 
-/** The dropdown's rows: three sections, with Save's label and the Drive account placed. */
 /** The menu's rows, as the dropdown and the mobile sheet both render them. */
 export function ProjectMenuSections({
   sections,

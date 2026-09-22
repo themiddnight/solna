@@ -175,9 +175,9 @@ form (one frame is mounted at a time). `ExportButton`'s `row` swaps only the tri
 `ExportDialog` renders beside it as today. Field tools ignore the prop.
 
 No placement field on the descriptor (ADR-0040 rejected one): the split is
-`MOBILE_BAR_TOOL_IDS` in the mobile top bar — a rendering choice. `headerToolsOn(layer)` (all
-groups, list order) joins `headerToolsFor(layer, group)`; `HeaderToolId`, `HeaderTool` and
-`HeaderToolProps` become exports.
+`MOBILE_BAR_TOOL_IDS` in the mobile top bar — a rendering choice. `headerToolsOn(layer)` filters
+`HEADER_TOOLS` directly (both groups, list order), beside `headerToolsFor(layer, group)`;
+`HeaderToolId`, `HeaderTool` and `HeaderToolProps` become exports.
 
 ### 6.3 Project rows — inline, not nested
 

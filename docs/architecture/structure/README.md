@@ -30,7 +30,7 @@ playback controllers live there (see finding U1).
 ```mermaid
 flowchart TB
   subgraph Views["components/ — views AND playback controllers"]
-    Shell["App · layout shell (useLayoutMode → DesktopShell / MobileShell)<br/>Header (tabs, HEADER_TOOLS: key/scale, export, theme)<br/>InstantVibesBar · TransportBar (play, BPM, meter, metronome)"]
+    Shell["App · layout shell (useLayoutMode → DesktopShell / MobileShell)<br/>Header or MobileTopBar (HEADER_TOOLS, menu sheet) · MobileTabBar<br/>InstantVibesBar · TransportBar (play, BPM, meter, metronome)"]
     LoopViews["Loop layer: SoundView · PatternView<br/>(Lead · FX · Accompaniment · Beat)"]
     SongViews["Song layer: ArrangeView · EffectsRackView"]
     Dock["BottomInputDock<br/>focus chip · keyboard · drum pads"]

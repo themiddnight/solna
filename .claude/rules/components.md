@@ -63,8 +63,12 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - The layout mode is `useLayoutMode()` (`components/shell/useLayoutMode.ts`): viewport width at Tailwind's `md`, never persisted, never a slice, no user override; nothing else reads the viewport to pick a frame. <!-- R315 -->
 - `Workspace` owns everything that must survive a layout switch — the coordinators, `PlaybackHost` and the app-level dialogs; a shell (`DesktopShell`, `MobileShell`) owns only the visible frame and never mounts one of those. <!-- R316 -->
 - A Header tool is a `HEADER_TOOLS` row (`components/header/headerTools.ts`) whose `layers` is its only availability gate; a new tool is a row, never JSX in `Header.tsx`, and never gates itself on the layer. <!-- R317 -->
+- Mobile navigation is `MobileTabBar` (`components/shell/MobileTabBar.tsx`): the `VIEW_ORDER` tabs, each calling `setActiveTab`; the tab implies the layer (`layerForTab`); the mobile frame has no layer switch, no second navigation state and no route logic of its own. <!-- R318 -->
+- The mobile top bar splits `HEADER_TOOLS` by id (`MOBILE_BAR_TOOL_IDS`, `components/shell/useMobileTopBar.ts`): field tools inline, every other available tool in the menu sheet as `variant="row"`; a tool that can reach the menu renders a `MenuRowButton` for `row`; the descriptor gains no placement or label field. <!-- R319 -->
+- The mobile menu sheet is a `Modal` with `placement="bottom"`, always rendered and closed only by dismissal; what a row opens renders inside the sheet's dialog — a nested dialog, or `afterBox` for a fixed overlay — never inside a daisyUI `menu` item. <!-- R320 -->
+- Exactly one element per frame consumes `env(safe-area-inset-bottom)`: `TransportBar` on desktop, `MobileTabBar` on mobile (`TransportBar bottomInset={false}`). <!-- R321 -->
 
-([ADR-0040](../../docs/decisions/0040-layout-shell.md))
+([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md))
 
 ## Prohibited
 
@@ -84,3 +88,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A viewport read that picks a frame outside `useLayoutMode`, or the layout mode in a slice or storage <!-- R315 -->
 - A coordinator, `PlaybackHost` or an app-level dialog mounted inside a shell <!-- R316 -->
 - A Header tool written as JSX in `Header.tsx`, or a tool gating itself on the layer <!-- R317 -->
+- A layer switch, a second navigation state or route logic in the mobile frame <!-- R318 -->
+- A placement or label field on a `HEADER_TOOLS` row, or a menu tool without a `row` rendering <!-- R319 -->
+- Closing the mobile menu sheet on a row tap, or a dialog rendered inside a daisyUI `menu` item <!-- R320 -->
+- Two elements of one frame both consuming the bottom safe-area inset <!-- R321 -->

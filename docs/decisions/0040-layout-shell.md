@@ -53,6 +53,9 @@ rotation or a resize, so this is rare. Two consequences of that remount:
 R014's first level moved from `App.tsx` to
 `shell/LayerPages.tsx`. U7's theme half is closed. The golden and `bun run verify` did not change.
 
+**Amended by [ADR-0041](0041-mobile-frame.md):** DEV-431 diverged `MobileShell`; a tool's
+`Component` takes an optional `variant` (`bar` | `row`).
+
 **Amends [ADR-0001](0001-always-mounted-views.md)** (R014's first gating level, now
 `shell/LayerPages.tsx`), **[ADR-0039](0039-playback-host.md)** (the host's position: first child
 of `Workspace`'s root, before the shell), **[ADR-0022](0022-persist-write-path-and-guarded-storage.md)**

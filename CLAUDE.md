@@ -55,7 +55,9 @@ Single-page audio workstation ("Solna"): two layers (Loop, Song) holding four ta
 and Pattern on the loop layer, Arrange and Master on the song layer — plus Pattern's four
 segments (Lead, FX, Accompaniment, Beat). `Workspace` (`App.tsx`) keeps the coordinators,
 `PlaybackHost` and the dialogs; `useLayoutMode()` picks `DesktopShell` or `MobileShell`
-(`src/components/shell/`) for the visible frame. <!-- R316 -->
+(`src/components/shell/`) for the visible frame. <!-- R316 --> Below `md` the mobile frame
+navigates by a four-tab bottom bar (the tab implies the layer) and holds the non-field tools and
+project actions in a menu sheet. <!-- R318 -->
 
 ### Everything stays mounted
 
@@ -156,7 +158,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `theming.md` | Theme tokens and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |
 | `note-input.md` | The note-input dispatcher and focus-routed input |
-| `components.md` | Component logic in a colocated hook, narrow store selectors, placement, the layout shell and `HEADER_TOOLS` |
+| `components.md` | Component logic in a colocated hook, narrow store selectors, placement, the layout shell, `HEADER_TOOLS` and the mobile frame |
 | `utils.md` | One theme per `utils/` file, utils layering, placement |
 
 **Decisions:** the ADR index and template are in [`docs/decisions/README.md`](docs/decisions/README.md).

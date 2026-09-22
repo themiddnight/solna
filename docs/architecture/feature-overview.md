@@ -42,7 +42,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | `audio/export/` | Offline mixdown, MIDI and stems export | `renderMixdown`, `renderMidi`, `renderStems` |
 | `audio/runtime/` | AudioContext session & health | `audioSession`, `healthMonitor`, `policy` |
 | `store/` | Zustand store (slices) + bridges | `store`, `*Slice`, `engineSync`, `sanitize`, `projectStore`, `projectAutosave`, `drive*`, `midiInput`, `vibes` |
-| `components/` | React views **and**, in `components/playback/`, the transport controller hooks mounted by `PlaybackHost` (`useChordClockPlayback`, `useLeadPlayback`, `useSequencerPlayback`) plus `useInputDeck` | `loop/*`, `song/*`, `project/*`, `ui/*`, `shell/*` (`DesktopShell`, `MobileShell`, `useLayoutMode`), `header/*`, `Header`, `TransportBar`, `InstantVibesBar` |
+| `components/` | React views **and**, in `components/playback/`, the transport controller hooks mounted by `PlaybackHost` (`useChordClockPlayback`, `useLeadPlayback`, `useSequencerPlayback`) plus `useInputDeck` | `loop/*`, `song/*`, `project/*`, `ui/*`, `shell/*` (`DesktopShell`, `MobileShell`, `MobileTopBar`, `MobileTabBar`, `useLayoutMode`), `header/*`, `Header`, `TransportBar`, `InstantVibesBar` |
 | `routing/` | URL ↔ layer/tab/loop | `tabRouting`, `useRouteSync` |
 | `incidents/` | Bug-report privacy boundary | `recorder`, `sanitize`, `githubReport` |
 | `diagnostics/` | Dev diagnostics recorder (imports store, engine and UI directly) | `recorder`, `DiagnosticPanel` |
@@ -55,7 +55,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 flowchart TB
   subgraph UI["components/ (React views — all mounted, gated hidden/block)"]
     direction TB
-    Header["Layout shell (DesktopShell / MobileShell)<br/>Header · TransportBar · InstantVibesBar"]
+    Header["Layout shell (DesktopShell / MobileShell)<br/>Header or MobileTopBar + MobileTabBar · TransportBar · InstantVibesBar"]
     subgraph LoopL["Loop layer"]
       Sound["Sound view<br/>synth · Beat kit · mixer"]
       Pattern["Pattern view<br/>Lead · FX · Accompaniment · Beat"]
