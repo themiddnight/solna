@@ -16,7 +16,7 @@ cannot read the store, because `src/audio/` may not import `src/store/`.
 
 `createRenderEngine(ctx)` returns a throwaway engine bound to a caller-supplied context, which is
 how the offline mixdown render (`src/audio/export/renderMixdown.ts`) works — it never touches
-`audioEngine`, and the snapshot it renders is assembled by `store/mixdownSlice.ts`, because
+`audioEngine`, and the snapshot it renders is assembled by `store/mixdownSnapshot.ts`, because
 `src/audio/` may not read the store.
 
 ### The context is the only difference
@@ -44,7 +44,7 @@ second implementation to write.
 
 - **R031** — `createRenderEngine(ctx)` is the one open door: throwaway engine on a caller context;
   `renderMixdown.ts` never touches `audioEngine`; its snapshot is assembled by
-  `store/mixdownSlice.ts`.
+  `store/mixdownSnapshot.ts`.
 - **R206** — One synth implementation serves live and offline: `createSubtractiveVoice` takes any
   `BaseAudioContext`; `SynthVoiceManager` holds no module state.
 - **R207** — Every scheduled time is an argument; the voice module never reads `ctx.currentTime`;

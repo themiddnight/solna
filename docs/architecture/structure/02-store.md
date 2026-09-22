@@ -17,13 +17,13 @@ There is **one app store**, `useAppStore` (`src/store/store.ts:286`), built as
 **every** slice. `store.ts:296-312` spreads **17 slice creators**, in this order:
 
 transport, musicContext, synth, chords, bass, pad, lead, fx, beat, effects, ui, presets, loop,
-loopCopy, project, mixdown, drive.
+loopCopy, project, export, drive.
 
 `AppStore` (`types.ts:756-772`) extends only **16** interfaces. `loopCopySlice` has no interface
 of its own: it returns `Pick<LoopSlice, 'applyLoopCopy'>` (`loopCopySlice.ts:9`), and
 `applyLoopCopy` is declared inside `LoopSlice` (`types.ts:753`). Three slice interfaces live in
 their slice files rather than in `types.ts`: `ProjectSlice` (`projectSlice.ts:59`), `DriveSlice`
-(`driveSlice.ts:22`), `MixdownSlice` (`mixdownSlice.ts:40`).
+(`driveSlice.ts:22`), `ExportSlice` (`exportSlice.ts`).
 
 A **second, separate** zustand store exists: `audioRecoveryStore`, a vanilla `createStore`
 (`audioRecovery.ts:58`, exported at `:173`). The incident store (`@/incidents/incidentStore`) is
@@ -55,8 +55,8 @@ summarised as "setters".
 | **loop** `loopSlice.ts` (273) | `loops`, `activeLoopId` | `addLoop`, `duplicateLoop`, `deleteLoop`, `reorderLoops`, `reorderLoopsArray`, `setLoopName`, `setLoopTempName`, `setLoopRepeatCount`, `setLoopMix`, `setActiveLoop` | transport `playbackScope`, `songLoopIndex`, player fields | transport: `playbackScope` (`:114`, `:149`), `songLoopIndex`, stops every player on delete (`:175-178`); flat per-loop mix keys via `setLoopMix` (`:260-269`) |
 | **loopCopy** `loopCopySlice.ts` (61) | — | `applyLoopCopy` | loop | `loops`, then calls `loadLoop` (engine side effects) when the target is active (`:26-29`) |
 | **loopKeyChange** `loopKeyChangeSlice.ts` | — | `applyLoopKeyChange`, `undoLoopKeyChange` | loop | `loops` plus, when the active loop is among the changed/restored ones, its flat key fields — one `set()` per action, never `crossLoopSeam` or `loadLoop` |
-| **project** `projectSlice.ts` (474) | `projectName`, `projectSource`, `projectStoreStatus`, `projectNotice` | `setProjectNotice`, `setProjectName`, `loadProject`, `save`, `saveProject`, `saveProjectAsLocal`, `saveAsBody`, `adoptSaveAs`, `applyProjectSource`, `newProject`, `openProjectFile`, `exportProjectFile` | everything in `PROJECT_CONTENT_KEYS`; presets `customBeatPresets` | `installProject` (`:155-203`) writes all project content, every per-loop flat key, `activeLoopId`, `selectedVibeId`, `songLoopIndex`, `soloTracks`, `recordingTrack`, `loopClipboard`; it also calls `cancelMixdown`, `hardStopAll` and `audioEngine.stopSource` directly (`:165-169`); `saveProject` calls drive's `saveToDrive` (`:307`) |
-| **mixdown** `mixdownSlice.ts` (203) | `exporting`, `mixdownProgress` | `setMixdownProgress`, `cancelMixdown`, `isMixdownCancelled`, `exportMixdown`, `buildMixdownSnapshot` | all content via `buildProjectContent` + `SOURCE_BUSES` (`:92-131`) | project `projectNotice` (`:180`) |
+| **project** `projectSlice.ts` (474) | `projectName`, `projectSource`, `projectStoreStatus`, `projectNotice` | `setProjectNotice`, `setProjectName`, `loadProject`, `save`, `saveProject`, `saveProjectAsLocal`, `saveAsBody`, `adoptSaveAs`, `applyProjectSource`, `newProject`, `openProjectFile`, `exportProjectFile` | everything in `PROJECT_CONTENT_KEYS`; presets `customBeatPresets` | `installProject` (`:155-203`) writes all project content, every per-loop flat key, `activeLoopId`, `selectedVibeId`, `songLoopIndex`, `soloTracks`, `recordingTrack`, `loopClipboard`; it also calls `cancelExport`, `hardStopAll` and `audioEngine.stopSource` directly (`:165-169`); `saveProject` calls drive's `saveToDrive` (`:307`) |
+| **export** `exportSlice.ts` | `exportJob` | `startExport`, `cancelExport` | all content via `buildMixdownSnapshot` (`mixdownSnapshot.ts`) | project `projectNotice` |
 | **drive** `driveSlice.ts` (163) | `driveSignedIn`, `driveAvailable`, `driveUser` | `connectDrive`, `disconnectDrive`, `listDriveProjects`, `openFromDrive`, `saveToDrive`, `saveAsToDrive` | project `projectSource` | project: `projectNotice`; calls `openProjectFile`, `saveAsBody`, `adoptSaveAs`, `applyProjectSource`, `exportProjectFile` |
 
 ### 1.2 How the melody tracks are built
@@ -191,7 +191,7 @@ flowchart LR
 | IndexedDB `solna-projects` / store `project` / key `current` | `ProjectSlotRecord { body, source }` (`projectSource.ts:89`) | `projectSlice.save` → `projectStore.save` → `putRecord` (`projectStoreIdb.ts:73-77`) | `projectStore.load` → `sanitizeSlotRecord` → `normalizeStoredBody` (`projectStore.ts`) |
 | `.solna` file (local handle or download) | `ProjectBody` = envelope + `content` (`projectFormat.ts:156-175`) | `saveProject` / `saveProjectAsLocal` (`projectSlice.ts:300-332`) | `parseProjectFile` (`projectFile.ts:165`) → `openProjectFile` |
 | Google Drive (`application/vnd.solna`) | the same `ProjectBody` | `saveToDrive`, `saveAsToDrive` (`driveSlice.ts:136-161`) | `openFromDrive` → `openProjectFile` (`:119-134`) |
-| memory only | everything else: transport players, playhead, `playbackScope`, `songLoopIndex`, `soloTracks`, `recordingTrack`, clipboards, cursors, **`midiMappings`**, `selectedMidiInputId`, panel state, drive/project/mixdown status | — | — |
+| memory only | everything else: transport players, playhead, `playbackScope`, `songLoopIndex`, `soloTracks`, `recordingTrack`, clipboards, cursors, **`midiMappings`**, `selectedMidiInputId`, panel state, drive/project status, `exportJob` | — | — |
 
 `PROJECT_CONTENT_KEYS = ['bpm','meterId','masterVolume','effects','loops']`
 (`projectFormat.ts:177`). A loop in a body is `PROJECT_LOOP_KEYS = ['id','name','repeatCount',
@@ -285,7 +285,7 @@ sequenceDiagram
    and one fixed key; version 2 deletes the old two-store layout (`projectStoreIdb.ts:7-12`,
    `:50-56`, `:73-77`).
 2. **Fixed on `fix/structure-audit-bugs`:** CLAUDE.md now points at `store.ts` as the binding list. **Slice roster.** CLAUDE.md listed 12 slices. `store.ts:296-312` composes 17 (it also has
-   `pad`, `fx`, `loopCopy`, `mixdown`, `drive`). `feature-overview.md:72` has the full list.
+   `pad`, `fx`, `loopCopy`, `export`, `drive`). `feature-overview.md:72` has the full list.
 3. **Fixed on `fix/structure-audit-bugs`:** CLAUDE.md names it. **"One Zustand store".** A second vanilla store holds audio-recovery state
    (`audioRecovery.ts:58`).
 4. **Fixed on `fix/structure-audit-bugs`:** `store/persistStorage.ts` (`createDedupedJsonStorage`) receives persist's object and
@@ -369,15 +369,15 @@ sequenceDiagram
    beside `MELODY_TRACKS`. Also, `loopStatePatch` (`loop.ts:477`) and `pickLoopContent`
    (`projectFormat.ts:215-219`) build objects by key iteration and cast.
 7. **Cross-slice coupling / god slice.** `projectSlice.installProject` resets state owned by six
-   other slices and calls into mixdown, transport and the engine (`projectSlice.ts:155-203`).
+   other slices and calls into export, transport and the engine.
    `projectSlice` ↔ `driveSlice` call each other's actions through `get()` (`projectSlice.ts:307`
    ↔ `driveSlice.ts:133,155,158`). This is why `saveToDrive`, `saveAsBody`, `adoptSaveAs` and
    `applyProjectSource` are public store actions with no component caller.
 8. **Unused or test-only actions** (no non-test caller found by grep): ~~`setActiveLoop`~~
    (removed on `fix/structure-audit-bugs`), `setMidiMappings` (`uiSlice.ts:127`, no callers at
-   all), `setCustomChordRhythm` (`chordsSlice.ts:72`), `setCustomBassPattern` (`bassSlice.ts:38`),
-   `buildMixdownSnapshot` as a store action (`mixdownSlice.ts:149`; the module function is what is
-   used). Knip's zero baseline cannot see these, because they are object members.
+   all), `setCustomChordRhythm` (`chordsSlice.ts:72`), `setCustomBassPattern` (`bassSlice.ts:38`).
+   `buildMixdownSnapshot` is now a plain function of the state in `mixdownSnapshot.ts`, not a
+   store action. Knip's zero baseline cannot see these, because they are object members.
 9. **Duplicated helpers.** `isPlainObject` exists in `sanitize.ts:356` and `projectFile.ts:30`. The
    incident-recorder construction is repeated in `audioRecovery.ts:142-148` and
    `incidentReporter.ts:22-28`.

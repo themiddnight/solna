@@ -24,7 +24,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | 7 | Transport & music context | TransportBar (bottom) + Header | Play/stop, BPM, meter, metronome, playhead in TransportBar; key & scale in Header |
 | 8 | Performance input | Bottom dock + Sound view | Dock: focus chip, QWERTY / on-screen keyboard, drum pads (per-pad velocity persisted). Arpeggiator is a per-track Sound panel; Web MIDI is a background bridge; solo/mute live on the mixer |
 | 9 | Project management | Project menu | IndexedDB autosave, `.solna` file open/save, Google Drive open/save |
-| 10 | Mixdown export | Header (song layer only) | Offline render of the song to WAV |
+| 10 | Export (mixdown WAV) | Header Export button (song layer) → Export dialog | Offline render of the song to WAV; one job at a time, kinds as data (`store/exportKinds.ts`) |
 | 11 | Audio health & recovery | Transport | AudioContext health monitor; recovery is a branch of `IncidentDialog`, surfaced by the `IncidentWarning` chip |
 | 12 | Incident reporting | Dialog | Privacy-safe bug reports, explicit GitHub export |
 | 13 | Diagnostics | Project menu → Tools (DEV builds only) | Session recorder, render counts, exportable diagnostics |
@@ -71,9 +71,9 @@ flowchart TB
   Routing["routing/<br/>URL ↔ layer / tab / loopId"]
 
   subgraph Store["store/ — one Zustand store"]
-    Slices["slices (store.ts binds): transport · musicContext · synth · chords · bass · pad<br/>lead · fx · beat · effects · ui · presets · loop · loopCopy · project · mixdown · drive<br/>+ separate audioRecovery store"]
+    Slices["slices (store.ts binds): transport · musicContext · synth · chords · bass · pad<br/>lead · fx · beat · effects · ui · presets · loop · loopCopy · project · export · drive<br/>+ separate audioRecovery store"]
     EngineSync["engineSync<br/>store → engine bridge for persistent state"]
-    Snapshots["playbackPlanSnapshots · mixdownSlice"]
+    Snapshots["playbackPlanSnapshots · mixdownSnapshot"]
     Persist["persist + sanitize<br/>(validate, no migrations;<br/>serialise only when a persisted value changed)"]
     Autosave["projectAutosave · projectStore<br/>(IDB: 1 object store, 1 key)"]
     MIDI["midiInput"]

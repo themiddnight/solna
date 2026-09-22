@@ -21,8 +21,8 @@ import type { MixdownLoop, MixdownSnapshot } from '../playback/plan/songSnapshot
  * `SOURCE_BUSES` (src/store/sourceBuses.ts) is the real roster, and the SLICE
  * iterates it — this module may not import it, because the eslint block
  * covering src/audio/** has no allowTypeImports exemption and this is a runtime
- * value. So the fixture states its own list, and `mixdownSlice.test.ts` asserts
- * the slice's output names exactly the SOURCE_BUSES roster. Keep the two in
+ * value. So the fixture states its own list, and `mixdownSnapshot.test.ts` asserts
+ * the snapshot's output names exactly the SOURCE_BUSES roster. Keep the two in
  * step by hand; the test is what fails when they drift.
  */
 const BUSES = ['synth', 'chord', 'bass', 'pad', 'fx', 'sequencer'] as const;

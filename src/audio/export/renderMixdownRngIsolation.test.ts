@@ -8,7 +8,7 @@ import { yieldPreservingRandomStream } from './renderMixdown';
  * macrotask hop. `rng.ts`'s `randomSource` is a module GLOBAL with no
  * caller identity, so if the user is ALSO playing the project live while an
  * export runs (nothing pauses live playback for an export — see
- * `store/mixdownSlice.ts`), the live 16th-clock's `setInterval` tick can
+ * `store/exportSlice.ts`), the live 16th-clock's `setInterval` tick can
  * fire inside that gap and steal a draw from the export's seeded generator,
  * silently shifting every value the render reads afterward — an offline
  * export that is supposed to be byte-for-byte reproducible becomes

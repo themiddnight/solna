@@ -6,7 +6,7 @@ paths:
   - "src/audio/export/**"
   - "src/store/engineSync.ts"
   - "src/store/playbackPlanSnapshots.ts"
-  - "src/store/mixdownSlice.ts"
+  - "src/store/mixdownSnapshot.ts"
   - "src/store/loadLoop.ts"
   - "src/store/songMode.ts"
   - "src/components/**/use*Playback.ts"
@@ -28,7 +28,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ([ADR-0002](../../docs/decisions/0002-four-layer-import-architecture.md))
 
-- `createRenderEngine(ctx)` is the one open door: a throwaway engine on a caller context; `renderMixdown.ts` never touches `audioEngine`; its snapshot is assembled by `store/mixdownSlice.ts`. <!-- R031 -->
+- `createRenderEngine(ctx)` is the one open door: a throwaway engine on a caller context; `renderMixdown.ts` never touches `audioEngine`; its snapshot is assembled by `store/mixdownSnapshot.ts`. <!-- R031 -->
 - Realtime-only concerns narrow through `realtimeCtx()` and stay out of the offline path. <!-- R208 -->
 - Never write a render-only copy of shared audio code; fix the shared code. <!-- R209 -->
 

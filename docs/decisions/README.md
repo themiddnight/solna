@@ -49,6 +49,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0032](0032-key-change-as-loop-content-operation.md) | Key change as a loop-content operation | Pure `changeKey` in `store/keyChange.ts` runs melody and chord harmonize in one setter write, for any loop; the badge clears only on a wholesale chord replacement. |
 | [0033](0033-batch-key-change-across-loops.md) | Batch key change across loops | `changeKeyAcrossLoops` plus `applyLoopKeyChange`/`undoLoopKeyChange`, each one `set()`; Set vs Transpose; a session-only, single-level, key-fields-only undo snapshot shared with the loop-delete Undo toast. |
 | [0034](0034-pure-song-event-timeline.md) | Pure song event timeline | `walkSongTimeline`/`buildSongTimeline` turn a snapshot into timed events; the mixdown performs the walk incrementally (RNG order); pure chord helpers and `planBeatStep` in `plan/`; an import-graph test keeps planners off the engine. |
+| [0035](0035-export-feature.md) | Export as a feature — one job, kinds as data | One session-only `exportJob`, `startExport`/`cancelExport`, a shared runner that owns capture, download and notices, `ExportKindSpec` entries in `EXPORT_KINDS`, and an `ExportDialog` the Header only opens; closing it never cancels. |
 
 ## Adding or changing a decision
 

@@ -53,7 +53,7 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 
 ## Live and offline share one implementation
 
-- `createRenderEngine(ctx)` is the one open door on the singleton: a throwaway engine on a caller context; `renderMixdown.ts` never touches `audioEngine`, and its snapshot is assembled by `store/mixdownSlice.ts`. <!-- R031 -->
+- `createRenderEngine(ctx)` is the one open door on the singleton: a throwaway engine on a caller context; `renderMixdown.ts` never touches `audioEngine`, and its snapshot is assembled by `store/mixdownSnapshot.ts`. <!-- R031 -->
 - `createSubtractiveVoice` builds on any `BaseAudioContext`; `SynthVoiceManager` holds no module state. <!-- R206 -->
 - Every scheduled time is an argument: the voice module never reads `ctx.currentTime`; the manager's single read sits behind the realtime teardown timer. <!-- R207 -->
 - Realtime-only concerns narrow through `realtimeCtx()` and stay out of the offline path. <!-- R208 -->
