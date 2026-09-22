@@ -22,6 +22,8 @@ import type { SynthPreset, SynthPresetCategory } from '../data/synthPresets';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { LeadNote } from '../audio/leadMelody';
 import type { LoopCopyGroupId } from './loopCopy';
+import type { BatchKeyTarget, LoopKeyChangeUndo } from './loopKeyChange';
+import type { KeyChangeOptions } from './keyChange';
 import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { MelodyTrackId } from './melodyTracks';
 import type { PlaybackScope } from './playbackScope';
@@ -780,6 +782,17 @@ export interface LoopSlice {
    * that file's docblock for the import cycle that forces the split.
    */
   applyLoopCopy: (targetId: string, sourceId: string, selected: readonly LoopCopyGroupId[]) => void;
+  /**
+   * `changeKeyAcrossLoops` across `ids`, one `set()`. Null means nothing
+   * changed (no write). Returns an Undo snapshot when something did.
+   */
+  applyLoopKeyChange: (
+    ids: readonly string[],
+    target: BatchKeyTarget,
+    opts: KeyChangeOptions,
+  ) => LoopKeyChangeUndo | null;
+  /** Restores every snapshot in one `set()`; a loop deleted since is skipped. */
+  undoLoopKeyChange: (undo: LoopKeyChangeUndo) => void;
 }
 
 export interface AppStore

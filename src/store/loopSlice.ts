@@ -195,7 +195,7 @@ export function loopTempNamePatch(
   return { loops: state.loops.map((r) => (r.id === id ? { ...r, tempName: trimmed } : r)) };
 }
 
-export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopCopy'> {
+export function createLoopSlice(set: Set, get: Get): Omit<LoopSlice, 'applyLoopCopy' | 'applyLoopKeyChange' | 'undoLoopKeyChange'> {
   return {
     loops: [createDefaultLoop()],
     activeLoopId: DEFAULT_LOOP_ID,

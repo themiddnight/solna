@@ -17,6 +17,7 @@ import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { createLoopSlice } from './loopSlice';
 import { createLoopCopySlice } from './loopCopySlice';
+import { createLoopKeyChangeSlice } from './loopKeyChangeSlice';
 import { createDefaultLoopContent } from './loopDefaults';
 import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
 import { createLoopMirroringSet } from './loopSync';
@@ -346,6 +347,7 @@ export const useAppStore = create<AppStore>()(
         ...createPresetsSlice(setWithLoopMirror),
         ...createLoopSlice(setWithLoopMirror, get),
         ...createLoopCopySlice(setWithLoopMirror, get),
+        ...createLoopKeyChangeSlice(setWithLoopMirror, get),
         ...createProjectSlice(setWithLoopMirror, get, projectStore),
         ...createMixdownSlice(setWithLoopMirror, get),
         ...createDriveSlice(setWithLoopMirror, get, {
