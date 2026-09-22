@@ -403,6 +403,16 @@ export type SendEffect = (typeof SEND_EFFECTS)[number];
 /** One track's send levels: LINEAR gain, 0..1, applied after the track's fader and mute. */
 export type TrackSendLevels = Record<SendEffect, number>;
 
+/** Every track's sends, keyed by engine source id (the `SOURCE_BUSES` `source` column). */
+export interface TrackSends {
+  synth: TrackSendLevels;
+  chord: TrackSendLevels;
+  bass: TrackSendLevels;
+  pad: TrackSendLevels;
+  fx: TrackSendLevels;
+  sequencer: TrackSendLevels;
+}
+
 /** A named template a patch is copied FROM. User presets carry the same shape. */
 export interface BeatPreset {
   id: string;

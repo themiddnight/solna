@@ -12,6 +12,7 @@ import { createPadSlice } from './padSlice';
 import { createLeadSlice } from './leadSlice';
 import { createFxSlice } from './fxSlice';
 import { createBeatSlice } from './beatSlice';
+import { createTrackSendsSlice } from './trackSendsSlice';
 import { createEffectsSlice } from './effectsSlice';
 import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
@@ -342,6 +343,7 @@ export const useAppStore = create<AppStore>()(
         ...createLeadSlice(setWithLoopMirror, get, defaults),
         ...createFxSlice(setWithLoopMirror, get, defaults),
         ...createBeatSlice(setWithLoopMirror),
+        ...createTrackSendsSlice(setWithLoopMirror, defaults),
         ...createEffectsSlice(setWithLoopMirror),
         ...createUiSlice(setWithLoopMirror),
         ...createPresetsSlice(setWithLoopMirror),

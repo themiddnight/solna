@@ -67,5 +67,18 @@ export function createDefaultLoopContent(): LoopContent {
     chordMuted: false,
     bassVolume: DEFAULT_BUS_TRIM_DB,
     bassMuted: false,
+    // Per-track master sends, LINEAR 0..1 (DEV-423). The one place these
+    // defaults are written: the sanitizer falls back to createDefaultLoop()
+    // and the slice starts from `defaults`.
+    trackSends: {
+      synth: { reverb: 1, delay: 1, distortion: 1 },
+      chord: { reverb: 1, delay: 1, distortion: 1 },
+      bass: { reverb: 1, delay: 1, distortion: 1 },
+      pad: { reverb: 1, delay: 1, distortion: 1 },
+      fx: { reverb: 1, delay: 1, distortion: 1 },
+      // Beat was dry into delay and distortion before DEV-423; reverb 1 keeps its
+      // per-voice reverbSend path at exactly today's level.
+      sequencer: { reverb: 1, delay: 0, distortion: 0 },
+    },
   };
 }

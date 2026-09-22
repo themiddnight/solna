@@ -75,6 +75,7 @@ export const LOOP_FLAT_KEYS = [
   'bassMuted',
   'fxVolume',
   'fxMuted',
+  'trackSends',
 ] as const satisfies readonly (keyof Loop)[];
 
 type LoopFlatKey = (typeof LOOP_FLAT_KEYS)[number];

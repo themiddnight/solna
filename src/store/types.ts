@@ -15,6 +15,7 @@ import type {
   PadInterval,
   PadMode,
   PadVoicing,
+  TrackSends,
 } from '../types';
 import type { ActiveSynth, ArpSettings } from '../types/synth';
 import type { MeterId } from '../utils/meter';
@@ -30,6 +31,7 @@ import type { PlaybackScope } from './playbackScope';
 import type { DriveSlice } from './driveSlice';
 import type { ProjectSlice } from './projectSlice';
 import type { ExportSlice } from './exportSlice';
+import type { TrackSendsSlice } from './trackSendsSlice';
 import type { SoloTrack } from './trackAudibility';
 import type { MixLayerId } from './focusTrack';
 
@@ -710,6 +712,9 @@ export interface Loop extends PadState, FxState {
   chordMuted: boolean;
   bassVolume: number;
   bassMuted: boolean;
+  /** Per-track sends into the shared master reverb/delay/distortion, keyed by
+   *  engine source id; LINEAR 0..1, taken after the fader and mute (DEV-423). */
+  trackSends: TrackSends;
 }
 
 /**
@@ -811,7 +816,8 @@ export interface AppStore
     LoopSlice,
     DriveSlice,
     ProjectSlice,
-    ExportSlice {}
+    ExportSlice,
+    TrackSendsSlice {}
 
 // The exact allow-list shape produced by the persist `partialize` config — this
 // interface and partializeAppState in store.ts must list the same keys. Project

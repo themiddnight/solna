@@ -12,7 +12,7 @@ import type {
   PadMode,
   PadVoicing,
 } from '../types';
-import { PAD_INTERVALS, PAD_MODES, PAD_VOICINGS } from '../types';
+import { PAD_INTERVALS, PAD_MODES, PAD_VOICINGS, SEND_EFFECTS, type TrackSendLevels, type TrackSends } from '../types';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import { SCALES } from '@/data/scales';
@@ -590,6 +590,30 @@ function readLoopBeatState(
   );
 }
 
+function sanitizeTrackSendLevels(value: unknown, fallback: TrackSendLevels): TrackSendLevels {
+  const row: Record<string, unknown> = isPlainObject(value) ? value : {};
+  const out = {} as TrackSendLevels;
+  for (const effect of SEND_EFFECTS) out[effect] = clampFinite(row[effect], 0, 1, fallback[effect]);
+  return out;
+}
+
+/**
+ * A loop's per-track master sends, validated on every read (R302) — never
+ * migrated, never version-gated. Not a plain object → the whole default; a
+ * row that is not a plain object → that row's default; a non-number or
+ * non-finite level → that effect's default; out of range → clamped. Unknown
+ * sources and effect keys are dropped, and the result is always freshly
+ * built: nothing from `value` or `fallback` is returned by reference.
+ */
+export function sanitizeTrackSends(value: unknown, fallback: TrackSends): TrackSends {
+  const raw: Record<string, unknown> = isPlainObject(value) ? value : {};
+  const out = {} as TrackSends;
+  for (const source of Object.keys(fallback) as (keyof TrackSends)[]) {
+    out[source] = sanitizeTrackSendLevels(raw[source], fallback[source]);
+  }
+  return out;
+}
+
 /**
  * Validates a persisted `loops` array. Each loop is rebuilt through the
  * same per-field guards/clamps the flat payload used (synth params, finite
@@ -733,6 +757,7 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
       bassMuted: asBoolean(r.bassMuted),
       fxVolume: asFaderDb(r.fxVolume, fallback.fxVolume),
       fxMuted: asBoolean(r.fxMuted),
+      trackSends: sanitizeTrackSends(r.trackSends, fallback.trackSends),
     }, stepsPerBar));
   }
   return loops.length > 0 ? loops : undefined;

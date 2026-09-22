@@ -158,6 +158,7 @@ export const LOOP_COPY_GROUPS: readonly LoopCopyGroup[] = [
       'fxVolume',
       'fxMuted',
       'beatMix',
+      'trackSends',
     ],
   },
 ];

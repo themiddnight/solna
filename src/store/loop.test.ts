@@ -6,6 +6,7 @@ import {
   defaultTrackArp,
   defaultTrackSynth,
 } from './initialState';
+import { createDefaultLoopContent } from './loopDefaults';
 import {
   cloneLoop,
   fallbackActiveLoopId,
@@ -26,6 +27,10 @@ import { loopBars, loopLengthSteps } from '@/utils/songStructure';
 
 function makeLoop(overrides: Partial<Loop> = {}): Loop {
   return {
+    // Only for fields not hand-listed below (e.g. trackSends) — every other
+    // field here still wins because the object literal's later keys override
+    // an earlier spread of the same name.
+    trackSends: createDefaultLoopContent().trackSends,
     id: 'loop-x',
     name: 'Loop X',
     tempName: 'untitled-1',
