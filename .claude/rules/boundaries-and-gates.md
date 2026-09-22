@@ -41,6 +41,7 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 - The engine may import only the timing half of `utils/musicTheory.ts` (`STEPS_PER_BAR`, `stepDurationSec`): `ENGINE_MUSIC_DOMAIN_BAN` is an `allowImportNames` allowlist, so a new pitch export is banned on the day it is written. <!-- R179 -->
 
 ([ADR-0018](../../docs/decisions/0018-engine-frequency-boundary.md))
+- `src/audio/` imports neither `react` nor `react-dom` (`REACT_IMPORT_BAN` in every `src/audio/` import block); a React wrapper over an audio clock lives in `components/playback/`. <!-- R314 --> ([ADR-0039](../../docs/decisions/0039-playback-host.md))
 
 ## Incidents
 
@@ -65,6 +66,7 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 - A merged (not replaced) `no-restricted-imports` block for the tonal ban <!-- R045 -->
 - A regex literal in the five `NOTE_REGEX_BAN` files <!-- R085 -->
 - A pitch export from `utils/musicTheory.ts` imported by the engine <!-- R179 -->
+- A `react` or `react-dom` import under `src/audio/` <!-- R314 -->
 - `src/incidents/` importing `store/`, `components/` or the audio engine <!-- R056 -->
 - An open-ended bag in `IncidentReportV1`, or accepting unknown keys <!-- R057 -->
 - A second `utils/` → `store/` import, or a `utils/` file reading store state <!-- R060 -->

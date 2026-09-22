@@ -78,7 +78,7 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
 | `playbackEngine.ts` | yes | Facade for transport-driven hooks: `playbackNoteOn(noteName, …)` converts to Hz and pins owner `'sequencer'` (`:21-38`); also `playbackStopOwnedVoices`, `subscribePlaybackClock`, `ACCOMPANIMENT_SOURCES`, `HARD_STOP_RELEASE`, latency helpers |
 | `synthPlayback.ts` | yes | Live-performance bridge. Owner `'live'` (`:58-66`); announces each note on `noteInputBus` (`:67`, `:94`) |
 | `drumPlayback.ts` | yes | `triggerPad` → `audioEngine.triggerDrum` (`:38-40`); `ensureDrumEngine` |
-| `arpPlayback.ts` | yes | **A React hook** (`useArpPlayback`, `:160`, imports `react` at `:1`) that subscribes the clock and triggers with owner `'arp'` (`:190`); `computeArpTick`, `releaseTriggeredTargets` |
+| `arpPlayback.ts` | yes | **Fixed (DEV-422):** `startArpClock` (plain function: clock subscription + latest-ref release, owner `'arp'`), `computeArpTick`, `releaseTriggeredTargets`; no React (R314) — the wrapper is `components/playback/useArpPlayback.ts` |
 | `chordPlayback.ts` | yes | Engine-touching emitters (`emitStepEvents`, `scheduleWholeChord`, `playFullHoldChord`) over the pure decisions in `plan/chordEvents.ts`; chord previews (`playChordLegato` with owner `'preview'` on the `'chord'` bus); a `setTimeout` pattern-preview loop (`startPatternLoop`) |
 | `presetPreview.ts` | yes | Library auditions on the `'preview'` bus with owner `'preview'` (`:167`, `:212`, `:244`) |
 | `padPlayback.ts` | **no** | Pure pad arm and voicing decisions (`resolvePadArm`, `applyPadVoicing`, `padHoldSec`) |
@@ -114,7 +114,7 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
   plus `scripts/calibration/renderOffline.ts`.
 - `leadMelody`: 11 importers, 7 of them in `store/` (including `store/types.ts`,
   `initialState.ts`, `sanitize.ts`).
-- `chordRhythms`: `useInputDeck`, `useChordPlayback`, `useChordView`, `ChordModulePanel`.
+- `chordRhythms`: `useInputDeck`, `useChordAudition`, `useChordClockPlayback`, `useChordView`, `ChordModulePanel`.
 - `bassPatterns`, `constants`, `leadLiveRecord`, `leadStepRecord`,
   `chordProgressions`, `drumGrids`, `effectChains`, `effectLimits`, `beatAdapter`, `rng`,
   `diagnostics`, `masterRack` (type only, from `engineSync`) each have 1–4 importers.
@@ -249,20 +249,22 @@ flowchart LR
   `songMode`'s `loadLoop` advance so a song never left its first loop (found while fixing the
   audit, not by it; pinned in `clock.test.ts`).
 
-Clock subscribers (non-test): `useChordPlayback` (`:581`), `useLeadPlayback` (`:95`, one per
-melody track), `useSequencerPlayback` (`:110`), `useArpPlayback` (`arpPlayback.ts:164`),
-`leadLiveClock` (`store/leadRecord.ts`, only while the transport runs), and `presetPreview`'s
-live scheduler (`presetPreview.ts:106-116`).
+Clock subscribers (non-test), all mounted once by `components/playback/PlaybackHost.tsx` unless
+noted: `playback/useChordClockPlayback.ts`, `playback/useLeadPlayback.ts` (one per melody track),
+`playback/useSequencerPlayback.ts`, plus `components/playback/useArpPlayback.ts` (wraps
+`startArpClock`, mounted by the input deck instead, since the arp follows held keys, not the
+transport), `leadLiveClock` (`store/leadRecord.ts`, only while the transport runs), and
+`presetPreview`'s live scheduler (`presetPreview.ts:106-116`).
 
 ### 3.2 Who creates voices, and with which owner
 
 | Lane / surface | Controller (where) | Decision (pure) | Engine call and owner | Bus |
 |---|---|---|---|---|
-| Chord and bass | `useChordPlayback.ts` (components) | `planChordArm` / `planChordStep` (`plan/chordPlan.ts`), snapshot from `store/playbackPlanSnapshots` | `playFullHoldChord` / `emitStepEvents` (`chordPlayback.ts`, owner `sequencer`); bass full-hold goes through `playbackNoteOn` (`useChordPlayback.ts:169`) | `chord`, `bass` |
-| Pad | `useChordPlayback.ts:128-137` | `planPadArm` → `resolvePadArm` (`playback/padPlayback.ts`) | `playFullHoldChord(…, 'pad')`, owner `sequencer` | `pad` |
-| Lead and FX | `useLeadPlayback.ts:95-133` | `planMelodyStep` (`plan/melodyPlan.ts` → `leadMelody.ts`) | `playbackNoteOn/Off` (owner pinned `sequencer`, `playbackEngine.ts:37`) | `synth`, `fx` |
-| Drums (sequencer) | `useSequencerPlayback.ts:110-139` | `planBeatStep` (`plan/beatPlan.ts`) | `triggerPad` → `triggerDrum` (no voice id, no owner) | `sequencer` |
-| Keyboard arp | `useArpPlayback` (**in `audio/playback/`**) | `computeArpTick` (same file) | `triggerSynthNoteOn(…, 'arp')` (`arpPlayback.ts:190`) | focused target |
+| Chord and bass | `playback/useChordClockPlayback.ts` (components, mounted by `PlaybackHost`) | `planChordArm` / `planChordStep` (`plan/chordPlan.ts`), snapshot from `store/playbackPlanSnapshots` | `playFullHoldChord` / `emitStepEvents` (`chordPlayback.ts`, owner `sequencer`); bass full-hold goes through `playbackNoteOn` | `chord`, `bass` |
+| Pad | `playback/useChordClockPlayback.ts` (components, mounted by `PlaybackHost`) | `planPadArm` → `resolvePadArm` (`playback/padPlayback.ts`) | `playFullHoldChord(…, 'pad')`, owner `sequencer` | `pad` |
+| Lead and FX | `playback/useLeadPlayback.ts` (components, mounted by `PlaybackHost`) | `planMelodyStep` (`plan/melodyPlan.ts` → `leadMelody.ts`) | `playbackNoteOn/Off` (owner pinned `sequencer`, `playbackEngine.ts:37`) | `synth`, `fx` |
+| Drums (sequencer) | `playback/useSequencerPlayback.ts` (components, mounted by `PlaybackHost`) | `planBeatStep` (`plan/beatPlan.ts`) | `triggerPad` → `triggerDrum` (no voice id, no owner) | `sequencer` |
+| Keyboard arp | `startArpClock` (`audio/playback/arpPlayback.ts`) via `useArpPlayback` (`components/playback/`, mounted by the input deck) | `computeArpTick` (same file) | `triggerSynthNoteOn(…, 'arp')` (`arpPlayback.ts:190`) | focused target |
 | Live keys, on-screen keys, MIDI notes | `useInputDeck.ts:366-393`; `store/midiInput.ts:275` | none | `synthPlaybackNoteOn` → owner `live` (`synthPlayback.ts:58-66`) plus `emitNoteInput` | focused target (MIDI always `synth`) |
 | Drum pads | `useInputDeck.ts:619` | none | `triggerPad` | `sequencer` |
 | Library auditions | `presetPreview.ts` | none | owner `preview` | `preview` |
@@ -284,7 +286,7 @@ Mono is decided per patch (`common.voiceMode === 'mono'`, `voiceManager.ts:383`)
 ```mermaid
 sequenceDiagram
   participant Clk as Clock (25ms setInterval)
-  participant Hook as useChordPlayback (components)
+  participant Hook as useChordClockPlayback (components/playback/, mounted by PlaybackHost)
   participant Snap as playbackPlanSnapshots (store)
   participant Plan as chordPlan (pure)
   participant CP as chordPlayback emitters
@@ -310,7 +312,7 @@ sequenceDiagram
   participant SP as synthPlayback
   participant Bus as noteInputBus
   participant Eng as audioEngine
-  participant Arp as useArpPlayback
+  participant Arp as startArpClock
   Key->>SP: synthPlaybackNoteOn(note, synth, vel, _, target)
   SP->>Eng: triggerSynthNoteOn(Hz, …, target, scale, 'live') → VoiceId
   SP->>Bus: emitNoteInput({kind:'on', note})
@@ -452,8 +454,9 @@ on a discrete destination. Only buses a walk event reached (`sourcesWithEvents`,
   `audioEngine.updateSynthPatch` directly; they write the slice and reach the engine once,
   through `engineSync`. The overview diagram now shows the split.
 - **F3 — The controllers are not in `audio/playback/`.** `feature-overview.md` placed them there
-  (now corrected; CLAUDE.md layer 4 now names them). In code, `useChordPlayback`, `useLeadPlayback` and `useSequencerPlayback` are
-  in `src/components/`, and `audio/playback/` holds facades (`playbackEngine.ts:6-10`).
+  (now corrected; CLAUDE.md layer 4 now names them). In code, `useChordClockPlayback`,
+  `useLeadPlayback` and `useSequencerPlayback` are in `src/components/playback/`, mounted once by
+  `PlaybackHost` (DEV-422), and `audio/playback/` holds facades (`playbackEngine.ts:6-10`).
 - **F4 — Controllers do not call `triggerSynthNoteOn(Hz, …, owner)`.** The overview's sequence
   showed them doing so (now corrected). They pass note names to
   `playbackNoteOn`/`emitStepEvents`, which convert to Hz and pin the owner
@@ -478,15 +481,17 @@ on a discrete destination. Only buses a walk event reached (`sourcesWithEvents`,
   `synth/voiceId.ts`.
 - **F7 — Planner placement is inconsistent.** **Partly fixed (ADR-0034).** Drums are now planned
   by `planBeatStep` (`plan/beatPlan.ts`), shared by the live stepper and the offline song
-  timeline. `playback/padPlayback.ts` is pure but named like an engine bridge. The arp's decision
-  (`computeArpTick`) still sits inside a React hook module — deferred.
+  timeline. `playback/padPlayback.ts` is pure but named like an engine bridge. **Fixed (DEV-422):**
+  the arp's decision (`computeArpTick`) sits in `arpPlayback.ts` beside `startArpClock`, a plain
+  function, not a React hook module.
 - **F8 — A "pure" planner transitively loads the engine singleton.** **Fixed (ADR-0034).** The
   chord/bass event math moved to pure `plan/chordEvents.ts`, which imports nothing
   engine-touching; `plan/chordPlan.ts` no longer imports `../chordPlayback`.
   `src/architecture/playbackPlannerImportGraph.test.ts` walks the graph so a transitive edge to
   the engine singleton cannot reopen silently.
-- **F9 — A React hook lives in `audio/`.** `arpPlayback.ts:1` and `:160`, against the "audio is
-  plain data" intent of the layering.
+- **F9 — A React hook lives in `audio/`.** **Fixed (DEV-422):** `arpPlayback.ts` now exports only
+  `startArpClock`, a plain function; the React wrapper is `components/playback/useArpPlayback.ts`,
+  and `REACT_IMPORT_BAN` keeps `react`/`react-dom` out of every `src/audio/` import block (R314).
 - **F10 — God objects and shared mutable fields.** `MasterRack` (1286 lines) owns the graph,
   buses, analysers, impulse cache, Beat filter state and the generic helpers
   (`release`/`cancelAndHold`/`createNoiseNode`). `DrumSynth` reaches into its public mutable
@@ -510,7 +515,7 @@ on a discrete destination. Only buses a walk event reached (`sourcesWithEvents`,
     double quotes; most files use single.
   - Import style is mixed (`@/audio/...` vs `../audio/...` within one hook,
     `useInputDeck.ts:3-4`).
-  - `stepInLoop` in `useSequencerPlayback.ts:132` is really step-in-bar (`step % stepsPerBar`).
+  - `stepInLoop` in `playback/useSequencerPlayback.ts` is really step-in-bar (`step % stepsPerBar`).
     The offline path (`plan/songTimeline.ts`'s `walkStep`) names the same value `stepInBar`; the
     live call site now also passes `{ stepInBar: stepInLoop }`, so only the live-side name is
     still misleading.

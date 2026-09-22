@@ -59,15 +59,16 @@ segments (Lead, FX, Accompaniment, Beat).
 
 - **Every layer, tab view and Pattern segment stays mounted**, gated `block`/`hidden` at three
   levels: `App.tsx` (`isSongLayer(activeTab)`), `LoopPage.tsx` (`activeTab`), `PatternView.tsx`
-  (`segmentForFocus(focusTrack)`). <!-- R014 -->
-- Audio therefore never stops when switching tabs. <!-- R015 -->
+  (`segmentForFocus(focusTrack)`). Views stay mounted to keep their UI state (scroll, drag, meter
+  history, local state). <!-- R014 -->
+- Audio never stops when switching tabs: it does not depend on mounting at all (R040). <!-- R015 -->
 - High-frequency state (playback step, playhead beat, a knob value mid-drag) stays local to the
   subtree that shows it, **never in a store slice** — a slice write re-renders every mounted
   view. <!-- R016 -->
-- Playback controllers are mounted inside the grids: **a lane sounds because its grid is
-  mounted**. <!-- R040 -->
+- Transport controllers are mounted once, in `PlaybackHost`: **a lane sounds because the host is
+  mounted, never because its grid is**. <!-- R040 -->
 
-Why: `docs/decisions/0001-always-mounted-views.md`.
+Why: `docs/decisions/0001-always-mounted-views.md`, `docs/decisions/0039-playback-host.md`.
 
 ### Layer map
 
@@ -77,9 +78,9 @@ Enforced by eslint `no-restricted-imports` (plus `no-restricted-globals` and
 | Layer | Rule | Rules file | ADR |
 |---|---|---|---|
 | `src/data/` | Imports nothing at runtime, not even a sibling; factory content only. <!-- R020 --> | `data-layer.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
-| `src/audio/` | Never imports `store/` or `components/`; may import `data/`. <!-- R028 --> Raw Web Audio API, no Tone.js; music theory only via `@/musicCore`, never `tonal`. <!-- R029 --> | `synth-voices.md`, `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
+| `src/audio/` | Never imports `store/` or `components/`; may import `data/`. <!-- R028 --> Raw Web Audio API, no Tone.js; music theory only via `@/musicCore`, never `tonal`. <!-- R029 --> No `react`/`react-dom`. <!-- R314 --> | `synth-voices.md`, `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md), [0039](docs/decisions/0039-playback-host.md) |
 | `src/store/` | Never imports `components/`. <!-- R032 --> | `persistence.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
-| `src/components/` | Views + live playback controllers; must not import `audio/engine`. <!-- R038 --> | `components.md`, `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
+| `src/components/` | Views, plus the live playback controllers in `components/playback/` (mounted once by `PlaybackHost`); must not import `audio/engine`. <!-- R038 --> | `components.md`, `playback.md` | [0002](docs/decisions/0002-four-layer-import-architecture.md) |
 | `src/musicCore/` | Only `tonalAdapter.ts` imports `tonal`. <!-- R044 --> Imports nothing from `store/`, `components/`, `audio/`, `utils/`. <!-- R050 --> | `music-domain.md` | [0005](docs/decisions/0005-music-core-and-tonal-confinement.md) |
 | `src/utils/` | Outside the chain, above `data/`; `data/` reads it only via `import type`. <!-- R058 --> May import `@/musicCore`, never the reverse. <!-- R059 --> | `utils.md`, `data-layer.md`, `boundaries-and-gates.md` | [0004](docs/decisions/0004-utils-placement-and-store-constant-inversion.md) |
 | `src/incidents/` | Privacy boundary: no `store/`, `components/` or audio engine import (type-only `@/audio/runtime/*` allowed). <!-- R056 --> | `boundaries-and-gates.md` | [0003](docs/decisions/0003-incidents-privacy-boundary.md) |
@@ -146,7 +147,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `synth-voices.md` | `VoiceId`/owner, the frequency boundary, polyphony gain, voice lifetime, shared live/offline render, per-track master sends |
 | `synth-patch.md` | Engine-tagged complete patches, presets, arp beside the patch, units in field names |
 | `persistence.md` | Persist write path, validation not migration, storage zones, project slot, autosave, Drive token |
-| `playback.md` | Clock, store→engine bridge, planned-then-performed playback, song timeline, snapshots, pub/subs |
+| `playback.md` | Clock, store→engine bridge, `PlaybackHost`, planned-then-performed playback, song timeline, snapshots, pub/subs |
 | `export.md` | The export job: one session-only job, kinds as data, the shared runner, the dialog and the Header trigger; MIDI export (lanes, channels, GM map); stems (dry bus taps, one ZIP) |
 | `metering.md` | Sample-based meters, tap point, meter scheduler |
 | `theming.md` | Theme tokens and the palette contrast gate |

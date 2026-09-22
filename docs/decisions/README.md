@@ -53,6 +53,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0036](0036-midi-export-from-song-timeline.md) | MIDI export from the song timeline | A format-1 SMF built from `walkSongTimeline`: one track per lane, GM drums on channel 10, mute honoured and solo never, note numbers from `noteMidi`. |
 | [0037](0037-per-track-sends.md) | Per-track sends into the shared master effects | Each track's own Rev/Dly/Dist send nodes, post-fader, per loop; Beat reverb stays per-voice × track send, second convolver input; defaults keep audio byte-identical. |
 | [0038](0038-dry-stems.md) | Dry stems: one render, bus taps, one ZIP | One multichannel offline render with a post-fader tap per bus and a detached master; a stem per track with content, zipped store-only; the mixdown golden unchanged. |
+| [0039](0039-playback-host.md) | PlaybackHost — transport controllers out of the grids | One memoized PlaybackHost mounts every transport controller in clock-listener order; the chord controller split into clock and audition halves, the playing chord on a pub/sub; no react under src/audio/. |
 
 ## Adding or changing a decision
 

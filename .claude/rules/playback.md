@@ -14,6 +14,8 @@ paths:
   - "src/components/usePlayheadSync.ts"
   - "src/components/playbackStep.ts"
   - "src/components/playheadBeat.ts"
+  - "src/components/playback/**"
+  - "src/components/playingChord.ts"
   - "src/App.tsx"
 ---
 
@@ -23,11 +25,19 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ## Engine and controllers
 
-- The playback step and playhead beat travel through the module pub/subs `src/components/playbackStep.ts` and `playheadBeat.ts`, never a slice. <!-- R017 --> ([ADR-0001](../../docs/decisions/0001-always-mounted-views.md))
+- The playback step, playhead beat and playing chord travel through the module pub/subs `src/components/playbackStep.ts`, `playheadBeat.ts` and `playingChord.ts`, never a slice. <!-- R017 --> ([ADR-0001](../../docs/decisions/0001-always-mounted-views.md))
 - One `audioEngine` singleton; every engine setter no-ops until `init()` creates the `AudioContext`. <!-- R030 -->
-- `useChordPlayback`, `useLeadPlayback`, `useSequencerPlayback`, `useInputDeck`, `usePlayheadSync` and the pub/subs live in `components/` and reach audio via `audio/playback/playbackEngine`, never `audio/engine`. <!-- R039 -->
+- The controllers in `components/playback/` (`useChordClockPlayback`, `useLeadPlayback`, `useLeadStepPublisher`, `useSequencerPlayback`, `useArpPlayback`), `useInputDeck`, `usePlayheadSync` and the pub/subs live in `components/` and reach audio via `audio/playback/playbackEngine`, never `audio/engine`. <!-- R039 -->
 
 ([ADR-0002](../../docs/decisions/0002-four-layer-import-architecture.md))
+
+## PlaybackHost
+
+- Transport controllers are mounted once, in `PlaybackHost`: a lane sounds because the host is mounted, never because its grid is. <!-- R040 -->
+- `PlaybackHost` (`components/playback/PlaybackHost.tsx`) is the only mount of the transport controllers (`useLeadPlayback`, `useLeadStepPublisher`, `useChordClockPlayback`, `useSequencerPlayback`), each called there in clock-listener order; a view never calls one. <!-- R312 -->
+- The playing chord travels through `components/playingChord.ts`, never a slice; the chord view's held-card id is local state reset on every publish. <!-- R313 -->
+
+([ADR-0039](../../docs/decisions/0039-playback-host.md))
 
 - `createRenderEngine(ctx)` is the one open door: a throwaway engine on a caller context; `renderMixdown.ts` never touches `audioEngine`; its snapshot is assembled by `store/mixdownSnapshot.ts`. <!-- R031 -->
 - Realtime-only concerns narrow through `realtimeCtx()` and stay out of the offline path. <!-- R208 -->
@@ -56,7 +66,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - Planners in `src/audio/playback/plan/` (`padPlan.ts`, `chordPlan.ts`, `melodyPlan.ts`, `chordEvents.ts`, `beatPlan.ts`, `songSnapshot.ts`, `songTimeline.ts`) are pure: no store, no engine setter, no `AudioContext`, no wall clock, no timer (ESLint block on the folder, which bans the engine MODULE — `@/audio/engine` and `playbackEngine`, in both aliased and relative form; the transitive edge to the engine singleton is gated by R289, not by this block). <!-- R227 -->
 - `src/architecture/playbackPlannerPurity.test.ts` asserts the block's severity. <!-- R228 -->
 - A planner never imports `chordPlayback.ts` at all — the chord/bass event math it used to share with that file's engine-touching emitters now lives in `chordEvents.ts`; the import itself is gated by R289. <!-- R229 -->
-- Clock subscription and arming state belong to the live controllers (`useChordPlayback.ts`, `useLeadPlayback.ts`); offline, full-hold strikes and note-ons are performed by `renderMixdown.ts` from walk items, never planned by it. <!-- R230 -->
+- Clock subscription and arming state belong to the live controllers (`useChordClockPlayback.ts`, `useLeadPlayback.ts`); offline, full-hold strikes and note-ons are performed by `renderMixdown.ts` from walk items, never planned by it. <!-- R230 -->
 - Per-lane snapshot types (arm-time, immutable) for Chord/bass, Pad, Melody and Beat (`BeatPlanSnapshot`) plus a per-step context (emit-time, live); never unify them into one `PlaybackSnapshot`. <!-- R231 -->
 - Chord/bass fix cycle, notes and the arp ACTIVE flag at arm and read synth patches and Arp settings live per step; `chordFeel`/`bassFeel` are read at both (arm → `cycleHoldScale`, emit → `feelToHoldScale`); pad is arm-only, melody emit-only. <!-- R232 -->
 - `src/store/playbackPlanSnapshots.ts` takes `AppStore` as an argument and never calls `useAppStore.getState()`. <!-- R233 -->
@@ -103,3 +113,6 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - A runtime import from `plan/` that reaches `audio/engine` or `playbackEngine` <!-- R289 -->
 - Deciding drum voices or velocity outside `planBeatStep` <!-- R290 -->
 - Sends routed through `setSourceState`; a component calling the send preview for anything but a drag <!-- R306 -->
+- A lane that sounds because its grid is mounted <!-- R040 -->
+- A view calling a transport controller, or a controller mounted anywhere but `PlaybackHost` <!-- R312 -->
+- The playing chord in a slice, or the clock writing the view's held-card state <!-- R313 -->

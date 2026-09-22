@@ -36,7 +36,7 @@ values that are fixed when a chord is armed and values that must be read live on
   call but that nothing stops it from calling — the pure/impure split INSIDE that file stays a
   convention, not something the gate enforces.
 - Everything else — the clock subscription, the arming state, the full-hold strikes, the note-ons —
-  is the CONTROLLER's (`useChordPlayback.ts`, `useLeadPlayback.ts`, and `renderMixdown.ts`
+  is the CONTROLLER's (`useChordClockPlayback.ts`, `useLeadPlayback.ts`, and `renderMixdown.ts`
   offline).
 
 ### There are FOUR snapshots, not one, and that is forced rather than chosen
@@ -110,7 +110,7 @@ be a difference that never existed.
 - **R228** — `src/architecture/playbackPlannerPurity.test.ts` asserts the block's severity.
 - **R229** — A planner never imports `chordPlayback.ts` at all; the import itself is gated by R289.
 - **R230** — Clock subscription and arming state belong to the live controllers
-  (`useChordPlayback.ts`, `useLeadPlayback.ts`); offline, full-hold strikes and note-ons are
+  (`useChordClockPlayback.ts`, `useLeadPlayback.ts`); offline, full-hold strikes and note-ons are
   performed by `renderMixdown.ts` from walk items.
 - **R231** — Per-lane snapshot types (arm-time immutable) for Chord/bass, Pad, Melody and Beat
   (`BeatPlanSnapshot`) + per-step context (emit-time live); never unify into one `PlaybackSnapshot`.

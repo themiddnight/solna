@@ -34,7 +34,7 @@ flowchart TB
     LoopViews["Loop layer: SoundView · PatternView<br/>(Lead · FX · Accompaniment · Beat)"]
     SongViews["Song layer: ArrangeView · EffectsRackView"]
     Dock["BottomInputDock<br/>focus chip · keyboard · drum pads"]
-    Ctrls["Controller hooks mounted inside the grids<br/>useChordPlayback · useLeadPlayback · useSequencerPlayback<br/>useInputDeck · usePlayheadSync · playbackStep + playheadBeat pub/subs"]
+    Ctrls["Controller hooks mounted by PlaybackHost<br/>useChordClockPlayback · useLeadPlayback · useLeadStepPublisher · useSequencerPlayback<br/>useInputDeck · usePlayheadSync · playbackStep + playheadBeat + playingChord"]
     Meters["Meter components (analyser reads)"]
   end
 
@@ -107,11 +107,11 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 
 | # | Finding | Where | Status |
 |---|---------|-------|--------|
-| U4/A3 | The playback controllers live in `components/`. Each lane only sounds because its grid is mounted, so `components/` are not dumb views. | `SequencerGrid.tsx`, `LeadMelodyGrid.tsx`, `useChordView.ts` | **Documented** in CLAUDE.md (layer 4); moving them is deferred. |
+| U4/A3 | The playback controllers live in `components/`. Each lane only sounds because its grid is mounted, so `components/` are not dumb views. | `SequencerGrid.tsx`, `LeadMelodyGrid.tsx`, `useChordView.ts` | **Fixed (DEV-422).** Controllers moved to `components/playback/`, mounted once by `PlaybackHost` ([ADR-0039](../../decisions/0039-playback-host.md)); a lane no longer sounds because its grid is mounted. |
 | S3 | `engineSync` is not the only store → engine path: a set of store modules call `audioEngine` directly. | 02-store §5a | **Documented** in CLAUDE.md as a rule (cuts, previews, lifecycle); MIDI CC left the list. |
 | S1 | IndexedDB uses one object store with one key. CLAUDE.md said bodies and metadata live in separate stores. | `projectStoreIdb.ts` | **Fixed** in CLAUDE.md. |
 | A4 | A "pure" planner imports `chordPlayback`, which instantiates the engine singleton. | `plan/chordPlan.ts`, `chordPlayback.ts` | **Fixed.** The chord/bass event math moved to pure `plan/chordEvents.ts`, which imports nothing engine-touching; `src/architecture/playbackPlannerImportGraph.test.ts` guards the transitive edge so it cannot silently reopen. |
-| A5 | There is a React hook inside `audio/`, and drums have no planner in `plan/`. | `arpPlayback.ts`; `plan/beatPlan.ts` | **Partly fixed.** Drums are now planned by `planBeatStep` (`plan/beatPlan.ts`), shared by the live stepper and the offline timeline. The React hook (`arpPlayback.ts`) remains inside `audio/`, deferred. |
+| A5 | There is a React hook inside `audio/`, and drums have no planner in `plan/`. | `arpPlayback.ts`; `plan/beatPlan.ts` | **Fixed.** Drums are now planned by `planBeatStep` (`plan/beatPlan.ts`), shared by the live stepper and the offline timeline. The hook half is **Fixed (DEV-422)**: the body is `startArpClock` in `audio/`, its React wrapper is `components/playback/useArpPlayback.ts`, and `REACT_IMPORT_BAN` keeps `react`/`react-dom` out of `src/audio/`. |
 | D2 | The meter-file exemption turns off every import ban for those files, including the tonal and taper bans. | `eslint.config.js` | **Documented** in CLAUDE.md; config unchanged. |
 | D3 | `utils/`, `diagnostics/` and `routing/` have no layering block. `diagnostics/` imports the store, the engine and a UI Modal. | `diagnostics/browserRecorder.ts` | Deferred. |
 | D-cyc | Runtime file cycles: `sanitize` ↔ `leadSlice`, and `store` → `loopCopySlice` → `loadLoop` → `store`. | 04 §1.5 | Deferred. |
@@ -121,8 +121,8 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 - ~~Per-track FX~~ **Done** in DEV-423 ([ADR-0037](../../decisions/0037-per-track-sends.md)): every
   track, drums included, has reverb/delay/distortion sends; the per-voice `reverbSend` became a
   multiplier of the Beat track's reverb send.
-- Everything in the smells list below, plus A5 (hook half), D3, D-cyc and moving the controllers
-  out of `components/` — see the plan's "Deferred" section for the full list.
+- Everything in the smells list below, plus D3 and D-cyc — see the plan's "Deferred" section for
+  the full list. (A5's hook half and moving the controllers out of the grids are Fixed, DEV-422.)
 
 ### Organic-growth smells (refactor candidates)
 
@@ -131,7 +131,7 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
   (`store/exportSlice.ts`, `store/exportJob.ts`, `store/exportKinds.ts`, `components/export/`);
   the theme still lives in `Header.tsx`.
 - **Duplicated shapes.** The per-loop field list is written out in 5+ places, and slice defaults duplicate `createDefaultLoop`. (S7) **Fixed on `refactor/dev-424-loop-content`:** `LoopContent` is bound to `LOOP_FLAT_KEYS` and slice defaults read `createDefaultLoopContent()`; `sanitizeLoops` still validates field by field on purpose and `LOOP_COPY_GROUPS` stays a test-pinned partition.
-- **Large files.** `MasterRack` (1,286 lines, with 23 external field accesses from `DrumSynth`), `SortableLoopCard.tsx` (886), `PresetLibrary.tsx` (798), `useInputDeck.ts` (776), `useChordPlayback.ts` (710). (A7, U)
+- **Large files.** `MasterRack` (1,286 lines, with 23 external field accesses from `DrumSynth`), `SortableLoopCard.tsx` (886), `PresetLibrary.tsx` (798), `useInputDeck.ts` (776). (A7, U)
 - **Naming.**
   - `utils/meter.ts` is time signature, while `meterLevel` and `meterScale` are level meters.
   - `utils/musicTheory.ts` mixes theory and timing.

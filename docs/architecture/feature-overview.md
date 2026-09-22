@@ -42,7 +42,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | `audio/export/` | Offline mixdown, MIDI and stems export | `renderMixdown`, `renderMidi`, `renderStems` |
 | `audio/runtime/` | AudioContext session & health | `audioSession`, `healthMonitor`, `policy` |
 | `store/` | Zustand store (slices) + bridges | `store`, `*Slice`, `engineSync`, `sanitize`, `projectStore`, `projectAutosave`, `drive*`, `midiInput`, `vibes` |
-| `components/` | React views **and** the playback controller hooks (`useChordPlayback`, `useLeadPlayback`, `useSequencerPlayback`, `useInputDeck`) | `loop/*`, `song/*`, `project/*`, `ui/*`, `Header`, `TransportBar`, `InstantVibesBar` |
+| `components/` | React views **and**, in `components/playback/`, the transport controller hooks mounted by `PlaybackHost` (`useChordClockPlayback`, `useLeadPlayback`, `useSequencerPlayback`) plus `useInputDeck` | `loop/*`, `song/*`, `project/*`, `ui/*`, `Header`, `TransportBar`, `InstantVibesBar` |
 | `routing/` | URL ↔ layer/tab/loop | `tabRouting`, `useRouteSync` |
 | `incidents/` | Bug-report privacy boundary | `recorder`, `sanitize`, `githubReport` |
 | `diagnostics/` | Dev diagnostics recorder (imports store, engine and UI directly) | `recorder`, `DiagnosticPanel` |
@@ -171,7 +171,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
   participant Clock as clock (16th tick)
-  participant Ctrl as Controller hook (components/: useChordPlayback / useLeadPlayback)
+  participant Ctrl as Controller hook (components/playback/: useChordClockPlayback / useLeadPlayback)
   participant Snap as Snapshot (store → immutable)
   participant Plan as Planner (pure)
   participant Eng as engine

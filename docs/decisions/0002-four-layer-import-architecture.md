@@ -55,11 +55,13 @@ where the Google access token lives is [ADR-0025](0025-drive-token-in-closure.md
 
 ### 4. `src/components/` — views plus the live playback controllers; must not import `audio/engine`
 
-The controllers — `useChordPlayback`, `useLeadPlayback`, `useSequencerPlayback`, `useInputDeck`,
-`usePlayheadSync` — and the step and playhead pub/subs (`playbackStep.ts`, `playheadBeat.ts`) live
-here, reach audio through `audio/playback/playbackEngine`, never `audio/engine`, and are mounted
-inside the grids — **a lane sounds because its grid is mounted**, which is one more reason every
-view stays mounted ([ADR-0001](0001-always-mounted-views.md)).
+The controllers — `components/playback/*` (`useChordClockPlayback`, `useLeadPlayback`,
+`useLeadStepPublisher`, `useSequencerPlayback`, `useArpPlayback`), `useInputDeck`,
+`usePlayheadSync` — and the step, playhead beat and playing-chord pub/subs (`playbackStep.ts`,
+`playheadBeat.ts`, `playingChord.ts`) live here, reach audio through `audio/playback/playbackEngine`,
+never `audio/engine`, and are mounted by `PlaybackHost`
+([ADR-0039](0039-playback-host.md)), which supersedes the earlier "a lane sounds because its
+grid is mounted" wiring recorded in [ADR-0001](0001-always-mounted-views.md).
 
 Only `AudioVisualizer.tsx`, `ui/VuMeter.tsx`, `ui/GainReductionMeter.tsx` and
 `ui/SourceMeter.tsx` (read-only analyser consumers) and test files are exempt — routing their
@@ -122,8 +124,9 @@ catch-all block like everything else, since the folder has no layering block of 
   one separate vanilla store `audioRecovery.ts`, outside the persisted store.
 - **R038** — `src/components/` = views + live playback controllers; must not import
   `audio/engine`.
-- **R039** — Controllers (`useChordPlayback`, `useLeadPlayback`, `useSequencerPlayback`,
-  `useInputDeck`, `usePlayheadSync`) and pub/subs live in `components/`, reach audio via
+- **R039** — The controllers in `components/playback/` (`useChordClockPlayback`, `useLeadPlayback`,
+  `useLeadStepPublisher`, `useSequencerPlayback`, `useArpPlayback`), `useInputDeck`,
+  `usePlayheadSync` and the pub/subs live in `components/` and reach audio via
   `audio/playback/playbackEngine`, never `audio/engine`.
 - **R043** — `eslint.config.js` is the binding list; any change to the analyser allowlist is made
   in the config AND in `.claude/rules/metering.md`.

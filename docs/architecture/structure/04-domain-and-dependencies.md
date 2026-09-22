@@ -156,10 +156,10 @@ violations.** Checked individually:
    `import.meta.env.DEV`), but `diagnostics/renderCounts.ts` ships in production via 4 static imports.
 2. Components drive the engine through a relay: `src/audio/playback/playbackEngine.ts` (header:
    "Engine bridge for the component-layer playback hooks") is imported by 7 component files —
-   `usePlayheadSync.ts`, `useSequencerPlayback.ts`, `playbackStep.ts`, `song/ArrangeView.tsx`,
-   `loop/lead/useLeadPlayback.ts`, `loop/lead/useLeadStepPublisher.ts`, `loop/chord/useChordPlayback.ts`.
+   `usePlayheadSync.ts`, `playbackStep.ts`, `song/ArrangeView.tsx`, and
+   `components/playback/{useSequencerPlayback,useLeadPlayback,useLeadStepPublisher,useChordClockPlayback}.ts`.
    The ESLint pattern bans only `**/audio/engine` (`eslint.config.js:603`), so this passes. `CLAUDE.md`
-   itself calls `useChordPlayback.ts`/`useLeadPlayback.ts` "controllers", i.e. the playback
+   itself calls `useChordClockPlayback.ts`/`useLeadPlayback.ts` "controllers", i.e. the playback
    controller half of the planner/controller split lives in `components/`, not `audio/playback/`.
 
 ### 1.5 Cycles
@@ -357,7 +357,7 @@ for `*.tsx`.
 | 13 | 755 | src/data/vibes.ts |
 | 14 | 745 | src/components/loop/ChordPresetLibrary.tsx |
 | 15 | 736 | src/audio/engine.ts |
-| 16 | 710 | src/components/loop/chord/useChordPlayback.ts |
+| 16 | 510 | src/components/playback/useChordClockPlayback.ts |
 | 17 | 694 | src/components/song/EffectsRackView.tsx |
 | 18 | 685 | src/components/Header.tsx |
 | 19 | 677 | src/components/loop/SoundSynthSection.tsx |
@@ -484,10 +484,11 @@ Verified unless marked *(uncertain)*.
 17. **`components/ui/` is not a leaf.** `ui/StepRow.tsx` → `components/playbackStep.ts` (clock/engine
     subscriber), `ui/BottomInputDock.tsx` → `useInputDeck.ts`; `ui/` also holds 663-line `Keyboard.tsx`
     and 798-line `PresetLibrary.tsx`.
-18. **Playback controllers live in `components/`:** `loop/chord/useChordPlayback.ts` (710),
-    `loop/lead/useLeadPlayback.ts`, `useSequencerPlayback.ts`, `usePlayheadSync.ts`,
-    `useInputDeck.ts` (776) — non-view logic that is the largest share of `components/` root and
-    the reason components→audio has 48 edges.
+18. **Playback controllers live in `components/`:** `playback/useChordClockPlayback.ts`,
+    `playback/useLeadPlayback.ts`, `playback/useLeadStepPublisher.ts`,
+    `playback/useSequencerPlayback.ts` — mounted by `PlaybackHost` (DEV-422) — plus
+    `usePlayheadSync.ts`, `useInputDeck.ts` (776) — non-view logic that is the largest share of
+    `components/` root and the reason components→audio has 48 edges.
 19. **Two runtime import cycles in `store/`** (§1.5): `sanitize ↔ leadSlice/sanitizeBeat` and
     `store → loopCopySlice → loadLoop → store`.
 20. **D2 alias rule half-applied:** 229 cross-folder `../` imports (§3).

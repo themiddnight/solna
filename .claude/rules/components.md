@@ -54,6 +54,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 ## Placement
 
 - Code used by one feature or area stays with it (a hook for `loop/chord/` lives in `loop/chord/`); code used by two or more is lifted to the shared location its layer already has — `src/components/ui/` for shared view pieces, `src/components/` root for shared hooks and controllers, `src/utils/` for cross-layer helpers, `src/musicCore/` for music theory. <!-- R276 -->
+- A transport controller is not a view's colocated hook: it lives in `components/playback/` and is mounted by `PlaybackHost` (R312, `playback.md`).
 
 ([ADR-0031](../../docs/decisions/0031-component-hook-store-selector-and-placement-conventions.md))
 
