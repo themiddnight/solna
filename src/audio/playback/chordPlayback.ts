@@ -1,12 +1,10 @@
 import { audioEngine, STEPS_PER_BAR, type AudioEngine } from "../engine";
-import { equalPowerVelocityScale } from "../chordRhythms";
 import {
   getDiatonicChordForDegree,
   barDurationSec,
   noteFrequency,
   stepDurationSec,
 } from "@/utils/musicTheory";
-import { DEFAULT_VELOCITY } from "../constants";
 import type { ChordItem } from "@/types";
 import type { ActiveSynth } from "@/types/synth";
 import { synthReleaseSeconds } from "@/utils/synthPatch";
@@ -154,7 +152,7 @@ export function playChordLegato(
     engine.triggerSynthNoteOn(
       noteFrequency(note),
       synth,
-      DEFAULT_VELOCITY * equalPowerVelocityScale(notes.length),
+      fullHoldVelocity(notes.length),
       undefined,
       "chord",
       1,

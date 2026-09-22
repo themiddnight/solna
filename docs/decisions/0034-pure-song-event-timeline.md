@@ -47,7 +47,7 @@ excluded (they erase at runtime and cannot instantiate the singleton).
 
 `renderMixdown.ts`'s `scheduleArrangement` no longer plans anything: it applies each pass's audio
 automation and performs each walk item — `performTimelineEvent` for a note or drum event — before
-resuming the generator. It calls no planner.
+resuming the generator. It calls no lane planner — `planArrangement` only sizes the context.
 
 ## Why incremental, not collect-then-perform (spec F8 and §6)
 
@@ -110,7 +110,7 @@ the walk-based renderer performs the same calls in the same order as the code it
 
 - **R287** — `buildSongTimeline`/`walkSongTimeline` in `plan/songTimeline.ts` is the one place an
   arrangement becomes timed events; `renderMixdown.ts` only applies pass automation and performs
-  walk items, and calls no planner.
+  walk items, and calls no lane planner (`planArrangement` only sizes the context).
 - **R288** — The renderer consumes `walkSongTimeline` incrementally, performing each item before
   resuming the walk; never collect the timeline before performing it. The walk's per-step emit
   order (drums, chord hold, bass hold, chord, bass, pad, lead, FX) is part of the contract.

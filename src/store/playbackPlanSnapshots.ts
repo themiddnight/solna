@@ -14,8 +14,9 @@ import type { AppStore } from './types';
  * `useAppStore.getState()`, so the singleton stays in the controller that owns
  * the clock subscription and a planner can never acquire a store read by
  * importing a "convenience" wrapper. The offline renderer builds the same
- * shapes from its own snapshot (`src/audio/export/renderMixdown.ts`), which is
- * why live/offline equivalence is a deep-equality assertion on two snapshots.
+ * shapes from its own snapshot (`src/audio/playback/plan/songSnapshot.ts`),
+ * which is why live/offline equivalence is a deep-equality assertion on two
+ * snapshots.
  *
  * What is NOT here is as deliberate as what is: no synth patch, no arp
  * settings that a lane reads live. Those are EMIT-time-ONLY reads passed to
@@ -29,6 +30,7 @@ import type { AppStore } from './types';
  * `ChordPlanSnapshot`'s own docblock in `chordPlan.ts` for why both reads are
  * needed rather than one being redundant.
  */
+
 /**
  * The Beat lane's plan snapshot from live store state. R234 twin of the
  * offline `beatSnapshotForLoop`: a new Beat field goes in both or neither.
