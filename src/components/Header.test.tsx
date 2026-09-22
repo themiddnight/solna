@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, projectDisplayName, readStoredTheme, resolveInitialTheme, ScaleSelects, UNTITLED_PROJECT_LABEL } from './Header';
+import { TabButton, LAYER_META, layerToggleTarget } from './Header';
+import { persistTheme, readStoredTheme, resolveInitialTheme } from './header/useTheme';
+import { projectDisplayName, ProjectNameLabel, UNTITLED_PROJECT_LABEL } from './header/ProjectNameLabel';
+import { FollowPlayheadToggle } from './header/FollowPlayheadToggle';
+import { ScaleMenu, ScaleSelects } from './header/ScaleMenu';
 import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
@@ -389,9 +393,17 @@ describe('the header cluster leads with the subject, not the tabs', () => {
   // toggle, which is also what keeps the tabs anchored just left of that
   // toggle on BOTH layers — this group exists on the loop layer only, so
   // behind the tabs it moved them sideways on every layer change.
-  test('the key/scale group precedes the tab nav, on both breakpoints', () => {
-    expect(src.indexOf('idPrefix="select-master-scale"')).toBeLessThan(navAt);
-    expect(src.indexOf('idPrefix="select-master-scale-compact"')).toBeLessThan(navAt);
+  test('the key/scale group precedes the tab nav', () => {
+    expect(src.indexOf('<ScaleMenu')).toBeGreaterThan(-1);
+    expect(src.indexOf('<ScaleMenu')).toBeLessThan(navAt);
+  });
+
+  // Both copies render — the inline pair from xl up and the dropdown below —
+  // each under its own id prefix, so the hidden copy never duplicates an id.
+  test('the key/scale menu renders both breakpoint copies', () => {
+    const html = renderToString(<ScaleMenu scaleRoot="C" scaleType="Major" />);
+    expect(html).toContain('id="select-master-scale-root"');
+    expect(html).toContain('id="select-master-scale-compact-root"');
   });
 });
 

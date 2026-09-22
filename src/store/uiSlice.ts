@@ -41,7 +41,7 @@ function isKeyboardMode(value: string | null): value is KeyboardMode {
  * Reads the persisted keyboard-mode choice, degrading to `null` (i.e. "no
  * stored preference, or garbage") if storage access throws or the stored
  * value isn't one of the three known modes. Mirrors `readStoredTheme` in
- * Header.tsx via the shared guarded-storage helpers.
+ * `components/header/useTheme.ts` via the shared guarded-storage helpers.
  */
 export function readStoredKeyboardMode(storage?: Pick<Storage, 'getItem'>): KeyboardMode | null {
   return readValidatedStorageValue(KEYBOARD_MODE_STORAGE_KEY, isKeyboardMode, storage);

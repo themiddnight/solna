@@ -1,25 +1,17 @@
 import React from "react";
-import {
-  Sun,
-  Moon,
-  ChevronDown,
-  LocateFixed,
-  LocateOff,
-} from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
 import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
-import { SCALES } from "@/data/scales";
-import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpelling";
-import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
-import { useLiveStore } from "./ui/useLiveStore";
-import { GROUP_LABEL, HEADER_FIELD_SHELL, HEADER_GROUP, HEADER_SELECT } from "./ui/fieldClasses";
-import { IconButton } from "./ui/IconButton";
+import { HEADER_GROUP } from "./ui/fieldClasses";
 import { LoopCopyButton } from "./loop/LoopCopyButton";
 import { LoopSelector } from "./loop/LoopSelector";
 import { ProjectMenu } from "./project/ProjectMenu";
 import { ExportButton } from "./export/ExportButton";
 import { VIEW_META } from "./viewMeta";
+import { ProjectNameLabel } from "./header/ProjectNameLabel";
+import { FollowPlayheadToggle } from "./header/FollowPlayheadToggle";
+import { ScaleMenu } from "./header/ScaleMenu";
+import { ThemeToggle } from "./header/ThemeToggle";
 
 /** The two layers in toggle order. Labels are user-facing copy. */
 export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [
@@ -83,252 +75,6 @@ export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButt
 }
 
 
-interface ScaleSelectsProps {
-  idPrefix: string;
-  stacked?: boolean;
-}
-
-/**
- * The two master scale selects. They render twice — inline from `md` up, and
- * inside a dropdown below it — so each instance takes its own id prefix rather
- * than duplicating ids into the DOM (the hidden copy is still rendered).
- */
-export function ScaleSelects({
-  idPrefix,
-  stacked,
-}: ScaleSelectsProps) {
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const setScaleRoot = useAppStore((s) => s.setScaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
-  const setScaleType = useAppStore((s) => s.setScaleType);
-
-  return (
-    <>
-      <select
-        id={`${idPrefix}-root`}
-        value={scaleRoot}
-        onChange={(e) => setScaleRoot(e.target.value)}
-        // `w-*`, never `min-w-*`: a min-width keeps the select from ever
-        // shrinking, which is what makes HEADER_SELECT's ellipsis unreachable.
-        // The widths are tuned against how much room the navbar has; a name
-        // too long for one ellipsises and stays whole in `title`. The dropdown
-        // copy is `w-full`, where there is room for all of it.
-        className={`${HEADER_SELECT} text-primary ${stacked ? 'w-full' : 'w-18'}`}
-        title="Root Note"
-      >
-        {KEY_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <select
-        id={`${idPrefix}-type`}
-        value={scaleType}
-        onChange={(e) => setScaleType(e.target.value)}
-        className={`${HEADER_SELECT} text-base-content/80 ${stacked ? 'w-full' : 'w-36'}`}
-        title="Scale Type"
-      >
-        {Object.keys(SCALES).map((s) => (
-          <option key={s} value={s}>
-            {SCALES[s].name}
-          </option>
-        ))}
-      </select>
-    </>
-  );
-}
-
-/** What an unnamed project reads as, in the header and in the menu. */
-export const UNTITLED_PROJECT_LABEL = 'Untitled project';
-
-/**
- * The one place a project's name becomes display text. `null` is the store's
- * spelling of "never named" (see projectSlice's `normalizeName`), so the
- * label is derived rather than stored — a stored label would go stale the
- * moment the name changed.
- */
-export function projectDisplayName(name: string | null): string {
-  return name ?? UNTITLED_PROJECT_LABEL;
-}
-
-interface ProjectNameLabelProps {
-  layer: Layer;
-}
-
-/**
- * The project's name, song layer only, editable in place. Takes `layer` as a
- * prop (rather than reading `activeTab` itself) so it can be unit-tested
- * directly: under `renderToString`, `Header`'s own `activeTab` read is a plain
- * `useAppStore` selector, which serves the store's CREATION-time value and
- * never reflects a test's `setState` (see .claude/rules/testing.md) — there is
- * no way to reach the song layer through a rendered `<Header />` in a test.
- *
- * `draft` is local state, never a store value: a keystroke must not write the
- * store (each write would re-render every mounted view, and the name is
- * envelope rather than content). Commit is Enter or blur; Escape reverts.
- */
-export function ProjectNameLabel({ layer }: ProjectNameLabelProps) {
-  const name = useLiveStore((s) => s.projectName);
-  const setProjectName = useLiveStore((s) => s.setProjectName);
-  const [draft, setDraft] = React.useState<string | null>(null);
-  if (layer !== 'song') return null;
-  const label = projectDisplayName(name);
-  const value = draft ?? name ?? '';
-  const commit = () => {
-    setProjectName(value);
-    setDraft(null);
-  };
-  return (
-    // Same shell and caption as the loop picker on the other layer, in the same
-    // place in the row: each layer opens with what its tabs are editing — a
-    // loop there, the project here.
-    <div className={HEADER_FIELD_SHELL}>
-      <label className={GROUP_LABEL} htmlFor="header-project-name">
-        Project
-      </label>
-      <input
-        id="header-project-name"
-        type="text"
-        value={value}
-        placeholder={UNTITLED_PROJECT_LABEL}
-        aria-label="Project name"
-        title={label}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            commit();
-          }
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            setDraft(null);
-          }
-        }}
-        className="input input-xs w-20 sm:w-32 max-w-[10rem] text-xs font-semibold bg-transparent border-0 focus:outline-none"
-      />
-    </div>
-  );
-}
-
-/**
- * Arrange's follow-the-playhead toggle. Song layer only — it is the same
- * `layer !== 'song'` gate `ProjectNameLabel` uses, and for the same reason it
- * sits beside it: the control belongs to what the song tabs are editing, not
- * to the tabs.
- *
- * Deliberately shown on BOTH song tabs rather than only on Arrange. It is a
- * stored preference, so setting it from Master FX is meaningful, and gating it
- * on the tab would shift the tab row sideways every time the user crossed
- * between the two — moving the buttons out from under the pointer that is
- * clicking them.
- *
- * Takes `layer` as a prop for the same testability reason ProjectNameLabel
- * does: a rendered `<Header />` can never reach the song layer under
- * `renderToString` (see .claude/rules/testing.md).
- */
-export function FollowPlayheadToggle({ layer }: { layer: Layer }) {
-  // useLiveStore, not a plain useAppStore selector: this component is rendered
-  // standalone in the suite and a plain selector would serve the store's
-  // creation-time value under renderToString, making the "off" state
-  // untestable (see ui/useLiveStore.ts and .claude/rules/testing.md).
-  const followPlayhead = useLiveStore((s) => s.followPlayhead);
-  const toggleFollowPlayhead = useLiveStore((s) => s.toggleFollowPlayhead);
-  if (layer !== 'song') return null;
-  return (
-    <IconButton
-      id="btn-follow-playhead"
-      label={followPlayhead ? 'Following the playing loop — click to stop' : 'Follow the playing loop'}
-      aria-pressed={followPlayhead}
-      active={followPlayhead}
-      icon={
-        followPlayhead ? (
-          <LocateFixed className="w-4 h-4 text-primary" />
-        ) : (
-          <LocateOff className="w-4 h-4 opacity-60" />
-        )
-      }
-      onClick={toggleFollowPlayhead}
-    />
-  );
-}
-
-export type SolnaTheme = 'solna-dark' | 'solna-light';
-
-const THEME_STORAGE_KEY = 'solna_theme';
-
-/**
- * Pure theme resolution — no DOM, no localStorage access, unit-testable.
- * Mirrors exactly what the bootstrap <script> in index.html does, so the two
- * can never disagree.
- */
-export function resolveInitialTheme(stored: string | null, prefersLight: boolean): SolnaTheme {
-  if (stored === 'solna-dark' || stored === 'solna-light') return stored;
-  return prefersLight ? 'solna-light' : 'solna-dark';
-}
-
-/**
- * Reads the persisted theme choice, degrading to `null` (i.e. "no stored
- * preference") if storage access throws. Mirrors the try/catch the
- * index.html bootstrap script already performs around the identical read.
- */
-export function readStoredTheme(storage?: Pick<Storage, 'getItem'>): string | null {
-  return readGuardedStorageValue(THEME_STORAGE_KEY, storage);
-}
-
-/**
- * Best-effort persistence: swallows a throwing `setItem` so the toggle still
- * updates the in-memory theme and the DOM attribute for the session — only
- * cross-session persistence is lost when storage is blocked.
- */
-export function persistTheme(theme: SolnaTheme, storage?: Pick<Storage, 'setItem'>): void {
-  persistGuardedStorageValue(THEME_STORAGE_KEY, theme, storage);
-}
-
-/**
- * The header's theme, from the DOM attribute the index.html bootstrap already
- * resolved (that is what prevents the FOUC) through to the toggle that writes
- * the attribute and localStorage.
- */
-function useTheme(): { currentTheme: SolnaTheme; toggleTheme: () => void } {
-  const [currentTheme, setCurrentTheme] = React.useState<SolnaTheme>(() =>
-    resolveInitialTheme(
-      typeof document !== "undefined"
-        ? document.documentElement.getAttribute("data-theme")
-        : null,
-      typeof window !== "undefined" &&
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-color-scheme: light)").matches,
-    ),
-  );
-
-  const toggleTheme = () => {
-    const next: SolnaTheme = currentTheme === "solna-dark" ? "solna-light" : "solna-dark";
-    setCurrentTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
-    persistTheme(next);
-  };
-
-  // The <head> bootstrap script in index.html has already resolved and applied
-  // the theme before React mounted (that's what prevents the FOUC). This effect
-  // only re-syncs when the DOM and React state disagree — e.g. another tab wrote
-  // localStorage, or the OS preference flipped on a first visit with no stored
-  // value. It never clobbers an attribute that already matches.
-  React.useEffect(() => {
-    const resolved = resolveInitialTheme(
-      readStoredTheme(),
-      window.matchMedia("(prefers-color-scheme: light)").matches,
-    );
-    if (document.documentElement.getAttribute("data-theme") !== resolved) {
-      document.documentElement.setAttribute("data-theme", resolved);
-    }
-    setCurrentTheme((prev) => (prev === resolved ? prev : resolved));
-  }, []);
-
-  return { currentTheme, toggleTheme };
-}
-
 /** The Loop/Song toggle; clicking the layer already shown is a no-op. */
 function LayerSwitcher({
   layer,
@@ -363,64 +109,12 @@ function LayerSwitcher({
   );
 }
 
-/** The master key/scale group: an inline field from `xl` up, a dropdown below it. */
-function ScaleMenu({ scaleRoot, scaleType }: { scaleRoot: string; scaleType: string }) {
-  return (
-    <>
-      {/* Scale Picker Compact (Desktop >= xl) */}
-      <div className={`hidden xl:flex ${HEADER_FIELD_SHELL}`}>
-        <ScaleSelects idPrefix="select-master-scale" />
-      </div>
-
-      {/* Below `xl` (mobile and landscape/portrait tablet): Compact Scale Picker Dropdown */}
-      {/* Centre-aligned on a phone, NOT `dropdown-end`. The panel is
-          224px wide and this summary's right edge sits ~169px into a
-          375px phone, so right-aligning it put both selects 50px off the
-          left of the screen — and the header clips (the app root is
-          `overflow-hidden`), so there was nothing to scroll to.
-          Start-aligning fixes that width and breaks 320px, where the
-          summary sits far enough right to push the panel off the other
-          edge; centring on the summary is the one alignment that clears
-          BOTH, because the summary sits near the middle of a phone
-          header either way. From `sm` up there is room to spare and the
-          panel goes back to hanging off the trigger's right edge. */}
-      <details className="dropdown dropdown-center sm:dropdown-end xl:hidden">
-        <summary
-          id="btn-scale-dropdown"
-          className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
-          title={`Key & Scale — ${formatKeyLabel(scaleRoot, scaleType, { long: true })}`}
-        >
-          <span className="text-primary">{getTonicSpelling(scaleRoot, scaleType)}</span>
-          {/* Dropped below 390px — the width at which brand + this group
-              stop sharing one row and the navbar grows a third one. The
-              cut is `max-[390px]` rather than `sm` so the 390px+ phones
-              that DO fit keep the scale name; narrower ones keep the root
-              note, the full name in the `title`, and both selects one tap
-              away in the dropdown. */}
-          <span className="text-[10px] text-base-content/70 max-w-12 truncate max-[390px]:hidden">
-            {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
-          </span>
-          <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
-        </summary>
-        <div className="dropdown-content z-50 mt-1 w-56 p-2.5 flex flex-col gap-2 bg-base-100 border border-base-300 rounded-box shadow-xl">
-          <div className="text-[11px] font-bold text-base-content/60 uppercase tracking-wider px-1">
-            Master Key & Scale
-          </div>
-          <ScaleSelects idPrefix="select-master-scale-compact" stacked />
-        </div>
-      </details>
-    </>
-  );
-}
-
 export const Header = React.memo(function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
   const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const scaleRoot = useAppStore((s) => s.scaleRoot);
   const scaleType = useAppStore((s) => s.scaleType);
-
-  const { currentTheme, toggleTheme } = useTheme();
 
   return (
     <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
@@ -491,19 +185,7 @@ export const Header = React.memo(function Header() {
 
 
         {/* Theme Toggle Button */}
-        <IconButton
-          id="btn-toggle-theme"
-          label={`Switch to ${currentTheme === 'solna-dark' ? 'Light' : 'Dark'} Theme`}
-          icon={
-            currentTheme === 'solna-dark' ? (
-              <Sun className="w-4 h-4 text-primary" />
-            ) : (
-              <Moon className="w-4 h-4 text-primary" />
-            )
-          }
-          size="sm"
-          onClick={toggleTheme}
-        />
+        <ThemeToggle />
       </div>
     </header>
   );

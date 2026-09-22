@@ -48,7 +48,7 @@ const FIRST_GESTURE_EVENTS = ['click', 'keydown', 'pointerdown'] as const;
  * teardown on unmount).
  *
  * Exported as a pure, DOM-injectable helper — same pattern as
- * `resolveInitialTheme` in `components/Header.tsx` — so it is unit-testable
+ * `resolveInitialTheme` in `components/header/useTheme.ts` — so it is unit-testable
  * without a real DOM or testing-library.
  */
 export function registerFirstGesture(
