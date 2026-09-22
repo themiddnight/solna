@@ -1,6 +1,6 @@
 import { audioEngine } from '../engine';
 import { DEFAULT_VELOCITY } from '../constants';
-import type { ChordItem } from '@/types';
+import type { ChordItem, TrackSendLevels } from '@/types';
 import type { ActiveSynth } from '@/types/synth';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 import { generateBlockChordNotes, noteFrequency } from '@/utils/musicTheory';
@@ -16,6 +16,13 @@ import { generateBlockChordNotes, noteFrequency } from '@/utils/musicTheory';
  * user's held keyboard notes, so a disposer firing there would cut them.
  */
 const PREVIEW_SOURCE = 'preview';
+
+/**
+ * The audition bus's master sends: unity into all three effects, exactly what
+ * every bus had before DEV-423. `'preview'` is not a track — no store row
+ * drives it — so it is told its levels here; an untold send is silent.
+ */
+const PREVIEW_SENDS: TrackSendLevels = { reverb: 1, delay: 1, distortion: 1 };
 
 /** Stops whatever the preview scheduled. Always safe to call more than once. */
 export type PreviewHandle = () => void;
@@ -45,6 +52,7 @@ let cancelCurrentStream: (() => void) | null = null;
  * 'preview' bus even though it no longer has a handle able to silence them.
  */
 function beginPreview(onSupersede?: () => void): PreviewHandle {
+  audioEngine.setSourceSends(PREVIEW_SOURCE, PREVIEW_SENDS);
   currentGeneration += 1;
   const generation = currentGeneration;
   cancelCurrentStream?.();

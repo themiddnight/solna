@@ -1,4 +1,4 @@
-import { MasterEffects, BeatFilterType } from '../types';
+import { MasterEffects, BeatFilterType, type TrackSendLevels } from '../types';
 import { MAX_FADER_GAIN } from '../utils/gainUnits';
 import { random } from './rng';
 import { clampEffects, clampEffectValue } from './effectLimits';
@@ -7,6 +7,12 @@ import {
   applySourceBusAutomation,
   type SourceBusApplyMode,
 } from './automation/sourceBusAutomation';
+import {
+  applySourceSendLevels,
+  clampSendLevels,
+  createSourceSendNodes,
+  type SourceSendNodes,
+} from './sourceSends';
 
 /**
  * The engine services a subsystem may call back into. Handed to every subsystem's
@@ -82,14 +88,12 @@ export const BEAT_FILTER_XFADE_SEC = 0.008;
 const DISTORTION_SEND_SETTLE_MS = 250;
 
 /**
- * Source buses that never feed the generic delay/reverb/distortion send
- * gates. The Beat (`sequencer`) bus is dry only: drums reach reverb solely
- * through the authored per-voice `reverbSend` -> `drumSendGate` path, and
- * never reach master delay or distortion. Named here, rather than implied by
- * the order setupMasterChain builds nodes in, so the rule survives a reorder
- * of that method and applies to a render engine the same way.
+ * The Beat bus's engine name. It is an ordinary track for delay and
+ * distortion, but it has NO bus→reverb send: drum reverb is the per-voice
+ * `reverbSend` → `drumSendGate` path, in series with the Beat track's own
+ * reverb send node (R304, DEV-423). `getSourceBus` skips only that one edge.
  */
-const SOURCES_WITHOUT_MASTER_SENDS: ReadonlySet<string> = new Set(['sequencer']);
+const BEAT_BUS_SOURCE = 'sequencer';
 
 /**
  * A parallel-send gate: connects its gate node to its effect node on
@@ -258,9 +262,10 @@ export class MasterRack {
   /** The send path's lanes, kept in lockstep with the dry path's. */
   drumSendFilterLanes: BeatFilterLane[] = [];
   /**
-   * The Beat source fader/mute for authored drum reverb sends. Drum sends do
-   * not use getSourceBus('sequencer'): that bus feeds the dry path only (it is
-   * in SOURCES_WITHOUT_MASTER_SENDS), while these sends must reach reverb.
+   * The Beat source fader/mute for authored drum reverb sends. Drum reverb
+   * does not come from the sequencer bus (that bus has no reverb edge, R304);
+   * it runs voice sends → `drumSendFilter` → this gate → the Beat track's
+   * reverb send node → convolver.
    * Mirroring the sequencer bus here keeps the authored send on that same
    * source control without putting a gate after the convolver, where muting
    * Beat would incorrectly erase a tail that was already ringing.
@@ -310,6 +315,10 @@ export class MasterRack {
   private sourceTaps = new Map<string, GainNode>();
   private sourceMuted = new Map<string, boolean>();
   private sourceGains = new Map<string, number>();
+  /** Each source's three send nodes, built with its bus in getSourceBus; cleared with sourceBuses. */
+  private sourceSendNodes = new Map<string, SourceSendNodes>();
+  /** Last send levels per source — survives pre-init like sourceGains, and seeds lazily built nodes. */
+  private sourceSends = new Map<string, TrackSendLevels>();
 
   noiseBuffer: AudioBuffer | null = null;
 
@@ -340,6 +349,7 @@ export class MasterRack {
     this.distortionSend?.dispose();
 
     for (const node of this.sourceBuses.values()) this.release(node);
+    for (const sends of this.sourceSendNodes.values()) this.release(sends.reverb, sends.delay, sends.distortion);
     for (const node of this.sourceTaps.values()) this.release(node);
     for (const node of this.drumTrackGains.values()) this.release(node);
     for (const node of this.sourceAnalysers.values()) this.release(node);
@@ -356,12 +366,14 @@ export class MasterRack {
     );
 
     this.sourceBuses.clear();
+    this.sourceSendNodes.clear();
     this.sourceTaps.clear();
     this.drumTrackGains.clear();
     this.sourceAnalysers.clear();
     this.sourceLevelAnalysers.clear();
     this.sourceMuted.clear();
     this.sourceGains.clear();
+    this.sourceSends.clear();
     this.impulseCache.clear();
     this.drumBusFilterLanes = [];
     this.drumSendFilterLanes = [];
@@ -438,9 +450,9 @@ export class MasterRack {
   } {
     const ctx = this.ctx;
     if (!ctx) throw new Error('createSendGates called before init()');
-    // Send gates: every source bus except SOURCES_WITHOUT_MASTER_SENDS
-    // connects here (getSourceBus), never
-    // straight to the effect node. Cleared implicitly with the rest of the
+    // Send gates: every source bus's own send nodes connect here
+    // (getSourceBus), never the bus itself and never straight to the effect
+    // node. Cleared implicitly with the rest of the
     // graph — setupMasterChain only runs once per context in production (see
     // the comment at the top of that method) but a gate is cheap to recreate
     // alongside everything else it is not cleared explicitly here.
@@ -479,6 +491,7 @@ export class MasterRack {
     // impulses built against the old one must not survive into the new graph.
     // Do NOT write new code that relies on these running.
     this.sourceBuses.clear();
+    this.sourceSendNodes.clear();
     this.sourceTaps.clear();
     this.drumTrackGains.clear();
     this.sourceAnalysers.clear();
@@ -559,31 +572,35 @@ export class MasterRack {
     this.dryGain = this.ctx.createGain();
     this.dryGain.gain.value = 1.0;
 
+    // The send gates exist BEFORE any source bus: getSourceBus wires each
+    // bus's send nodes into them and throws without them (DEV-423).
+    const { reverbSendGate, delaySendGate, distortionSendGate } = this.createSendGates();
+
     // Drum bus filter — routed through the sequencer source bus for volume and
-    // mute control. That bus feeds the dry path only: getSourceBus excludes it
-    // from the generic sends by name, so building it before or after the send
-    // gates below makes no difference.
-    const busBank = this.buildBeatFilterBank(this.getSourceTap('sequencer'));
+    // mute control. That bus feeds the dry path and, through its own send
+    // nodes, the delay and distortion gates; never the reverb gate (R304).
+    const busBank = this.buildBeatFilterBank(this.getSourceTap(BEAT_BUS_SOURCE));
     this.drumBusFilter = busBank.input;
     this.drumBusFilterLanes = busBank.lanes;
 
-    // Same settings, wired to the reverb send only.
+    // Same settings, wired to the reverb only: drumSendGate, then the Beat
+    // track's reverb send node in series — the per-voice reverbSend is a
+    // multiplier of the track send (R305). A permanent edge.
     this.drumSendGate = this.ctx.createGain();
+    this.drumSendGate.connect(this.sendNodesFor(BEAT_BUS_SOURCE).reverb);
     const sendBank = this.buildBeatFilterBank(this.drumSendGate);
     this.drumSendFilter = sendBank.input;
     this.drumSendFilterLanes = sendBank.lanes;
     // getSourceTap('sequencer') above has already created and seeded the dry
     // bus from sourceGains/sourceMuted. Copy that exact source level so a
     // pre-init snapshot starts both branches in the same state.
-    this.drumSendGate.gain.value = this.getSourceBus('sequencer').gain.value;
+    this.drumSendGate.gain.value = this.getSourceBus(BEAT_BUS_SOURCE).gain.value;
 
     // Every wet send and EQ gain is seeded at ZERO. The audible defaults are
     // INITIAL_EFFECTS and arrive through applyEngineSnapshot() on the first
     // user click; seeding a second set here was a second source of truth that
     // already disagreed with initialState.ts (distortionWet 0.1 vs 0.0, eqLow
     // 2 vs 0, eqHigh 3 vs 0) and was silently overwritten anyway.
-
-    const { reverbSendGate, delaySendGate, distortionSendGate } = this.createSendGates();
 
     // Delay
     this.delayNode = this.ctx.createDelay(2.0);
@@ -619,11 +636,13 @@ export class MasterRack {
     this.reverbNode.connect(this.reverbGain);
     reverbSendGate.connect(this.reverbNode);
     this.reverbSendConnected = true;
-    // Gate BEFORE the convolver: mute blocks new drum input while the reverb
-    // tail already inside the shared processor keeps decaying naturally.
-    // This connection is structural seeding only — updateReverbSend owns
-    // whether it stays connected once the master reverb send goes idle.
-    this.drumSendGate.connect(this.reverbNode);
+    // The Beat reverb send sits BEFORE the convolver: mute blocks new drum
+    // input while the reverb tail already inside the shared processor keeps
+    // decaying naturally. This connection is structural seeding only —
+    // updateReverbSend owns whether it stays connected once the master reverb
+    // send goes idle. It is the SECOND convolver input, connected after
+    // reverbSendGate (C1): the sum order is part of the byte-identical golden.
+    this.sendNodesFor(BEAT_BUS_SOURCE).reverb.connect(this.reverbNode);
     this.drumSendReverbConnected = true;
 
     // The fixed low -> mid -> high -> masterGain tail is wired here once and
@@ -778,6 +797,11 @@ export class MasterRack {
     this.distortionSend.releaseAfter(DISTORTION_SEND_SETTLE_MS);
   }
 
+  /** The convolver's second feed: the Beat track's reverb send node (C1, R304). */
+  private beatReverbFeed(): GainNode | null {
+    return this.sourceSendNodes.get(BEAT_BUS_SOURCE)?.reverb ?? null;
+  }
+
   /**
    * Reverb's convolver keeps a real tail (up to `reverbDecay` seconds) once
    * fed real signal. Reconnecting cancels any pending disconnect outright;
@@ -786,8 +810,8 @@ export class MasterRack {
    *
    * TWO independent feeds reach the convolver — `reverbSendGate` (every
    * non-drum source bus, gated on `updateEffects`'s reverbWet/reverbBypass)
-   * and `drumSendGate` (the authored per-voice drum reverb send, which has
-   * no bypass of its own). Both are driven by the SAME `active` decision —
+   * and the Beat track's reverb send node (fed by `drumSendGate`, the
+   * authored per-voice drum reverb send, which has no bypass of its own). Both are driven by the SAME `active` decision —
    * there is no separate "drum reverb send" master toggle — so this method
    * gates both gates under the one shared tail timer rather than inventing
    * a second one: the convolver only truly goes idle once NEITHER feed is
@@ -807,8 +831,9 @@ export class MasterRack {
         this.reverbSendGate.connect(this.reverbNode);
         this.reverbSendConnected = true;
       }
-      if (this.drumSendGate && !this.drumSendReverbConnected) {
-        this.drumSendGate.connect(this.reverbNode);
+      const beatFeed = this.beatReverbFeed();
+      if (beatFeed && !this.drumSendReverbConnected) {
+        beatFeed.connect(this.reverbNode);
         this.drumSendReverbConnected = true;
       }
       return;
@@ -821,7 +846,8 @@ export class MasterRack {
       this.reverbDisconnectTimer = null;
       if (this.reverbSendGate && this.reverbNode) this.reverbSendGate.disconnect(this.reverbNode);
       this.reverbSendConnected = false;
-      if (this.drumSendGate && this.reverbNode) this.drumSendGate.disconnect(this.reverbNode);
+      const beatFeed = this.beatReverbFeed();
+      if (beatFeed && this.reverbNode) beatFeed.disconnect(this.reverbNode);
       this.drumSendReverbConnected = false;
     }, tailMs);
   }
@@ -923,27 +949,43 @@ export class MasterRack {
     return buffer;
   }
 
-  // Lazily create (and cache) the gain bus for a source: dry always, plus the
-  // generic delay/reverb/distortion send gates for every source NOT in
-  // SOURCES_WITHOUT_MASTER_SENDS. The exclusion is by name, never by which
-  // gates happen to exist yet, so it holds whatever order the graph is built
-  // in — live and in a render engine alike.
+  // Lazily create (and cache) the gain bus for a source: dry always, plus its
+  // own three send nodes, taken after the fader and mute, into the delay,
+  // reverb and distortion gates (R303). The Beat bus alone has no reverb edge
+  // (R304): its reverb node is fed by drumSendGate in setupMasterChain. The
+  // gates must exist first — a missing gate is a construction-order bug.
   getSourceBus(source: string): GainNode {
     if (!this.ctx || !this.dryGain) throw new Error('AudioContext not initialized');
     let bus = this.sourceBuses.get(source);
     if (!bus) {
+      const { delaySendGate, reverbSendGate, distortionSendGate } = this;
+      if (!delaySendGate || !reverbSendGate || !distortionSendGate) {
+        throw new Error('send gates not initialized');
+      }
       bus = this.ctx.createGain();
       const baseGain = this.sourceGains.get(source) ?? 1;
       bus.gain.value = this.sourceMuted.get(source) ? 0 : baseGain;
       bus.connect(this.dryGain);
-      if (!SOURCES_WITHOUT_MASTER_SENDS.has(source)) {
-        if (this.delaySendGate) bus.connect(this.delaySendGate);
-        if (this.reverbSendGate) bus.connect(this.reverbSendGate);
-        if (this.distortionSendGate) bus.connect(this.distortionSendGate);
+      const sends = createSourceSendNodes(this.ctx, this.sourceSends.get(source));
+      // Gate order as before DEV-423: delay, reverb, distortion.
+      bus.connect(sends.delay);
+      sends.delay.connect(delaySendGate);
+      if (source !== BEAT_BUS_SOURCE) {
+        bus.connect(sends.reverb);
+        sends.reverb.connect(reverbSendGate);
       }
+      bus.connect(sends.distortion);
+      sends.distortion.connect(distortionSendGate);
+      this.sourceSendNodes.set(source, sends);
       this.sourceBuses.set(source, bus);
     }
     return bus;
+  }
+
+  /** A source's three send nodes, building its bus (and them) on first use. */
+  private sendNodesFor(source: string): SourceSendNodes {
+    this.getSourceBus(source);
+    return this.sourceSendNodes.get(source) as SourceSendNodes;
   }
 
   // The pre-fader entry point for a source. Unity, one output (the bus), never
@@ -990,6 +1032,26 @@ export class MasterRack {
     if (!this.ctx) return;
     const at = Math.max(time ?? this.ctx.currentTime, this.ctx.currentTime);
     this.applySourceLevel(source, state.muted ? 0 : gain, at, mode);
+  }
+
+  /**
+   * A track's three send levels (linear 0..1). Its own method, never folded
+   * into setSourceState (C2): the golden call log pins setSourceState's calls.
+   * Writes only the send nodes — the bus and drumSendGate stay owned by the
+   * level/mute path (applySourceLevel).
+   */
+  setSourceSends(
+    source: string,
+    sends: TrackSendLevels,
+    time?: number,
+    mode: SourceBusApplyMode = 'transition',
+  ): void {
+    const levels = clampSendLevels(sends);
+    this.sourceSends.set(source, levels);
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const at = Math.max(time ?? now, now);
+    applySourceSendLevels(this.sendNodesFor(source), levels, at, mode, now);
   }
 
   // Mute/unmute an entire source layer with a ~10 ms click-free ramp. The

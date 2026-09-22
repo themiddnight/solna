@@ -3,6 +3,7 @@ import { bindFakeCtx, freshEngine, makeEngine } from './testFakes';
 import { FADER_MAX_DB, MAX_FADER_GAIN, dbToGain, toDecibels } from '../utils/gainUnits';
 import { noteFrequency } from '../utils/musicTheory';
 import { ACTIVE_SYNTH, masterChainCtx } from './engineTestHelpers';
+import { MasterRack } from './masterRack';
 
 const C4_HZ = noteFrequency('C4');
 
@@ -121,5 +122,80 @@ describe('source bus level control', () => {
     engine.setSourceGain('bass', 0.9);
 
     expect(bus.gain.targets.at(-1)!.v).toBe(0);
+  });
+});
+
+function builtRack() {
+  const engine = makeEngine();
+  const ctx = masterChainCtx();
+  bindFakeCtx(engine, ctx);
+  return { engine, ctx, rack: (engine as any).masterRack };
+}
+
+/** Everything a param has been told, so "never touched" is one comparison. */
+function automationOf(node: any): string {
+  return JSON.stringify([node.gain.cancels, node.gain.events, node.gain.targets]);
+}
+
+describe('source send levels', () => {
+  test('setSourceSends clamps, remembers and settles all three send nodes', () => {
+    const { rack } = builtRack();
+    rack.setSourceSends('chord', { reverb: 1.7, delay: -0.2, distortion: Number.NaN }, 10, 'settle');
+    expect(rack.sourceSends.get('chord')).toEqual({ reverb: 1, delay: 0, distortion: 0 });
+    const sends = rack.sourceSendNodes.get('chord');
+    expect(sends.reverb.gain.events.at(-1)).toEqual({ kind: 'set', v: 1, t: 10 });
+    expect(sends.delay.gain.events.at(-1)).toEqual({ kind: 'set', v: 0, t: 10 });
+    expect(sends.distortion.gain.events.at(-1)).toEqual({ kind: 'set', v: 0, t: 10 });
+  });
+
+  test('a future send change transitions at the boundary, through the engine facade', () => {
+    const { engine, ctx, rack } = builtRack();
+    const boundary = ctx.currentTime + 0.075;
+    engine.setSourceSends('bass', { reverb: 0.5, delay: 0.25, distortion: 0 }, boundary);
+    const sends = rack.sourceSendNodes.get('bass');
+    expect(sends.reverb.gain.targets.at(-1)).toEqual({ v: 0.5, t: boundary, tc: 0.01 });
+    expect(sends.delay.gain.targets.at(-1)).toEqual({ v: 0.25, t: boundary, tc: 0.01 });
+  });
+
+  test('a send with no level received is seeded silent', () => {
+    const { rack } = builtRack();
+    rack.getSourceBus('pad');
+    const sends = rack.sourceSendNodes.get('pad');
+    expect([sends.reverb.gain.value, sends.delay.gain.value, sends.distortion.gain.value]).toEqual([0, 0, 0]);
+  });
+
+  test('levels received before init are kept and seed the lazily built nodes', () => {
+    const rack: any = new MasterRack();
+    rack.setSourceSends('pad', { reverb: 0.3, delay: 0.4, distortion: 0.5 });
+    expect(rack.sourceSends.get('pad')).toEqual({ reverb: 0.3, delay: 0.4, distortion: 0.5 });
+    rack.bind(masterChainCtx() as unknown as BaseAudioContext);
+    rack.setupMasterChain();
+    rack.getSourceBus('pad');
+    const sends = rack.sourceSendNodes.get('pad');
+    expect([sends.reverb.gain.value, sends.delay.gain.value, sends.distortion.gain.value]).toEqual([0.3, 0.4, 0.5]);
+  });
+
+  test('setSourceState never touches a send node; setSourceSends never touches the bus or drumSendGate', () => {
+    const { rack } = builtRack();
+    const bus = rack.getSourceBus('sequencer');
+    const sends = rack.sourceSendNodes.get('sequencer');
+    const sendNodes = [sends.reverb, sends.delay, sends.distortion];
+    const sendsBefore = sendNodes.map(automationOf);
+    rack.setSourceState('sequencer', { gain: 0.5, muted: false }, 10, 'settle');
+    expect(sendNodes.map(automationOf)).toEqual(sendsBefore);
+
+    const busBefore = [automationOf(bus), automationOf(rack.drumSendGate)];
+    rack.setSourceSends('sequencer', { reverb: 0.5, delay: 0.5, distortion: 0.5 }, 10, 'settle');
+    expect([automationOf(bus), automationOf(rack.drumSendGate)]).toEqual(busBefore);
+  });
+
+  test('dispose releases every send node and forgets every level', () => {
+    const { ctx, rack } = builtRack();
+    rack.setSourceSends('fx', { reverb: 1, delay: 1, distortion: 1 }, 10, 'settle');
+    const sends = rack.sourceSendNodes.get('fx');
+    rack.dispose(ctx.currentTime);
+    expect(rack.sourceSendNodes.size).toBe(0);
+    expect(rack.sourceSends.size).toBe(0);
+    expect(sends.reverb._connectTargets).toEqual([]);
   });
 });

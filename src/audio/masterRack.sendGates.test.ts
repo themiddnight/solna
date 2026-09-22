@@ -42,10 +42,10 @@ function withFakeTimer() {
 /**
  * Split out of masterRack.test.ts to stay under the file's own line-count
  * gate (see eslint.config.js's max-lines comment: "Split the file, never
- * raise the cap"). Covers the send gates that sit between every source bus
- * (getSourceBus) and the reverb/delay/distortion nodes — the mechanism that
- * physically disconnects an idle effect send instead of merely zeroing its
- * downstream wet gain.
+ * raise the cap"). Covers each source bus's own send nodes (getSourceBus),
+ * the send gates they feed, and the reverb/delay/distortion nodes — the
+ * mechanism that physically disconnects an idle effect send instead of merely
+ * zeroing its downstream wet gain.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no
    internals; these tests drive the private subsystem fields and the
@@ -155,77 +155,88 @@ describe('effect sends physically disconnect when idle', () => {
     expect(gate._connectTargets).toContain(node);
     expect((engine as any).masterRack.delaySend.disconnectTimer).toBeNull();
   });
+});
 
-  test('every source bus connects to the send gates, never straight to the effect nodes', () => {
+/** DEV-423: every source bus owns three send nodes; only they touch the gates. */
+describe('each source bus feeds the gates through its own send nodes', () => {
+  test('every bus reaches the gates only through its own send nodes, never straight to a gate or an effect node', () => {
     const engine = makeEngine();
-    const ctx = masterChainCtx();
-    bindFakeCtx(engine, ctx);
+    bindFakeCtx(engine, masterChainCtx());
     const rack = (engine as any).masterRack;
-    rack.setupMasterChain();
+    const direct = [
+      rack.reverbSendGate, rack.delaySendGate, rack.distortionSendGate,
+      rack.reverbNode, rack.delayNode, rack.distortionNode,
+    ];
 
-    const bus = rack.getSourceBus('synth');
-    expect(bus._connectTargets).toContain(rack.reverbSendGate);
-    expect(bus._connectTargets).toContain(rack.delaySendGate);
-    expect(bus._connectTargets).toContain(rack.distortionSendGate);
-    expect(bus._connectTargets).not.toContain(rack.reverbNode);
-    expect(bus._connectTargets).not.toContain(rack.delayNode);
-    expect(bus._connectTargets).not.toContain(rack.distortionNode);
+    for (const source of ['synth', 'chord', 'bass', 'pad', 'fx', 'sequencer']) {
+      const bus = rack.getSourceBus(source);
+      for (const node of direct) expect(bus._connectTargets).not.toContain(node);
+      const sends = rack.sourceSendNodes.get(source);
+      expect(sends.delay._connectTargets).toEqual([rack.delaySendGate]);
+      expect(sends.distortion._connectTargets).toEqual([rack.distortionSendGate]);
+    }
+    for (const source of ['synth', 'chord', 'bass', 'pad', 'fx']) {
+      const sends = rack.sourceSendNodes.get(source);
+      expect(rack.getSourceBus(source)._connectTargets)
+        .toEqual([rack.dryGain, sends.delay, sends.reverb, sends.distortion]);
+      expect(sends.reverb._connectTargets).toEqual([rack.reverbSendGate]);
+    }
   });
 });
 
 /**
- * The Beat (`sequencer`) source bus is the one bus that never feeds the
- * generic master sends: drums reach reverb only through the authored
- * per-voice `drumSendGate`, and never reach delay or distortion. This used to
- * hold only because setupMasterChain happened to create the sequencer bus
- * BEFORE the send gates, so getSourceBus's `if (this.delaySendGate)` guards
- * skipped. These tests rebuild the bus AFTER the gates exist, which is the
- * order that would have leaked, in the live engine and in a render engine.
+ * DEV-423: the Beat (`sequencer`) bus is an ordinary track for delay and
+ * distortion — its own send nodes feed those two gates — but it has NO
+ * bus→reverb edge. Drum reverb stays the per-voice path through
+ * `drumSendGate`, in series with the Beat track's reverb send (R304).
  */
-describe('the Beat bus never feeds the generic master sends', () => {
-  function assertBeatBusExcluded(rack: any) {
-    // Drop the bus setupMasterChain built, so the next lookup creates it with
-    // every send gate already present.
-    rack.sourceBuses.delete('sequencer');
-    rack.sourceTaps.delete('sequencer');
-    expect(rack.delaySendGate).not.toBeNull();
-    expect(rack.reverbSendGate).not.toBeNull();
-    expect(rack.distortionSendGate).not.toBeNull();
-
-    const tap = rack.getSourceTap('sequencer');
+describe('the Beat bus sends to delay and distortion, never from the bus to reverb', () => {
+  function assertBeatBusSends(rack: any) {
     const bus = rack.getSourceBus('sequencer');
-    expect(tap._connectTargets).toContain(bus);
-    expect(bus._connectTargets).toContain(rack.dryGain);
-    expect(bus._connectTargets).not.toContain(rack.delaySendGate);
+    const sends = rack.sourceSendNodes.get('sequencer');
+    expect(bus._connectTargets).toEqual([rack.dryGain, sends.delay, sends.distortion]);
+    expect(bus._connectTargets).not.toContain(sends.reverb);
     expect(bus._connectTargets).not.toContain(rack.reverbSendGate);
-    expect(bus._connectTargets).not.toContain(rack.distortionSendGate);
-
-    // Every other source still fans out to all three gates.
-    const synth = rack.getSourceBus('synth');
-    expect(synth._connectTargets).toContain(rack.delaySendGate);
-    expect(synth._connectTargets).toContain(rack.reverbSendGate);
-    expect(synth._connectTargets).toContain(rack.distortionSendGate);
+    expect(sends.delay._connectTargets).toEqual([rack.delaySendGate]);
+    expect(sends.distortion._connectTargets).toEqual([rack.distortionSendGate]);
   }
 
-  test('as built by setupMasterChain, the sequencer bus reaches only the dry path', () => {
+  /** Drop the bus setupMasterChain built, so the next lookup builds it with every gate present. */
+  function rebuildBeatBus(rack: any) {
+    rack.sourceBuses.delete('sequencer');
+    rack.sourceTaps.delete('sequencer');
+    rack.sourceSendNodes.delete('sequencer');
+    rack.getSourceTap('sequencer');
+  }
+
+  test('as built by setupMasterChain', () => {
     const engine = makeEngine();
     bindFakeCtx(engine, masterChainCtx());
-    // bindContext already ran setupMasterChain once, which is the production
-    // shape; a second explicit call would build over live buses.
+    assertBeatBusSends((engine as any).masterRack);
+  });
+
+  test('live engine: a Beat bus created later is wired the same way', () => {
+    const engine = makeEngine();
+    bindFakeCtx(engine, masterChainCtx());
     const rack = (engine as any).masterRack;
-    const bus = rack.getSourceBus('sequencer');
-    expect(bus._connectTargets).toEqual([rack.dryGain]);
+    rebuildBeatBus(rack);
+    assertBeatBusSends(rack);
   });
 
-  test('live engine: a sequencer bus created after the send gates still skips them', () => {
+  test('render engine: a Beat bus created later is wired the same way', () => {
+    const engine = createRenderEngine(masterChainCtx() as unknown as BaseAudioContext);
+    const rack = (engine as any).masterRack;
+    rebuildBeatBus(rack);
+    assertBeatBusSends(rack);
+  });
+
+  test('getSourceBus requires the send gates', () => {
     const engine = makeEngine();
     bindFakeCtx(engine, masterChainCtx());
-    assertBeatBusExcluded((engine as any).masterRack);
-  });
-
-  test('render engine: a sequencer bus created after the send gates still skips them', () => {
-    const engine = createRenderEngine(masterChainCtx() as unknown as BaseAudioContext);
-    assertBeatBusExcluded((engine as any).masterRack);
+    const rack = (engine as any).masterRack;
+    rack.sourceBuses.delete('chord');
+    rack.delaySendGate = null;
+    expect(() => rack.getSourceBus('chord')).toThrow('send gates not initialized');
   });
 });
 
@@ -241,16 +252,34 @@ describe('the Beat bus never feeds the generic master sends', () => {
  * than folded into the block above) to stay under this file's own
  * `max-lines-per-function` gate.
  */
-describe('the drum reverb send shares the reverb tail gate, not a permanent connection', () => {
-  test('the drum reverb send is a second feed into the convolver, wired at setup like reverbSendGate', () => {
+describe('the Beat reverb feed shares the reverb tail gate, not a permanent connection', () => {
+  test('the Beat reverb feed is drumSendGate → the Beat track reverb send → convolver', () => {
     const engine = makeEngine();
-    const ctx = masterChainCtx();
-    bindFakeCtx(engine, ctx);
-    (engine as any).masterRack.setupMasterChain();
+    bindFakeCtx(engine, masterChainCtx());
+    const rack = (engine as any).masterRack;
+    const beatFeed = rack.sourceSendNodes.get('sequencer').reverb;
+    expect(rack.drumSendGate._connectTargets).toEqual([beatFeed]);
+    expect(beatFeed._connectTargets).toEqual([rack.reverbNode]);
+  });
 
-    const drumGate = (engine as any).masterRack.drumSendGate;
-    const node = (engine as any).masterRack.reverbNode;
-    expect(drumGate._connectTargets).toContain(node);
+  test('C1: the convolver is fed reverbSendGate first, then the Beat reverb feed', () => {
+    const ctx: any = masterChainCtx();
+    const log: { from: unknown; to: unknown }[] = [];
+    const createGain = ctx.createGain;
+    ctx.createGain = () => {
+      const node = createGain();
+      const connect = node.connect;
+      node.connect = (to: unknown) => {
+        log.push({ from: node, to });
+        connect(to);
+      };
+      return node;
+    };
+    const engine = makeEngine();
+    bindFakeCtx(engine, ctx);
+    const rack = (engine as any).masterRack;
+    const feeds = log.filter((entry) => entry.to === rack.reverbNode).map((entry) => entry.from);
+    expect(feeds).toEqual([rack.reverbSendGate, rack.sourceSendNodes.get('sequencer').reverb]);
   });
 
   test('bypassing reverb also tail-waits the drum send, sharing the reverb tail timer', () => {
@@ -261,11 +290,11 @@ describe('the drum reverb send shares the reverb tail gate, not a permanent conn
 
     engine.updateEffects(fxWith({ reverbBypass: true }));
 
-    const drumGate = (engine as any).masterRack.drumSendGate;
+    const beatFeed = (engine as any).masterRack.sourceSendNodes.get('sequencer').reverb;
     const node = (engine as any).masterRack.reverbNode;
     // Still connected immediately — the tail has not decayed yet, exactly
     // like reverbSendGate above.
-    expect(drumGate._connectTargets).toContain(node);
+    expect(beatFeed._connectTargets).toContain(node);
     expect((engine as any).masterRack.reverbDisconnectTimer).not.toBeNull();
   });
 
@@ -278,9 +307,9 @@ describe('the drum reverb send shares the reverb tail gate, not a permanent conn
     engine.updateEffects(fxWith({ reverbBypass: true }));
     engine.updateEffects(fxWith({ reverbBypass: false, reverbWet: 0.3 }));
 
-    const drumGate = (engine as any).masterRack.drumSendGate;
+    const beatFeed = (engine as any).masterRack.sourceSendNodes.get('sequencer').reverb;
     const node = (engine as any).masterRack.reverbNode;
-    expect(drumGate._connectTargets).toContain(node);
+    expect(beatFeed._connectTargets).toContain(node);
     expect((engine as any).masterRack.reverbDisconnectTimer).toBeNull();
   });
 
@@ -299,10 +328,11 @@ describe('the drum reverb send shares the reverb tail gate, not a permanent conn
     }
 
     const reverbGate = (engine as any).masterRack.reverbSendGate;
-    const drumGate = (engine as any).masterRack.drumSendGate;
+    const beatFeed = (engine as any).masterRack.sourceSendNodes.get('sequencer').reverb;
     const node = (engine as any).masterRack.reverbNode;
     expect(reverbGate._connectTargets).not.toContain(node);
-    expect(drumGate._connectTargets).not.toContain(node);
+    expect(beatFeed._connectTargets).not.toContain(node);
     expect((engine as any).masterRack.reverbDisconnectTimer).toBeNull();
+    expect((engine as any).masterRack.drumSendGate._connectTargets).toEqual([beatFeed]);
   });
 });

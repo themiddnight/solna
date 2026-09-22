@@ -444,3 +444,18 @@ describe('a preview auditions the patch it is handed', () => {
     }
   });
 });
+
+describe('the audition bus and the master sends', () => {
+  test('an audition feeds all three master effects at unity, as before DEV-423 (preview is not a track)', () => {
+    const fake = withFakeAudioEngine();
+    const setSourceSends = spyOn(audioEngine, 'setSourceSends');
+    try {
+      const stop = previewSynthPatch(SYNTH);
+      expect(setSourceSends).toHaveBeenCalledWith('preview', { reverb: 1, delay: 1, distortion: 1 });
+      stop();
+    } finally {
+      setSourceSends.mockRestore();
+      fake.restore();
+    }
+  });
+});

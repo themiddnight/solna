@@ -244,7 +244,7 @@ export interface BeatKickParams {
   /** 0..1. Zero IS "no click" — the disabled state, not a missing field. */
   clickLevel: number;
   clickDecay: number;
-  /** Level into the drum reverb send, 0..1. The BODY only — the click stays dry. */
+  /** 0..1, a MULTIPLIER of the Beat track's reverb send — not a direct send to the master reverb (DEV-423). The BODY only — the click stays dry. */
   reverbSend: number;
 }
 
@@ -261,6 +261,7 @@ export interface BeatSnareParams {
   noiseFilter: number;
   noiseDecay: number;
   noiseGain: number;
+  /** 0..1, a multiplier of the Beat track's reverb send (DEV-423). */
   reverbSend: number;
 }
 
@@ -279,6 +280,7 @@ export interface BeatClapParams {
   filter: number;
   decay: number;
   gain: number;
+  /** 0..1, a multiplier of the Beat track's reverb send (DEV-423). */
   reverbSend: number;
 }
 
@@ -288,6 +290,7 @@ export interface BeatTomParams {
   pitchTime: number;
   decay: number;
   gain: number;
+  /** 0..1, a multiplier of the Beat track's reverb send (DEV-423). */
   reverbSend: number;
 }
 
@@ -301,6 +304,7 @@ export interface BeatRideParams {
   bodyFilter: number;
   metal: number;
   gain: number;
+  /** 0..1, a multiplier of the Beat track's reverb send (DEV-423). */
   reverbSend: number;
 }
 
@@ -308,6 +312,7 @@ export interface BeatCrashParams {
   filter: number;
   decay: number;
   gain: number;
+  /** 0..1, a multiplier of the Beat track's reverb send (DEV-423). */
   reverbSend: number;
   metal: number;
 }
@@ -318,6 +323,7 @@ export interface BeatBellParams {
   filter: number;
   decay: number;
   gain: number;
+  /** 0..1, a multiplier of the Beat track's reverb send (DEV-423). */
   reverbSend: number;
 }
 

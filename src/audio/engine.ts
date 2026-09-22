@@ -1,4 +1,4 @@
-import { type BeatVoices, MasterEffects, BeatFilterType } from '../types';
+import { type BeatVoices, MasterEffects, BeatFilterType, type TrackSendLevels } from '../types';
 import { STEPS_PER_BAR } from '../utils/musicTheory';
 import { DEFAULT_METER_ID, getMeter as resolveMeter, type Meter } from '../utils/meter';
 import { DEFAULT_VELOCITY } from './constants';
@@ -151,6 +151,15 @@ export class AudioEngine {
     mode?: SourceBusApplyMode,
   ): void {
     this.session?.masterRack.setSourceState(source, state, time, mode);
+  }
+
+  setSourceSends(
+    source: string,
+    sends: TrackSendLevels,
+    time?: number,
+    mode?: SourceBusApplyMode,
+  ): void {
+    this.session?.masterRack.setSourceSends(source, sends, time, mode);
   }
 
   updateEffects(raw: Omit<MasterEffects, 'reverbDecay'>): void { this.session?.masterRack.updateEffects(raw); }

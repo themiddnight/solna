@@ -58,13 +58,14 @@ describe('drum reverb sends', () => {
     // A gate downstream of the convolver would erase its existing tail. A
     // direct filter -> convolver edge would let newly-triggered muted hits
     // leak into it. The only topology satisfying both source-mute semantics
-    // is filter -> gate -> convolver. The filter is a three-lane bank now, so
-    // it is every LANE that must land on the gate and nothing that may skip it.
+    // is filter -> gate -> Beat reverb send (DEV-423) -> convolver. The filter
+    // is a three-lane bank, so every LANE must land on the gate; none skip it.
     expect(sendGate).toBeDefined();
     if (!sendGate) return;
     expect(sendLanes).toHaveLength(3);
     for (const lane of sendLanes) expect(lane.gain._connectTargets).toEqual([sendGate]);
-    expect(sendGate._connectTargets).toEqual([reverb]);
+    const beatFeed = (engine as any).masterRack.sourceSendNodes.get('sequencer').reverb;
+    expect([sendGate._connectTargets, beatFeed._connectTargets]).toEqual([[beatFeed], [reverb]]);
   });
 
   test('the Beat source mute and fader govern new drum reverb input', () => {
@@ -223,8 +224,8 @@ describe("drum voice details", () => {
 
     engine.triggerDrum('openhat', 1.0);
 
-    // Voice level only. The Beat bus is kept off the master delay/distortion
-    // sends by name in getSourceBus; masterRack.sendGates.test.ts pins that.
+    // Voice level only. The Beat bus reaches the delay only through its own
+    // send node (DEV-423); masterRack.sendGates.test.ts pins that.
     for (const g of ctx._gains.slice(before)) {
       expect(g.connectedTo).not.toContain(delayNode);
     }
