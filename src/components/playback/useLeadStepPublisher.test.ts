@@ -5,7 +5,7 @@ import { leadMarkerPublishes } from './useLeadStepPublisher';
 import { clampLeadCursor } from '@/audio/leadMelody';
 import { clockStepToGridColumn } from '@/audio/leadLiveRecord';
 import { LEAD_STEP_RESOLUTION_IDS, columnsPerBar, strideFor } from '@/utils/stepResolution';
-import { METERS, METER_IDS } from '@/utils/meter';
+import { METERS, METER_IDS } from '@/utils/timeSignature';
 
 const TICK_DUR = 0.0625; // one 1/32 at 120bpm; the offsets are all that use it.
 

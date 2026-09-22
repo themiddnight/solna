@@ -5,7 +5,7 @@ import { createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS, MAX_CUSTOM_PATTERN_BARS } from './loop';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { Loop } from './types';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 
 const body = { ...makeEnvelope('Round Trip', 1_700_000_000_000), content: factoryProjectContent() };
 

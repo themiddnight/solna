@@ -32,7 +32,7 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 - The engine takes Hz, never a note name: `triggerSynthNoteOn(frequency, synth, velocity, time, source, scaleFactor, owner)`; `SynthVoiceNoteOn`, `ManagedVoice`, `SubtractiveVoiceEvent` carry `frequency` and no name. <!-- R176 -->
 - `noteFrequency` is called by the controller; `src/architecture/frequencyBoundary.test.ts` holds the literal allowlist of files (in `src/` and `scripts/`) that may name it. <!-- R177 -->
 - The engine never regains a note name, not even for logging; names belong on the note-input bus (`emitNoteInput`). <!-- R178 -->
-- The engine may import only the timing half of `utils/musicTheory.ts` (`STEPS_PER_BAR`, `stepDurationSec`): `ENGINE_MUSIC_DOMAIN_BAN` is an `allowImportNames` allowlist. <!-- R179 -->
+- Timing lives in `utils/tempo.ts`, which the engine may import; `utils/musicTheory.ts` is banned outright by `ENGINE_MUSIC_DOMAIN_BAN`. <!-- R179 -->
 - The gate covers `src/audio/engine.ts`, `src/audio/synth/**`, `drumSynth.ts`, `masterRack.ts` — not `clock.ts` or `src/audio/playback/**`. <!-- R180 -->
 - Guarded files may not import `src/audio/playback/**`, not even type-only (planner types name pitches). <!-- R181 -->
 - `src/architecture/engineDomainPurity.test.ts` proves the block armed at `error`, in aliased and relative form. <!-- R182 -->

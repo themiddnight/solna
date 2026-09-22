@@ -174,7 +174,7 @@ violations.** Checked individually:
 | components ↔ diagnostics | `PlayheadReadout.tsx:6`, `TransportBar.tsx:19`, `loop/ChordView.tsx:13`, `loop/chord/ProgressionCard.tsx:11` → `diagnostics/renderCounts.ts`; `project/ProjectMenu.tsx:22` (dynamic) | `diagnostics/DiagnosticPanel.tsx:3` → `components/ui/Modal.tsx` | value both ways |
 | store ↔ utils | 70 edges | `utils/driveBrowser.ts:1`, `utils/localFileSave.ts:1` | value both ways (documented exception) |
 | data ↔ musicCore | `data/chordProgressions.ts:18` (type) | `musicCore/scale.ts:1` (value) | type-only one way |
-| data ↔ utils | `data/{vibes,chordRhythms,bassPatterns,drumGrids}.ts` → `utils/meter.ts`, `data/vibes.ts` → `utils/synthControl.ts` (type) | `utils/musicTheory.ts`, `utils/noteSpelling.ts`, `utils/synthPresets.ts` → data (value) | type-only one way |
+| data ↔ utils | `data/{vibes,chordRhythms,bassPatterns,drumGrids}.ts` → `utils/timeSignature.ts`, `data/vibes.ts` → `utils/synthControl.ts` (type) | `utils/musicTheory.ts`, `utils/noteSpelling.ts`, `utils/synthPresets.ts` → data (value) | type-only one way |
 
 - **File level (value imports only), two runtime cycles, both in `store/`:**
   - `store/sanitize.ts:20,25` → `sanitizeBeat.ts`, `leadSlice.ts`; `store/sanitizeBeat.ts:43` →
@@ -442,7 +442,7 @@ Verified unless marked *(uncertain)*.
    (`musicCore/scale.ts:1`), utils→store, incidents→utils, and `components → store → audio → data`
    is drawn as a chain although components→audio is a direct, 48-edge dependency.
 9. **Fixed on `fix/structure-audit-bugs`:** the overview now says type-only. "`data/` imports nothing" — it has 11 `import type` edges (to `types.ts`, `types/synth.ts`,
-   `utils/meter.ts`, `utils/synthControl.ts`, `musicCore`). Allowed by `CLAUDE.md`, but the overview's
+   `utils/timeSignature.ts`, `utils/synthControl.ts`, `musicCore`). Allowed by `CLAUDE.md`, but the overview's
    wording is stricter than the code.
 
 ### 5.3 Organic-growth smells
@@ -453,7 +453,7 @@ Verified unless marked *(uncertain)*.
     Core names (`:33`, incl. `CHORD_QUALITY_ALIASES as TONAL_CHORD_ALIASES`). `ENGINE_MUSIC_DOMAIN_BAN`'s
     `allowImportNames` (`eslint.config.js:153-158`) exists to split this file by name after the fact.
     Music Core symbols are reachable by two routes (`@/musicCore` and `@/utils/musicTheory`).
-11. **"meter" means two things in `utils/`.** `utils/meter.ts` is time signatures (`MeterId`,
+11. **"meter" means two things in `utils/`.** `utils/timeSignature.ts` is time signatures (`MeterId`,
     `METERS`); `meterLevel/meterScale/meterZones/meterColor/meterScheduler/meterAttach.ts` are level
     meters. Seven files, one prefix, two unrelated domains.
 12. **Library lookups scattered across three folders.** `drumGridById` (`audio/drumGrids.ts:16`, 24-line

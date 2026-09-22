@@ -20,7 +20,7 @@ import { createDefaultLoop } from './loopSlice';
 import { readBeatState, type BeatState } from './sanitizeBeat';
 import { MAX_CUSTOM_PATTERN_BARS, normalizeCustomPattern, progressionBars } from './loop';
 import { resizePatternBars } from '../utils/customPattern';
-import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
+import { DEFAULT_METER_ID, getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/timeSignature';
 import { clampLoopLength } from '../utils/patternTimeline';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import { getChordQualityEntry, pitchClassOfNote } from '@/musicCore';

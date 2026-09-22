@@ -17,8 +17,8 @@ import {
 } from './chordRhythms';
 import { CHORD_RHYTHMS, type RhythmPattern } from '@/data/chordRhythms';
 import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
-import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
-import type { MeterId } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR } from '../utils/timeSignature';
+import type { MeterId } from '../utils/timeSignature';
 
 describe('feelToHoldScale', () => {
   test('neutral (0.5) keeps the hold at x1', () => {

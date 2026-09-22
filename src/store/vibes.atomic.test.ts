@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { shallow } from 'zustand/shallow';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { VIBES } from '../data/vibes';
-import { DEFAULT_METER_ID, MAX_STEPS_PER_BAR } from '../utils/meter';
+import { DEFAULT_METER_ID, MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { INITIAL_EFFECTS } from './initialState';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';

@@ -5,7 +5,7 @@ import {
   resolveLeadStepTriggers,
   type LeadNote,
 } from '@/audio/leadMelody';
-import { arpStepFor } from '@/utils/meter';
+import { arpStepFor } from '@/utils/timeSignature';
 import {
   TICKS_PER_SIXTEENTH,
   columnsPerBar,

@@ -4,7 +4,7 @@
  */
 import type { MixdownLoop, MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { buildProjectContent } from './projectFormat';
 import { faderDbToGain } from './levelUnits';
 import { SOURCE_BUSES } from './sourceBuses';

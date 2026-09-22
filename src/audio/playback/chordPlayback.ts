@@ -1,10 +1,6 @@
 import { audioEngine, STEPS_PER_BAR, type AudioEngine } from "../engine";
-import {
-  getDiatonicChordForDegree,
-  barDurationSec,
-  noteFrequency,
-  stepDurationSec,
-} from "@/utils/musicTheory";
+import { getDiatonicChordForDegree, noteFrequency } from "@/utils/musicTheory";
+import { barDurationSec, stepDurationSec } from "@/utils/tempo";
 import type { ChordItem } from "@/types";
 import type { ActiveSynth } from "@/types/synth";
 import { synthReleaseSeconds } from "@/utils/synthPatch";

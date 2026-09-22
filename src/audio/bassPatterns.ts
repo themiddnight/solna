@@ -1,9 +1,10 @@
 import { midiToSharpName, noteMidi, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import type { ChordItem } from '../types';
-import { generateBlockChordNotes, rootSemitone, stepDurationSec } from '../utils/musicTheory';
+import { generateBlockChordNotes, rootSemitone } from '../utils/musicTheory';
+import { stepDurationSec } from '../utils/tempo';
 import { DEFAULT_VELOCITY } from './constants';
 import { groupByStyle } from './groupByStyle';
-import type { MeterId } from '../utils/meter';
+import type { MeterId } from '../utils/timeSignature';
 import { BASS_PATTERNS, type BassNoteToken, type BassPattern, type BassStep, type BassStepChoice } from '@/data/bassPatterns';
 import { normalizePatternSpans } from '../utils/customPattern';
 import { patternStoredIndexAt } from '../utils/patternTimeline';

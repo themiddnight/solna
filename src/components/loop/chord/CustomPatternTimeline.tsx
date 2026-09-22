@@ -2,7 +2,7 @@ import React from 'react';
 import { useSegmentGatedStep } from '@/components/playbackStep';
 import { useSpanResize, type SpanResizeStart } from '@/components/ui/useSpanResize';
 import { cx } from '@/components/ui/cx';
-import { beatIndexAt } from '@/utils/meter';
+import { beatIndexAt } from '@/utils/timeSignature';
 import {
   customPatternCells,
   customPatternFoldedStep,

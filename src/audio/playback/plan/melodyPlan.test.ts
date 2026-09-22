@@ -7,8 +7,8 @@ import {
   type LeadNote,
 } from '@/audio/leadMelody';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH, strideFor } from '@/utils/stepResolution';
-import { arpStepFor } from '@/utils/meter';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { arpStepFor } from '@/utils/timeSignature';
+import { stepDurationSec } from '@/utils/tempo';
 
 const ARP_OFF = { active: false, mode: 'up', rate: '8n', octaves: 1 } as MelodyPlanSnapshot['arp'];
 const TICK_DUR = stepDurationSec(120) / TICKS_PER_SIXTEENTH;

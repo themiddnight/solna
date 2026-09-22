@@ -1,4 +1,5 @@
-import { getScaleNotesInOctave, isNoteInScale, ROOTS, stepDurationSec } from '@/utils/musicTheory';
+import { getScaleNotesInOctave, isNoteInScale, ROOTS } from '@/utils/musicTheory';
+import { stepDurationSec } from '@/utils/tempo';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import { noteMidi, pitchClassOfNote } from '@/musicCore';
 import type { LeadMelodyView } from '@/store/types';
@@ -10,7 +11,7 @@ import {
   columnsPerBar,
   leadNoteCells,
 } from '@/utils/stepResolution';
-import { beatIndexAt, isBeatBoundary, type Meter } from '@/utils/meter';
+import { beatIndexAt, isBeatBoundary, type Meter } from '@/utils/timeSignature';
 import type { StepCell } from '@/components/sequencerGrid';
 
 // Declared in audio/leadStepRecord so the store can read it as well: step

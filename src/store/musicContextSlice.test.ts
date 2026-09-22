@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import type { LeadNote } from '../audio/leadMelody';
 import { readFileSync } from 'node:fs';
 import { changeKey } from './keyChange';

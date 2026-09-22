@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern } from '@/types';
 import { MIXDOWN_SAMPLE_RATE, renderMixdown } from './renderMixdown';

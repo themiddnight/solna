@@ -10,7 +10,7 @@ import {
   quantiseInputStep,
   wrapColumn,
 } from './leadLiveRecord';
-import { stepDurationSec } from '../utils/musicTheory';
+import { stepDurationSec } from '../utils/tempo';
 
 describe('pushClockAnchor', () => {
   test('keeps the two most recent anchors and nothing else', () => {

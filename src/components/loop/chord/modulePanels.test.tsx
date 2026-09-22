@@ -5,7 +5,7 @@ import type { BassStepChoice } from '@/data/bassPatterns';
 import { useAppStore } from '@/store/store';
 import { LOOP_COPY_GROUPS } from '@/store/loopCopy';
 import type { LoopCopyGroupId } from '@/store/loopCopy';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { BassModulePanel } from './BassModulePanel';
 import { ChordModulePanel } from './ChordModulePanel';
 import { customPatternFoldedStep } from './customPatternGrid';

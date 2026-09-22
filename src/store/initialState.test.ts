@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { presetById } from '@/utils/synthPresets';
 import { PAD_INTERVALS, type BeatVoiceId } from '../types';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '../data/beatPresets';
 import { defaultBeatState } from './beatPresets';
 import { defaultPadState, defaultTrackSynth, TRACK_SYNTH_PRESET_IDS } from './initialState';

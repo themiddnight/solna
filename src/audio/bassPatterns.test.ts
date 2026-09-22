@@ -3,8 +3,8 @@ import { BASS_STYLE_GROUPS, customBassPatternFromSpans, resolveBassSteps } from 
 import { BASS_PATTERNS } from '@/data/bassPatterns';
 import type { BassPattern, BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '../types';
-import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
-import type { MeterId } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR } from '../utils/timeSignature';
+import type { MeterId } from '../utils/timeSignature';
 import { generateBlockChordNotes } from '../utils/musicTheory';
 
 const Cmaj7: ChordItem = { id: 'c1', root: 'C', quality: 'maj7', bars: 1 };

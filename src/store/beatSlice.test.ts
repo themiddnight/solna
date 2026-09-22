@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '@/data/beatPresets';
-import { MAX_STEPS_PER_BAR, getMeter } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR, getMeter } from '@/utils/timeSignature';
 import { beatParamsFromPreset, beatPresetById, defaultBeatState } from './beatPresets';
 import { createDefaultLoop } from './loopSlice';
 import { loopStatePatch } from './loop';

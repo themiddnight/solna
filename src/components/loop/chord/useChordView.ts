@@ -27,7 +27,7 @@ import {
   stopBassPreviewSource,
   stopChordPreviewSource,
 } from '@/audio/playback/chordPlayback';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { scaleEntry } from '@/musicCore';
 import type { ChordQuality } from '@/musicCore';
 import {

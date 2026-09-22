@@ -12,7 +12,8 @@ import {
 import type { PlaybackPatternCycle } from '@/audio/chordRhythms';
 import { isApproachToken, resolveBassSteps } from '@/audio/bassPatterns';
 import type { BassPattern } from '@/data/bassPatterns';
-import { generateBlockChordNotes, stepDurationSec, barDurationSec } from '@/utils/musicTheory';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { stepDurationSec, barDurationSec } from '@/utils/tempo';
 import { initPlaybackEngine, playbackNoteOff, playbackNoteOn } from '@/audio/playback/playbackEngine';
 import type { ChordItem } from '@/types';
 import { synthReleaseSeconds } from '@/utils/synthPatch';

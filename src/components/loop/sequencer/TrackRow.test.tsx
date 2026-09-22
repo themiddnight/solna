@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { TrackRow } from './TrackRow';
 import { stepCells } from '@/components/sequencerGrid';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { BEAT_VOICE_META } from '@/components/loop/beat/beatVoices';
 import { DEFAULT_FADER_DB } from '@/store/levelUnits';
 

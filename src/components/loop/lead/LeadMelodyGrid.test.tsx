@@ -5,7 +5,7 @@ import type React from 'react';
 import { renderToString } from 'react-dom/server';
 import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker, LeadMarkerView } from './LeadMelodyGrid';
 import { stepCells } from '@/components/sequencerGrid';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { leadColumnCells } from './melodyGrid';
 import { useAppStore } from '@/store/store';
 import type { MixLayerId } from '@/store/focusTrack';

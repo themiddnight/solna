@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { adaptStepRow, adaptStepRows, padStepRow, rotateStepWindow, writeStepWindow } from './patternAdapt';
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 
 const FOUR_ON_FLOOR = [
   true, false, false, false,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { cycleStepAt, equalPowerVelocityScale } from '@/audio/chordRhythms';
 import type { RhythmPattern } from '@/data/chordRhythms';
-import { arpStepFor } from '@/utils/meter';
+import { arpStepFor } from '@/utils/timeSignature';
 import type { ArpSettings } from '@/types/synth';
 import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';

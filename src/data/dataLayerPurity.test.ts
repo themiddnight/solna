@@ -48,7 +48,7 @@ describe('src/data/ import ban', () => {
   test('a type-only import is allowed', async () => {
     expect(
       await guardedMessages(
-        "import type { MeterId } from '@/utils/meter';\nexport const M: MeterId = '4/4';\n",
+        "import type { MeterId } from '@/utils/timeSignature';\nexport const M: MeterId = '4/4';\n",
       ),
     ).toEqual([]);
   });
@@ -56,7 +56,7 @@ describe('src/data/ import ban', () => {
   test('a value import from another folder is an error', async () => {
     expect(
       await guardedMessages(
-        "import { METERS } from '../utils/meter';\nexport const M = METERS;\n",
+        "import { METERS } from '../utils/timeSignature';\nexport const M = METERS;\n",
       ),
     ).toContainEqual(err(IMPORT_BAN));
   });

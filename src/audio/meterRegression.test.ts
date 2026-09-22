@@ -6,9 +6,9 @@ import {
   beatIndexAt,
   getMeter,
   isBeatBoundary,
-} from '../utils/meter';
-import type { MeterId } from '../utils/meter';
-import { barDurationSec, stepDurationSec, STEPS_PER_BAR } from '../utils/musicTheory';
+} from '../utils/timeSignature';
+import type { MeterId } from '../utils/timeSignature';
+import { barDurationSec, stepDurationSec, STEPS_PER_BAR } from '../utils/tempo';
 import { BEATS_PER_BAR, beatsPerBarFor } from '../utils/playhead';
 import { adaptStepRow } from '../utils/patternAdapt';
 import { adaptStepEvents } from '../utils/eventAdapt';

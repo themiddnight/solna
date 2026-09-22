@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 import { normalizePatternSpans, resizePatternBars, writePatternSpan } from './customPattern';
 
 /** A full stored pattern of `bars` fixed-width bars, every slot empty. */

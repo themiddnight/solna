@@ -3,7 +3,7 @@ import { subscribeNoteInput } from '../audio/playback/noteInputBus';
 import { clampLeadCursor, leadStoredIndexAt } from '../audio/leadMelody';
 import { clockStepToGridColumn, heldStepLength } from '../audio/leadLiveRecord';
 import { leadLiveInputStep, startLeadLiveClock } from '../audio/playback/leadLiveClock';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import { columnsPerBar, strideFor } from '../utils/stepResolution';
 import { layerForTab } from '../types';
 import { isAnyPlayerActive, isPlayerActive, type PlayerStates } from './transportSlice';

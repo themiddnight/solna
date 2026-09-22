@@ -3,7 +3,7 @@ import { mixdownLoop, mixdownMelodyBar } from './mixdownFixture';
 import { mixdownLeadTrack, mixdownFxTrack } from '../playback/plan/songSnapshot';
 import { melodyPlanSnapshot } from '@/store/playbackPlanSnapshots';
 import { planMelodyStep } from '../playback/plan/melodyPlan';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { stepDurationSec } from '@/utils/tempo';
 import { TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import type { AppStore } from '@/store/types';
 

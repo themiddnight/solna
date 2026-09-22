@@ -10,8 +10,8 @@ import {
 } from '@/audio/playback/playbackEngine';
 import { planMelodyStep } from '@/audio/playback/plan/melodyPlan';
 import { DEFAULT_VELOCITY } from '@/audio/constants';
-import { stepDurationSec } from '@/utils/musicTheory';
-import { getMeter } from '@/utils/meter';
+import { stepDurationSec } from '@/utils/tempo';
+import { getMeter } from '@/utils/timeSignature';
 import { TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from '@/components/playerStop';

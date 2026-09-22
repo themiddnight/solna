@@ -12,7 +12,7 @@ import { IncidentWarning } from "./ui/IncidentDialog";
 import { aggregateAllPlayers, transportDisplayState } from "../store/transportSlice";
 import { METER_OPTIONS, coerceMeterChoice } from "./meterSelect";
 import type { Loop } from '../store/types';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 import { loopLabel } from '@/store/loop';
 import { layerForTab } from '@/types';
 import { playTargetLabel } from './transportAction';

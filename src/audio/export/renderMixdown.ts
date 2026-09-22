@@ -46,8 +46,9 @@ import {
   type TimelineEvent,
 } from '../playback/plan/songTimeline';
 import { MIXDOWN_SEED, withSeededRandom, yieldPreservingRandomStream } from '../rng';
-import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
-import { getMeter } from '@/utils/meter';
+import { noteFrequency } from '@/utils/musicTheory';
+import { stepDurationSec } from '@/utils/tempo';
+import { getMeter } from '@/utils/timeSignature';
 import { encodeWav } from '@/utils/encodeWav';
 import { applyBeatParams } from '../beatAdapter';
 import { SEND_EFFECTS, type BeatParams, type TrackSendLevels } from '@/types';

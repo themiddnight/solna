@@ -3,7 +3,7 @@ import { Volume2 } from "lucide-react";
 import type { SynthPreset } from "@/data/synthPresets";
 import { findPresetByName } from "@/utils/synthPresets";
 import type { CategoryPresetGroup } from "@/utils/synthPresets";
-import type { MeterId } from "@/utils/meter";
+import type { MeterId } from "@/utils/timeSignature";
 import { patternMeterTitle, patternOptionLabel } from "@/components/meterSelect";
 import { FIELD_LABEL, FIELD_SELECT } from "@/components/ui/fieldClasses";
 import { Slider } from "@/components/ui/Slider";

@@ -1,6 +1,6 @@
 import type { StoreApi } from 'zustand';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { adaptStepRow, writeStepWindow } from '@/utils/patternAdapt';
 import { beatPresetById, defaultBeatState } from './beatPresets';
 import type { AppStore, BeatSlice } from './types';

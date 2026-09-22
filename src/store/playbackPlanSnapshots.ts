@@ -2,7 +2,7 @@ import type { BeatPlanSnapshot } from '@/audio/playback/plan/beatPlan';
 import type { ChordPlanSnapshot } from '@/audio/playback/plan/chordPlan';
 import type { MelodyPlanSnapshot } from '@/audio/playback/plan/melodyPlan';
 import type { PadPlanSnapshot } from '@/audio/playback/plan/padPlan';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { melodyTrack, type MelodyTrackId } from './melodyTracks';
 import type { AppStore } from './types';
 

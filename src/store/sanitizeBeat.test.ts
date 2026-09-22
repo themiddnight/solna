@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { BEAT_PRESETS } from '@/data/beatPresets';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { defaultBeatState } from './beatPresets';
 import { createDefaultLoop } from './loopSlice';
 import { parseProjectFile } from './projectFile';

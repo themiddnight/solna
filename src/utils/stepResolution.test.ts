@@ -12,7 +12,7 @@ import {
   leadNoteCells,
   strideFor,
 } from './stepResolution';
-import { MAX_STEPS_PER_BAR, METERS, METER_IDS } from './meter';
+import { MAX_STEPS_PER_BAR, METERS, METER_IDS } from './timeSignature';
 
 describe('the table', () => {
   test('stores at 1/32 and strides down to the active resolution', () => {
@@ -44,13 +44,13 @@ describe('the table', () => {
     expect(strideFor(DEFAULT_LEAD_STEP_RESOLUTION)).toBe(TICKS_PER_SIXTEENTH);
   });
 
-  test('the module reaches meter and nothing else', () => {
+  test('the module reaches the time signature table and nothing else', () => {
     // utils/ leaves may be imported by audio/, store/ AND components/. An
     // import from any of those three would make this module unimportable
     // by the other two under the layering rules.
     const src = readFileSync(new URL('./stepResolution.ts', import.meta.url), 'utf8');
     const imports = [...src.matchAll(/^import .*? from '(.*?)';$/gm)].map((m) => m[1]);
-    expect(imports).toEqual(['./meter']);
+    expect(imports).toEqual(['./timeSignature']);
   });
 });
 

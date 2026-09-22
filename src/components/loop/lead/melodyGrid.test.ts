@@ -21,8 +21,8 @@ import {
 } from './melodyGrid';
 import type { LeadNote } from '@/audio/leadMelody';
 import { columnsPerBar, LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
-import { getMeter } from '@/utils/meter';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { getMeter } from '@/utils/timeSignature';
+import { stepDurationSec } from '@/utils/tempo';
 
 describe('leadPitchRows — scale-locked', () => {
   test('lists the scale notes across the window, highest first', () => {

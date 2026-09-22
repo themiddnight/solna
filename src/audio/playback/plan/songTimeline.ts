@@ -11,9 +11,9 @@
  * the renderer performs the walk instead of draining it first (spec §5, §6).
  */
 import { loopDwellSteps, loopEffectiveLengthSteps } from '@/utils/songStructure';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 import { DEFAULT_VELOCITY } from '@/audio/constants';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { stepDurationSec } from '@/utils/tempo';
 import { TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import type { BeatVoiceId } from '@/types';
 import { planBeatStep, type BeatPlanSnapshot } from './beatPlan';

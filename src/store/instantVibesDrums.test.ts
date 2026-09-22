@@ -3,7 +3,7 @@ import { VIBES } from '../data/vibes';
 import { resolveVibe, VIBE_IDS } from './vibes';
 import { ORIGINAL_VIBE_DRUM_PATTERNS } from './instantVibesDrumsFixture';
 import { drumGridById } from '../audio/drumGrids';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 
 // Row sets differ per vibe now that a grid may omit a voice (decision 10) and
 // decision 21 has removed the clap rows genres do not play and the snare rows

@@ -1,4 +1,4 @@
-import { beatIndexAt } from '@/utils/meter';
+import { beatIndexAt } from '@/utils/timeSignature';
 import { normalizePatternHold } from '@/utils/customPattern';
 import { maxPatternHold, patternStoredIndexAt } from '@/utils/patternTimeline';
 

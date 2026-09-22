@@ -1,6 +1,6 @@
 import type { ViewMode } from '@/types';
 import type { MixLayerId } from '@/store/focusTrack';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 import type { PlayerState } from '@/store/types';
 import type { AudioDiagnosticSnapshot } from '@/audio/diagnostics';
 

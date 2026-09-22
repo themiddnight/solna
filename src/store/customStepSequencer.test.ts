@@ -3,7 +3,7 @@ import { useAppStore } from './store';
 import { VIBES } from '../data/vibes';
 import { applyVibeToStore, resolveVibe } from './vibes';
 import type { BassStepChoice } from '@/data/bassPatterns';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
 import type { ChordItem } from '../types';
 

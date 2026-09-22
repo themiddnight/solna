@@ -17,7 +17,7 @@
  * (utils/eventAdapt.ts). The user picks these by id and never edits them, so
  * the library stays pure and needs no migration.
  */
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 
 type RhythmHitType = 'block' | 'strum';
 

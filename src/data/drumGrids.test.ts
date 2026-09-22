@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { DRUM_GRIDS } from './drumGrids';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { BEAT_PRESETS } from '@/data/beatPresets';
-import { getMeter, isMeterId } from '@/utils/meter';
+import { getMeter, isMeterId } from '@/utils/timeSignature';
 
 // The three origin groups, kept apart in the test even though the table is
 // one: 14 sequencer genre grids, 7 Instant Vibe grids, 9 sourced genre

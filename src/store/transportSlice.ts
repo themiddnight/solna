@@ -1,6 +1,6 @@
 import type { StoreApi } from 'zustand';
-import { clampBpm } from '../utils/musicTheory';
-import { DEFAULT_METER_ID } from '../utils/meter';
+import { clampBpm } from '../utils/tempo';
+import { DEFAULT_METER_ID } from '../utils/timeSignature';
 import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
 import { playbackScopeReducer, SCOPE_NONE } from './playbackScope';
 import type { PlaybackScope } from './playbackScope';

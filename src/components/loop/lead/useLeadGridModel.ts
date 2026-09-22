@@ -4,7 +4,7 @@ import { useLiveStore } from '@/components/ui/useLiveStore';
 import { melodyTrack, type MelodyTrackId } from '@/store/melodyTracks';
 import { MELODY_ACTIONS } from '@/store/leadSlice';
 import { melodyTrackForFocus } from '@/store/focusTrack';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { loopBars } from '@/utils/songStructure';
 import { columnsPerBar, strideFor } from '@/utils/stepResolution';
 import {

@@ -38,7 +38,7 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 
 ([ADR-0005](../../docs/decisions/0005-music-core-and-tonal-confinement.md))
 
-- The engine may import only the timing half of `utils/musicTheory.ts` (`STEPS_PER_BAR`, `stepDurationSec`): `ENGINE_MUSIC_DOMAIN_BAN` is an `allowImportNames` allowlist, so a new pitch export is banned on the day it is written. <!-- R179 -->
+- Timing lives in `utils/tempo.ts`, which the engine may import; `utils/musicTheory.ts` is the music-domain half and `ENGINE_MUSIC_DOMAIN_BAN` bans it outright, so a new pitch export is banned on the day it is written. <!-- R179 -->
 
 ([ADR-0018](../../docs/decisions/0018-engine-frequency-boundary.md))
 - `src/audio/` imports neither `react` nor `react-dom` (`REACT_IMPORT_BAN` in every `src/audio/` import block); a React wrapper over an audio clock lives in `components/playback/`. <!-- R314 --> ([ADR-0039](../../docs/decisions/0039-playback-host.md))

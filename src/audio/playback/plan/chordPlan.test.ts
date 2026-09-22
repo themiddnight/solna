@@ -15,7 +15,8 @@ import {
   resolvePlaybackRhythmCycle,
 } from '@/audio/chordRhythms';
 import { isApproachToken, resolveBassSteps } from '@/audio/bassPatterns';
-import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { barDurationSec, stepDurationSec } from '@/utils/tempo';
 import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
 import type { ChordItem } from '@/types';
 import type { BassStepChoice } from '@/data/bassPatterns';

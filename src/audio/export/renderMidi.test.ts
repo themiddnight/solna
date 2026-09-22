@@ -12,8 +12,8 @@ import {
 } from './renderMidi';
 import { mixdownLoop, mixdownSnapshot } from './mixdownFixture';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
-import { METER_IDS } from '@/utils/meter';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { METER_IDS } from '@/utils/timeSignature';
+import { stepDurationSec } from '@/utils/tempo';
 import type { BeatVoiceId } from '@/types';
 import type { TimelineEvent } from '../playback/plan/songTimeline';
 import type { MixdownBusState } from '../playback/plan/songSnapshot';

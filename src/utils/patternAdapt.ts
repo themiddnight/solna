@@ -1,4 +1,4 @@
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 
 /**
  * Array-shaped pattern adaptation: the drum rows, which are dense per-step

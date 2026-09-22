@@ -9,7 +9,7 @@
  * Adaptation to a different active meter happens at PLAYBACK time; the user
  * picks these by id and never edits them.
  */
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 
 export type BassNoteToken =
   | 'root' | 'third' | 'fifth' | 'seventh' | 'octave'

@@ -133,7 +133,7 @@ describe('SequencerView grid options carry their meter', () => {
 import { SequencerGrid } from './sequencer/SequencerGrid';
 import { stepPublisher } from '../playbackStep';
 import { stepCells } from '../sequencerGrid';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { StepHeader } from '../ui/StepHeader';
 import { TrackRow } from './sequencer/TrackRow';
 import { useSegmentGatedStep } from '../playbackStep';

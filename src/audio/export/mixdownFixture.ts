@@ -8,7 +8,7 @@
  * against a five-loop fixture whose silent bar could be hiding the bug.
  */
 import { BEAT_PRESETS, BEAT_VOICE_IDS } from '@/data/beatPresets';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
 import type {
   BeatMix,

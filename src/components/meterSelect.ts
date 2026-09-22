@@ -1,4 +1,4 @@
-import { METERS, METER_IDS, getMeter, isMeterId, type MeterId } from '../utils/meter';
+import { METERS, METER_IDS, getMeter, isMeterId, type MeterId } from '../utils/timeSignature';
 
 /**
  * Option model for the transport meter select, kept out of TransportBar.tsx so

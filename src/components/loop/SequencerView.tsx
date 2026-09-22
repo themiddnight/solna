@@ -6,8 +6,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useAppStore } from "@/store/store";
-import { getMeter } from "@/utils/meter";
-import type { MeterId } from "@/utils/meter";
+import { getMeter } from "@/utils/timeSignature";
+import type { MeterId } from "@/utils/timeSignature";
 import { sequencerMeterBadge, stepCells } from "../sequencerGrid";
 import { rotateStepWindow } from "@/utils/patternAdapt";
 import { BEAT_PREVIEW_VELOCITY, ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";

@@ -167,9 +167,8 @@ const ENGINE_MUSIC_DOMAIN_BAN = [
   },
   {
     group: ['**/utils/musicTheory'],
-    allowImportNames: ['STEPS_PER_BAR', 'clampBpm', 'stepDurationSec', 'barDurationSec'],
     message:
-      'DEV-399: the engine may read the TIMING half of musicTheory only — pitch, chord, scale and reharmonization helpers belong to the controllers (see noteFrequency at the playback boundary).',
+      'DEV-426: timing moved to utils/tempo.ts, which the engine may import. musicTheory is now the music-domain half only — pitch, chord, scale and reharmonization belong to the controllers (see noteFrequency at the playback boundary).',
   },
 ];
 

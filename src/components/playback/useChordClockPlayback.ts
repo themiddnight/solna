@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "@/store/store";
 import { emitStepEvents, playFullHoldChord } from "@/audio/playback/chordPlayback";
 import { chordPlanPosition } from "@/audio/playback/plan/chordEvents";
-import { STEPS_PER_BAR, stepDurationSec } from "@/utils/musicTheory";
+import { STEPS_PER_BAR, stepDurationSec } from "@/utils/tempo";
 import {
   ACCOMPANIMENT_SOURCES,
   HARD_STOP_RELEASE,
@@ -13,7 +13,7 @@ import {
   subscribePlaybackClock,
 } from "@/audio/playback/playbackEngine";
 import type { AccompanimentSource } from "@/audio/playback/playbackEngine";
-import { getMeter } from "@/utils/meter";
+import { getMeter } from "@/utils/timeSignature";
 import { armOnBarLine, isSoftStopBoundary, shouldHardStopNow } from "@/components/playerStop";
 import type { PlayerState } from "@/store/types";
 import type { ChordItem } from "@/types";

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { withSeededRandom } from '@/audio/rng';
 import { pitchClassOfNote, ROOTS } from '@/musicCore';
-import { stepDurationSec } from '@/utils/musicTheory';
+import { stepDurationSec } from '@/utils/tempo';
 import {
   beatMixFixture, beatPatternFixture, mixdownLoop, mixdownMelodyBar, mixdownSnapshot,
 } from '@/audio/export/mixdownFixture';

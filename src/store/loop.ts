@@ -6,7 +6,7 @@ import {
   type PatternSpans,
   type PatternSpansResult,
 } from '@/utils/customPattern';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import {
   clampLoopLength,
   foldPatternBoundaries,

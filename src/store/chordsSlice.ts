@@ -9,7 +9,7 @@ import {
   resizePatternSpanAt,
   writePatternEvent,
 } from './loop';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import type { AppStore, ChordsSlice } from './types';
 import type { ChordItem } from '../types';
 

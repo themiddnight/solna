@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import {
   customPatternCells,
   customPatternFoldedStep,

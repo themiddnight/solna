@@ -11,7 +11,7 @@ import {
 } from './transportSlice';
 import { useAppStore } from './store';
 import { SCOPE_NONE } from './playbackScope';
-import { MAX_BPM, MIN_BPM } from '../utils/musicTheory';
+import { MAX_BPM, MIN_BPM } from '../utils/tempo';
 import type { AppStore, PlayerModule, PlayerState, TransportSlice } from './types';
 
 // Minimal harness: createTransportSlice takes zustand's (set, get). We back

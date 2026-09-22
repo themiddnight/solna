@@ -7,7 +7,7 @@ import {
   startEngineSync,
   stopEngineSync,
 } from './engineSync';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import type { MasterEffects } from '../types';
 import type { ActiveSynth } from '../types/synth';
 import { SOURCE_BUSES } from './sourceBuses';

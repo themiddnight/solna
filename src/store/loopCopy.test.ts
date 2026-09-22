@@ -3,7 +3,7 @@ import { LOOP_FLAT_KEYS } from './loop';
 import { buildLoopCopyPatch, impliesKeyCopy, LOOP_COPY_GROUPS } from './loopCopy';
 import type { LoopCopyGroupId } from './loopCopy';
 import { createDefaultLoop } from './loopSlice';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { Loop } from './types';
 

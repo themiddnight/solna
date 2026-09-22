@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
 import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock, RECORD_ARM_NAV_SOURCES } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
 import { leadStoredIndexAt } from '../audio/leadMelody';
 import type { LeadNote } from '../audio/leadMelody';

@@ -25,7 +25,7 @@ import { encodeSmf, type SmfEvent, type SmfFile, type SmfTrack } from './smfWrit
 import type { MixdownFailureReason, MixdownProgressReporter } from './renderMixdown';
 import { noteMidi } from '@/musicCore';
 import type { BeatVoiceId } from '@/types';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 
 export const MIDI_PPQ = 480;
 

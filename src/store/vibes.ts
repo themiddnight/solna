@@ -30,7 +30,7 @@ import { loopMirrorPartial } from './loopSync';
 import { changeKey } from './keyChange';
 import { normalizePadIntervals } from './sanitize';
 import type { AppStore } from './types';
-import { clampBpm } from '../utils/musicTheory';
+import { clampBpm } from '../utils/tempo';
 
 /** A VibeSpec with its three library references turned into values. */
 export interface ResolvedVibe extends VibeSpec {

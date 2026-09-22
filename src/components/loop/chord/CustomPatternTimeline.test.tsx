@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToString } from 'react-dom/server';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { customPatternFoldedStep } from './customPatternGrid';
 import { CustomPatternTimeline, type CustomPatternTimelineProps } from './CustomPatternTimeline';
 

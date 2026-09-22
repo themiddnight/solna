@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { sequencerMeterBadge, stepCells } from './sequencerGrid';
-import { METERS } from '../utils/meter';
+import { METERS } from '../utils/timeSignature';
 
 describe('sequencerMeterBadge', () => {
   // The name now comes from VIEW_META; the badge carries only the

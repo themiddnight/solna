@@ -72,7 +72,7 @@
  * Layering: this file imports nothing at runtime — src/data/ files never do —
  * so it can be read, reviewed or copied into a fixture in isolation.
  */
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 
 export interface DrumGrid {
   /** Display name, shown in the sequencer's grid menu. */

@@ -20,7 +20,7 @@ import type { AppStore } from './types';
 import { BEAT_PRESETS, BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '@/data/beatPresets';
 import { buildProjectContent } from './projectFormat';
 import type { BeatParams, BeatPatch } from '@/types';
-import { getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/meter';
+import { getMeter, MAX_STEPS_PER_BAR, type MeterId } from '../utils/timeSignature';
 
 // ---------------------------------------------------------------------------
 // Fake browser environment (bun has none of these globals). The store module

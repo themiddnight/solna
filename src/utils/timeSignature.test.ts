@@ -10,7 +10,7 @@ import {
   isBeatBoundary,
   arpStepFor,
   type MeterId,
-} from './meter';
+} from './timeSignature';
 
 describe('the meter table', () => {
   test('holds exactly the six meters the spec names, in declaration order', () => {

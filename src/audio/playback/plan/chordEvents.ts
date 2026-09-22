@@ -2,8 +2,9 @@ import { cycleStepAt, equalPowerVelocityScale } from "@/audio/chordRhythms";
 import type { RhythmPattern } from "@/data/chordRhythms";
 import { buildArpSequence } from "@/audio/arpeggiator";
 import { arpFiresOnStep, computeArpTriggers } from "@/audio/arpSchedule";
-import { arpStepFor } from "@/utils/meter";
-import { shiftNoteOctave, STEPS_PER_BAR } from "@/utils/musicTheory";
+import { arpStepFor } from "@/utils/timeSignature";
+import { shiftNoteOctave } from "@/utils/musicTheory";
+import { STEPS_PER_BAR } from "@/utils/tempo";
 import { DEFAULT_VELOCITY } from "@/audio/constants";
 import type { ArpSettings } from "@/types/synth";
 

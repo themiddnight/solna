@@ -1,7 +1,7 @@
 import { BASS_PATTERNS } from '@/data/bassPatterns';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import type { MasterEffects } from '../types';
-import { DEFAULT_METER_ID, isMeterId } from '../utils/meter';
+import { DEFAULT_METER_ID, isMeterId } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
 import { PROJECT_FORMAT_VERSION, pickLoopContent, type ProjectBody, type ProjectContent } from './projectFormat';
 import { clampFinite, sanitizeEffectsValue, sanitizeLoops } from './sanitize';

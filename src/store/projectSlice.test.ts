@@ -7,7 +7,7 @@ import { parseProjectFile, unknownLibraryReferences } from './projectFile';
 import { buildProjectContent, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { DEFAULT_LOOP_ID, createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS } from './loop';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import type { AppStore } from './types';
 
 class FakeLocalStorage {

@@ -8,7 +8,7 @@
  * same reason `applySynthPreset` clones.
  */
 import { BEAT_PRESETS, BEAT_VOICE_IDS, DEFAULT_BEAT_PRESET_ID } from '@/data/beatPresets';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { DEFAULT_BUS_TRIM_DB, DEFAULT_FADER_DB } from './levelUnits';
 import type {
   BeatMix,

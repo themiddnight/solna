@@ -1,6 +1,6 @@
 import { type BeatVoices, MasterEffects, BeatFilterType, type TrackSendLevels } from '../types';
-import { STEPS_PER_BAR } from '../utils/musicTheory';
-import { DEFAULT_METER_ID, getMeter as resolveMeter, type Meter } from '../utils/meter';
+import { STEPS_PER_BAR } from '../utils/tempo';
+import { DEFAULT_METER_ID, getMeter as resolveMeter, type Meter } from '../utils/timeSignature';
 import { DEFAULT_VELOCITY } from './constants';
 import type { ActiveSynth } from '@/types/synth';
 import type { VoiceOwner } from './voiceOwner';

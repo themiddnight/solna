@@ -6,7 +6,7 @@ import {
   getAllSynthPresets,
   groupPresets,
 } from "@/utils/synthPresets";
-import { getMeter } from "@/utils/meter";
+import { getMeter } from "@/utils/timeSignature";
 import { foldPatternBoundaries, loopLengthDivisors } from "@/utils/patternTimeline";
 import { loopBars } from "@/utils/songStructure";
 import { JOIN_LANE, FIELD_LABEL } from "@/components/ui/fieldClasses";

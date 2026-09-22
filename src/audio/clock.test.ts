@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { bindFakeCtx, fakeCtx, freshEngine, makeEngine, type EngineInstance } from './testFakes';
-import { barDurationSec, noteFrequency, STEPS_PER_BAR, stepDurationSec } from '../utils/musicTheory';
-import { getMeter } from '../utils/meter';
+import { noteFrequency } from '../utils/musicTheory';
+import { barDurationSec, STEPS_PER_BAR, stepDurationSec } from '../utils/tempo';
+import { getMeter } from '../utils/timeSignature';
 import { ACTIVE_SYNTH, suspendableEngine } from './engineTestHelpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the engine exports no

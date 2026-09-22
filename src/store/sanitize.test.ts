@@ -13,7 +13,7 @@ import { INITIAL_EFFECTS, TRACK_ARP_DEFAULTS } from './initialState';
 import { TRACK_SYNTH_DEFAULTS } from '@/store/initialState';
 import { createDefaultLoop } from './loopSlice';
 import type { BassStepChoice } from '@/data/bassPatterns';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { MAX_CUSTOM_PATTERN_BARS } from './loop';
 import type { ChordItem } from '../types';
 import { generateBlockChordNotes } from '../utils/musicTheory';

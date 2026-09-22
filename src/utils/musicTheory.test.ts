@@ -1,32 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { CHORD_QUALITY_GROUPS, isChordQuality, type ChordQuality } from '@/musicCore';
-import {
-  MAX_BPM,
-  MIN_BPM,
-  ROOTS,
-  STEPS_PER_BAR,
-  TONAL_CHORD_ALIASES,
-  barDurationSec,
-  clampBpm,
-  degreeToRoman,
-  formatChordLabel,
-  formatChordQuality,
-  generateBlockChordNotes,
-  getBorrowedChords,
-  getDiatonicChordForDegree,
-  getScaleNotes,
-  isNoteInScale,
-  parentDegreesFor,
-  remapNoteByScaleDegree,
-  resolveDegreeQuality,
-  resolveParentDegreeQuality,
-  rootSemitone,
-  sixteenthNoteMs,
-  snapProgressionToScale,
-  stepDurationSec,
-  transposeNoteBySemitones,
-  transposeProgression,
-} from './musicTheory';
+import { ROOTS, TONAL_CHORD_ALIASES, degreeToRoman, formatChordLabel, formatChordQuality, generateBlockChordNotes, getBorrowedChords, getDiatonicChordForDegree, getScaleNotes, isNoteInScale, parentDegreesFor, remapNoteByScaleDegree, resolveDegreeQuality, resolveParentDegreeQuality, rootSemitone, snapProgressionToScale, transposeNoteBySemitones, transposeProgression } from './musicTheory';
+import { MAX_BPM, MIN_BPM, STEPS_PER_BAR, barDurationSec, clampBpm, sixteenthNoteMs, stepDurationSec } from './tempo';
 import { SCALES } from '@/data/scales';
 import { progressionById, resolveProgression } from '@/audio/chordProgressions';
 import { readFileSync } from 'node:fs';

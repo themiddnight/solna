@@ -1,5 +1,5 @@
-import { clampBpm, stepDurationSec } from '../utils/musicTheory';
-import { beatIndexAt, getMeter, isBeatBoundary, DEFAULT_METER_ID, type Meter } from '../utils/meter';
+import { clampBpm, stepDurationSec } from '../utils/tempo';
+import { beatIndexAt, getMeter, isBeatBoundary, DEFAULT_METER_ID, type Meter } from '../utils/timeSignature';
 import type { EngineHooks, MasterRack } from './masterRack';
 import type { ClockDiagnosticSnapshot } from './diagnostics';
 

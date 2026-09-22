@@ -8,7 +8,7 @@ import { CHORD_RHYTHMS, type RhythmHit, type RhythmPattern } from '@/data/chordR
 import { BASS_PATTERNS, type BassPattern, type BassStepChoice } from '@/data/bassPatterns';
 import { customBassPatternFromSpans } from './bassPatterns';
 import { adaptStepEvents } from '../utils/eventAdapt';
-import { getMeter, type MeterId } from '../utils/meter';
+import { getMeter, type MeterId } from '../utils/timeSignature';
 import { normalizePatternSpans } from '../utils/customPattern';
 import { foldPatternBoundaries, patternStoredIndexAt } from '../utils/patternTimeline';
 

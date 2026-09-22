@@ -6,7 +6,7 @@ import { loopStatePatch } from './loop';
 import { scopedLoopId } from './playbackScope';
 import { useAppStore } from './store';
 import { isSongLayer } from '../types';
-import { stepDurationSec } from '../utils/musicTheory';
+import { stepDurationSec } from '../utils/tempo';
 import { enterSongIndex, startSongModeSync } from './songMode';
 import type { Loop } from './types';
 

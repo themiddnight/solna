@@ -1,4 +1,4 @@
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 
 /**
  * How fine a lead melody cell is — the lead's second axis, on top of meter.

@@ -1,4 +1,4 @@
-import { beatIndexAt, isBeatBoundary, type Meter } from '../utils/meter';
+import { beatIndexAt, isBeatBoundary, type Meter } from '../utils/timeSignature';
 
 /**
  * Pure view-model for the sequencer grid, kept out of SequencerView.tsx so it

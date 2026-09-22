@@ -1,5 +1,5 @@
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import {
   defaultFxState,
   defaultPadState,

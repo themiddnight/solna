@@ -30,7 +30,7 @@ import type {
   PadMode,
   PadVoicing,
 } from '@/types';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 import type { ArpSettings } from '@/types/synth';
 import type { SynthControlTarget } from '@/utils/synthControl';
 

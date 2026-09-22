@@ -1,4 +1,4 @@
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 import { maxPatternHold, patternStoredIndexAt } from './patternTimeline';
 
 /**

@@ -1,4 +1,4 @@
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 
 /**
  * The timeline arithmetic the Chord and Bass editors share. Headless on

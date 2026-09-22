@@ -5,8 +5,8 @@ import {
 } from '../audio/playback/playbackEngine';
 import { layerForTab } from '../types';
 import type { Layer } from '../types';
-import { getMeter } from '../utils/meter';
-import { stepDurationSec } from '../utils/musicTheory';
+import { getMeter } from '../utils/timeSignature';
+import { stepDurationSec } from '../utils/tempo';
 import { songAdvanceDecision } from '../utils/songStructure';
 import { loadLoop } from './loadLoop';
 import { playbackScopeReducer } from './playbackScope';

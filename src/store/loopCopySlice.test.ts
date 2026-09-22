@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { SCOPE_NONE } from './playbackScope';
 import { useAppStore } from './store';
 import type { Loop } from './types';

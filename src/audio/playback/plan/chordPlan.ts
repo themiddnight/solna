@@ -1,8 +1,9 @@
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { ChordItem } from '@/types';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 import type { ArpSettings } from '@/types/synth';
-import { barDurationSec, generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
+import { generateBlockChordNotes } from '@/utils/musicTheory';
+import { barDurationSec, stepDurationSec } from '@/utils/tempo';
 import {
   cycleHoldScale,
   feelToHoldScale,

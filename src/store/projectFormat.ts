@@ -1,6 +1,6 @@
 import type { MasterEffects } from '../types';
-import type { MeterId } from '../utils/meter';
-import { DEFAULT_METER_ID } from '../utils/meter';
+import type { MeterId } from '../utils/timeSignature';
+import { DEFAULT_METER_ID } from '../utils/timeSignature';
 import { INITIAL_EFFECTS } from './initialState';
 import {
   LOOP_FLAT_KEYS,

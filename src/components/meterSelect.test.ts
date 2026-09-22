@@ -7,7 +7,7 @@ import {
   patternOptionLabel,
   patternMeterTitle,
 } from './meterSelect';
-import { METERS, METER_IDS } from '../utils/meter';
+import { METERS, METER_IDS } from '../utils/timeSignature';
 
 describe('METER_OPTIONS', () => {
   test('offers exactly the six meters, in table order', () => {

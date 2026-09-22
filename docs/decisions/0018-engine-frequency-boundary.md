@@ -63,7 +63,9 @@ Scope of the gate:
   holds the literal allowlist of files (src + scripts) that may name it.
 - **R178** — The engine never regains a note name, not even for logging; names belong on the
   note-input bus (`emitNoteInput`).
-- **R179** — The engine may import only the timing half of `utils/musicTheory.ts`
+- **R179** — Timing lives in `utils/tempo.ts`, which the engine may import; `utils/musicTheory.ts`
+  is banned outright (amended by DEV-426; it was an `allowImportNames` allowlist on musicTheory's
+  timing exports until those exports moved)
   (`STEPS_PER_BAR`, `stepDurationSec`) — `ENGINE_MUSIC_DOMAIN_BAN` is an `allowImportNames`
   allowlist.
 - **R180** — The gate covers `src/audio/engine.ts`, `src/audio/synth/**`, `drumSynth.ts`,

@@ -26,7 +26,7 @@ import type {
   TrackSendLevels,
 } from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
-import type { MeterId } from '@/utils/meter';
+import type { MeterId } from '@/utils/timeSignature';
 import type { LeadStepResolutionId } from '@/utils/stepResolution';
 import type { BeatPlanSnapshot } from './beatPlan';
 import type { ChordPlanSnapshot } from './chordPlan';

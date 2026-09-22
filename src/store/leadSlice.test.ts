@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore, partializeAppState } from './store';
 import { loadLoop } from './loadLoop';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import {
   DEFAULT_LEAD_STEP_RESOLUTION,
   LEAD_TICKS_PER_BAR,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_STEPS_PER_BAR } from './meter';
+import { MAX_STEPS_PER_BAR } from './timeSignature';
 import {
   clampLoopLength,
   foldPatternBoundaries,

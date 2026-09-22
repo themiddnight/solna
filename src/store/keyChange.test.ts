@@ -3,7 +3,7 @@ import { ROOTS } from '@/musicCore';
 import type { ChordQuality } from '@/musicCore';
 import type { ChordItem } from '@/types';
 import type { LeadNote } from '../audio/leadMelody';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
+import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
 import { changeKey, harmonizeChordsToKey, type KeyChangeSource } from './keyChange';
 

@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test';
 import { planBeatStep, type BeatPlanSnapshot } from './beatPlan';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { DEFAULT_VELOCITY } from '@/audio/constants';
 import { beatMixFixture, beatPatternFixture } from '@/audio/export/mixdownFixture';
 import type { BeatMix, BeatPattern, BeatVoiceId } from '@/types';

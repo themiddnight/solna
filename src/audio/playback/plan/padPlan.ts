@@ -1,5 +1,5 @@
 import type { ChordItem, PadInterval, PadMode, PadVoicing } from '@/types';
-import { barDurationSec } from '@/utils/musicTheory';
+import { barDurationSec } from '@/utils/tempo';
 import { loopBars } from '@/utils/songStructure';
 import { padHoldsAcrossLoop, resolvePadArm } from '../padPlayback';
 

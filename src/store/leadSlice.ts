@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import {
   DEFAULT_LEAD_GATE,
   clampLeadCursor,

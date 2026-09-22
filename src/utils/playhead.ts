@@ -1,5 +1,5 @@
 import type { ChordItem } from '../types';
-import { getMeter } from './meter';
+import { getMeter } from './timeSignature';
 
 /**
  * Beats in a 4/4 bar. Only a DEFAULT — the live count is the active meter's

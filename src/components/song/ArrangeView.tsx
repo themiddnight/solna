@@ -24,7 +24,7 @@ import type { DeletedLoop, Loop } from '@/store/types';
 import { aggregateAllPlayers } from '@/store/transportSlice';
 import { useAppStore } from '@/store/store';
 import { buildRouteUrl } from '@/routing/tabRouting';
-import { getMeter } from '@/utils/meter';
+import { getMeter } from '@/utils/timeSignature';
 import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
 import { useTimedToast } from '../ui/useTimedToast';

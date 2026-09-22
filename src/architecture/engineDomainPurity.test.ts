@@ -180,7 +180,7 @@ describe('engine music-domain guard (DEV-399)', () => {
   });
 
   test('the TIMING half of musicTheory is still allowed — the ban is about the domain, not the module', async () => {
-    const source = "import { STEPS_PER_BAR } from '../utils/musicTheory';\nexport const s = STEPS_PER_BAR;\n";
+    const source = "import { STEPS_PER_BAR } from '../utils/tempo';\nexport const s = STEPS_PER_BAR;\n";
     expect(await messagesFor(source, ENGINE_ROOT)).not.toContainEqual(RESTRICTED);
   });
 

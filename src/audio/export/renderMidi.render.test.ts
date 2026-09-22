@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { noteMidi } from '@/musicCore';
-import { MAX_STEPS_PER_BAR } from '@/utils/meter';
+import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import {
   GM_DRUM_NOTE,

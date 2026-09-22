@@ -5,7 +5,7 @@ import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { applyBeatParams } from '../audio/beatAdapter';
 import { useAppStore } from './store';
 import { isPlayerActive } from './transportSlice';
-import { getMeter } from '../utils/meter';
+import { getMeter } from '../utils/timeSignature';
 import { startMidiInputBridge } from './midiInput';
 import { createFrameCoalescer } from '../utils/frameCoalescer';
 import { createTrailingDebounce } from '../utils/trailingDebounce';

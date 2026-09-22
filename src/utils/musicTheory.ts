@@ -16,7 +16,6 @@ import {
   type ChordQuality,
 } from '@/musicCore';
 import { ChordItem } from '../types';
-import { METERS } from './meter';
 // SCALES is authored content and lives in src/data/, below this file in the
 // layering: data -> audio -> store -> components. Reading DOWN into it, as
 // this line does, is the allowed direction. The other way is not: src/data/
@@ -548,49 +547,6 @@ export function snapProgressionToScale(
 export function rootSemitone(root: string): number {
   const chroma = chromaOfNote(root);
   return Number.isFinite(chroma) ? chroma : 0;
-}
-
-export function sixteenthNoteMs(bpm: number): number {
-  return ((60 / Math.max(1, bpm)) * 1000) / 4;
-}
-
-
-/**
- * The 4/4 bar length, in 16th steps.
- *
- * This is now only a DEFAULT: the live bar length comes from the transport's
- * meter (`getMeter(meterId).stepsPerBar`). It stays exported and stays 16 so
- * the functions that already accept `stepsPerBar` as a defaulted parameter keep
- * their historical behaviour when a caller has no meter to hand — and so
- * engine.ts's and playbackEngine.ts's re-exports keep resolving.
- *
- * Declared here rather than in audio/engine.ts so barDurationSec can use it
- * without a cycle; utils/meter.ts imports nothing, so this import is safe.
- */
-export const STEPS_PER_BAR = METERS['4/4'].stepsPerBar;
-
-/** Transport tempo bounds. The engine clock and the store clamp to the same pair. */
-export const MIN_BPM = 20;
-export const MAX_BPM = 300;
-
-/**
- * A bpm the clock can actually use. The BPM input is `type="number"`, so an
- * empty field yields 0 — an unclamped 0 makes every listener compute a step
- * duration from a 1-bpm floor and land its note-offs minutes away (stuck notes).
- */
-export function clampBpm(bpm: number): number {
-  if (Number.isNaN(bpm)) return 120;
-  return Math.min(MAX_BPM, Math.max(MIN_BPM, bpm));
-}
-
-/** One 16th-note step, in seconds. */
-export function stepDurationSec(bpm: number): number {
-  return sixteenthNoteMs(bpm) / 1000;
-}
-
-/** One bar, in seconds. `stepsPerBar` defaults to the 4/4 bar. */
-export function barDurationSec(bpm: number, stepsPerBar: number = STEPS_PER_BAR): number {
-  return stepDurationSec(bpm) * stepsPerBar;
 }
 
 export function noteFrequency(note: string, octaveOffset = 0): number {

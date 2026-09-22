@@ -16,7 +16,7 @@ import { loopLabel, loopStatePatch } from './loop';
 import { SCOPE_NONE } from './playbackScope';
 import { defaultPadState, INITIAL_EFFECTS } from './initialState';
 import { DEFAULT_BPM } from './transportSlice';
-import { DEFAULT_METER_ID, MAX_STEPS_PER_BAR } from '../utils/meter';
+import { DEFAULT_METER_ID, MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { gainToDb, toLinearGain } from '../utils/gainUnits';
 import type { ChordItem } from '../types';
 
@@ -616,7 +616,7 @@ describe('applyVibeToStore audible cut', () => {
 import { generateBlockChordNotes, isNoteInScale } from '../utils/musicTheory';
 import { SCALES } from '@/data/scales';
 import { progressionById, resolveProgression } from '@/audio/chordProgressions';
-import { isMeterId } from '../utils/meter';
+import { isMeterId } from '../utils/timeSignature';
 
 describe('vibe scales', () => {
   test('every vibe scaleType is a real key of SCALES', () => {
