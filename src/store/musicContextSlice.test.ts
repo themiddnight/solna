@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { LeadNote } from '../audio/leadMelody';
@@ -92,11 +92,23 @@ const PROG: ChordItem[] = [
 ];
 
 describe('musicContextSlice — chords follow the key in the same write', () => {
+  // This block's tests key-change the singleton store's chords, autoReharmonize
+  // and reharmonizedIndicator (and the loops[active] mirror). Restore the
+  // pre-test baseline after each test so a sibling suite reading the store
+  // does not see this block's leftovers — see vibes.test.ts's resetStore and
+  // reharmonizeNav.test.ts's baseline restore.
+  let baseline: ReturnType<typeof useAppStore.getState>;
+
   beforeEach(() => {
+    baseline = useAppStore.getState();
     useAppStore.setState({
       scaleRoot: 'A', scaleType: 'Natural Minor', chords: PROG,
       autoReharmonize: true, reharmonizedIndicator: false,
     });
+  });
+
+  afterEach(() => {
+    useAppStore.setState(baseline);
   });
 
   test('toggle on: one notification carries key, chords, indicator and the loops[] mirror', () => {

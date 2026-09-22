@@ -66,9 +66,10 @@ directly, per loop, without depending on which loop happens to be active or moun
   identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to
   compile if a `Loop` field is neither.
 - **R283** — `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop
-  default is written; slices read it through their `defaults` parameter.
+  default is written; slices read it through their `defaults` parameter, or through the shared
+  `default*State()` factories `createDefaultLoopContent` itself spreads.
 
 ## Sources
 
 Spec `docs/superpowers/specs/2026-09-22-loop-content-and-batch-key-design.md`; plan
-`.superpowers/sdd/2026-09-22-dev-424-loop-content/`.
+`docs/superpowers/plans/2026-09-22-dev-424-loop-content.md`.

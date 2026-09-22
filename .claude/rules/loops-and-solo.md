@@ -21,7 +21,7 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 ## Loop content
 
 - `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to compile if a `Loop` field is neither. <!-- R282 -->
-- `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop default is written; slices read it through their `defaults` parameter. <!-- R283 -->
+- `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop default is written; slices read it through their `defaults` parameter, or through the shared `default*State()` factories `createDefaultLoopContent` itself spreads. <!-- R283 -->
 
 ([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
 

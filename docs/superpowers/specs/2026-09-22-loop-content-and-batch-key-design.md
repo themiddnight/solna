@@ -205,6 +205,11 @@ prevented. Still one `set()` (`vibes.atomic.test.ts` keeps passing).
    behaviour, `applyLoopCopy`'s active branch can call `changeKey` instead — a one-line follow-up,
    not a redesign.
 2. **Badge clears on every wholesale replacement (§1.5)**, closing the documented residual.
+3. **Toggle-off session shared-chord transpose.**
+   - Old corner case: a fresh session, then toggle off, change the key, toggle on, then New
+     Project. The old effect transposed the new project's shared `INITIAL_CHORDS` from the old
+     key.
+   - The new code does not do this. It is a bug fix.
 
 ### 1.8 Data flow after PR 1
 
