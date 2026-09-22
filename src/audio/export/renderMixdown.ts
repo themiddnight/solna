@@ -8,6 +8,10 @@
  * shared clock and the transport are not involved and are not disturbed: an
  * export is a side effect on a file, not on the session.
  *
+ * `renderSongBuffer` is the shared body — guards, context, seeded build,
+ * walk, render; `renderMixdown` encodes its two channels and `renderStems.ts`
+ * its `STEM_CHANNELS` (ADR-0038).
+ *
  * Imports only src/data/, src/utils/ and src/audio/ — no store, no component,
  * not even a type: the eslint block covering src/audio/** has no
  * allowTypeImports exemption. Everything the render reads arrives in the
@@ -184,18 +188,20 @@ function applyLoopAudioState(
 /**
  * Plays one walk event exactly as the pre-timeline renderer did: the same
  * engine call, the same arguments. Patch and bus come from songTrackVoice;
- * the release is computed at perform time from the patch.
+ * the release is computed at perform time from the patch. Returns the engine
+ * source the event played on — bookkeeping only, no engine call, no RNG.
  */
-function performTimelineEvent(engine: AudioEngine, snapshot: MixdownSnapshot, e: TimelineEvent): void {
+function performTimelineEvent(engine: AudioEngine, snapshot: MixdownSnapshot, e: TimelineEvent): string {
   if (e.kind === 'drum') {
     engine.triggerDrum(e.voice, e.velocity, e.timeSec);
-    return;
+    return 'sequencer';
   }
   const { params, source } = songTrackVoice(snapshot.loops[e.loopIndex], e.track);
   const voiceId = engine.triggerSynthNoteOn(
     noteFrequency(e.noteName), params, e.velocity, e.startSec, source, 1, 'sequencer',
   );
   if (voiceId) engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(params), e.endSec);
+  return source;
 }
 
 /**
@@ -211,9 +217,10 @@ async function scheduleArrangement(
   plan: ArrangementPlan,
   walk: Generator<SongWalkItem, void, undefined>,
   signal?: AbortSignal,
-): Promise<{ cancelled: boolean }> {
+): Promise<{ cancelled: boolean; sourcesWithEvents: Set<string> }> {
   const loopAutomation = planLoopAudioAutomation(snapshot, plan);
   let stepsSinceYield = 0;
+  const sourcesWithEvents = new Set<string>();
   for (let next = walk.next(); !next.done; next = walk.next()) {
     const item = next.value;
     if (item.kind === 'pass') {
@@ -223,13 +230,13 @@ async function scheduleArrangement(
       if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {
         stepsSinceYield = 0;
         await yieldPreservingRandomStream();
-        if (signal?.aborted) return { cancelled: true };
+        if (signal?.aborted) return { cancelled: true, sourcesWithEvents };
       }
     } else {
-      performTimelineEvent(engine, snapshot, item);
+      sourcesWithEvents.add(performTimelineEvent(engine, snapshot, item));
     }
   }
-  return { cancelled: false };
+  return { cancelled: false, sourcesWithEvents };
 }
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
@@ -294,28 +301,54 @@ function offlineContextCtor(): OfflineCtor | null {
 }
 
 /**
- * Renders the arrangement to a WAV. NEVER THROWS.
+ * How `renderSongBuffer` shapes its context. The mixdown passes
+ * `{ channels: 2 }` and nothing else, so its graph and engine-call sequence are
+ * exactly the golden's (R309).
+ */
+export interface SongRenderLayout {
+  channels: number;
+  /** Stems: the master rack's last stage connects to an unconnected sink instead of the destination. */
+  detachMaster?: boolean;
+  /** Runs inside the seeded block after applyMasterState, before the walk. Must not draw from the RNG. */
+  wire?: (engine: AudioEngine, ctx: OfflineAudioContext) => void;
+}
+
+type SongBufferResult =
+  | { ok: true; buffer: AudioBuffer; sourcesWithEvents: ReadonlySet<string> }
+  | { ok: false; reason: MixdownFailureReason };
+
+function renderFailed(err: unknown): MixdownFailureReason {
+  return { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) };
+}
+
+/**
+ * Renders the arrangement to an `AudioBuffer`. NEVER THROWS. Shared by the
+ * mixdown and the stems (ADR-0038); `report` must already be guarded
+ * (`safeProgressReporter`).
  *
- * The one `try` covers the context construction, the encode and the render
- * itself, so a failure anywhere becomes a failed result with a reason rather
- * than an unhandled rejection crossing into a click handler with no message
- * for the user.
+ * The one `try` covers the context construction and the render itself, so a
+ * failure anywhere becomes a failed result with a reason rather than an
+ * unhandled rejection crossing into a click handler with no message for the user.
  *
  * The seeded generator is installed for the whole graph-building phase — the
  * engine construction (`setupMasterChain` builds the reverb impulse at the
- * DEFAULT decay 2.0), the master-state settle and the scheduling walk —
- * because the reverb impulse, the noise-voice buffers and the arp's `'random'`
- * note order all read from it as they are created, which happens while the
- * graph is being built and not while it renders. It is restored in a `finally`
- * on every exit path, including the throwing one, so a leaked source cannot
- * make the rest of the session reproducible.
+ * DEFAULT decay 2.0), the master-state settle, `layout.wire` and the
+ * scheduling walk — because the reverb impulse, the noise-voice buffers and the
+ * arp's `'random'` note order all read from it as they are created, which
+ * happens while the graph is being built and not while it renders. It is
+ * restored in a `finally` on every exit path, including the throwing one, so a
+ * leaked source cannot make the rest of the session reproducible.
+ *
+ * `wire` runs AFTER `applyMasterState`, so the six buses already exist in the
+ * mixdown's creation order (`setSourceState` in `snapshot.buses` order); a tap
+ * only adds edges to existing nodes.
  */
-export async function renderMixdown(
+export async function renderSongBuffer(
   snapshot: MixdownSnapshot,
-  onProgress?: MixdownProgressReporter,
+  layout: SongRenderLayout,
+  report: MixdownProgressReporter,
   signal?: AbortSignal,
-): Promise<MixdownRenderResult> {
-  const report = safeProgressReporter(onProgress);
+): Promise<SongBufferResult> {
   try {
     if (signal?.aborted) {
       return { ok: false, reason: { kind: 'cancelled' } };
@@ -335,7 +368,7 @@ export async function renderMixdown(
     // song ending on a held chord is cut off mid-decay.
     const tailSec = Math.max(MIXDOWN_TAIL_SEC, snapshot.effects.reverbDecay + 1);
     const ctx = new Offline(
-      MIXDOWN_CHANNELS,
+      layout.channels,
       bodySamples + Math.ceil(tailSec * MIXDOWN_SAMPLE_RATE),
       MIXDOWN_SAMPLE_RATE,
     );
@@ -346,12 +379,16 @@ export async function renderMixdown(
     // default — so seeding only applyMasterState + scheduleArrangement would
     // leave an unseeded impulse in the graph for the store's default project,
     // and two renders of it would differ.
-    const scheduleResult = await withSeededRandom(MIXDOWN_SEED, async () => {
-      const engine = createRenderEngine(ctx);
+    const scheduled = await withSeededRandom(MIXDOWN_SEED, async () => {
+      // The mixdown passes no options: createRenderEngine(ctx), as the golden recorded (R309).
+      const engine = layout.detachMaster
+        ? createRenderEngine(ctx, { masterOutput: ctx.createGain() })
+        : createRenderEngine(ctx);
       applyMasterState(engine, snapshot);
+      layout.wire?.(engine, ctx);
       return scheduleArrangement(engine, snapshot, plan, walkSongTimeline(snapshot, plan), signal);
     });
-    if (scheduleResult.cancelled) {
+    if (scheduled.cancelled) {
       return { ok: false, reason: { kind: 'cancelled' } };
     }
 
@@ -365,6 +402,27 @@ export async function renderMixdown(
     if (signal?.aborted) {
       return { ok: false, reason: { kind: 'cancelled' } };
     }
+    return { ok: true, buffer, sourcesWithEvents: scheduled.sourcesWithEvents };
+  } catch (err) {
+    return { ok: false, reason: renderFailed(err) };
+  }
+}
+
+/**
+ * Renders the arrangement to a WAV. NEVER THROWS. The render is
+ * `renderSongBuffer` with two channels and no options; this adds only the
+ * encoding tail, in today's order.
+ */
+export async function renderMixdown(
+  snapshot: MixdownSnapshot,
+  onProgress?: MixdownProgressReporter,
+  signal?: AbortSignal,
+): Promise<MixdownRenderResult> {
+  const report = safeProgressReporter(onProgress);
+  try {
+    const rendered = await renderSongBuffer(snapshot, { channels: MIXDOWN_CHANNELS }, report, signal);
+    if (!rendered.ok) return rendered;
+    const { buffer } = rendered;
     report({ phase: 'encoding' });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (signal?.aborted) {
@@ -376,9 +434,6 @@ export async function renderMixdown(
     );
     return { ok: true, buffer, blob };
   } catch (err) {
-    return {
-      ok: false,
-      reason: { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) },
-    };
+    return { ok: false, reason: renderFailed(err) };
   }
 }
