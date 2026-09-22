@@ -1,10 +1,13 @@
 /**
- * The export dialog's logic (R265): pure view helpers here, the hook in
- * Task 5. Kind-specific wording comes from the kind's spec; the three generic
- * phases are worded here once.
+ * The export dialog's logic (R265): pure view helpers here. Kind-specific
+ * wording comes from the kind's spec; the three generic phases are worded
+ * here once.
  */
+import { useCallback, useState } from 'react';
+import { useLiveStore } from '@/components/ui/useLiveStore';
 import type { ExportJob, ExportOutcome } from '@/store/exportJob';
-import { exportKind } from '@/store/exportKinds';
+import { exportKind, type ExportKindId } from '@/store/exportKinds';
+import { selectExportBusy } from '@/store/exportSlice';
 
 export interface ExportStatusView {
   label: string;
@@ -56,4 +59,50 @@ export function exportTriggerView(job: ExportJob | null): ExportTriggerView {
 /** The toast reports a finished download; any other ending keeps the dialog open. */
 export function closesDialogAfter(outcome: ExportOutcome): boolean {
   return outcome.status === 'downloaded';
+}
+
+export interface UseExportDialog {
+  open: boolean;
+  openDialog: () => void;
+  closeDialog: () => void;
+  busy: boolean;
+  status: ExportStatusView | null;
+  trigger: ExportTriggerView;
+  start: (kind: ExportKindId) => void;
+  cancel: () => void;
+}
+
+/**
+ * Called once, at `ExportButton` (R268). `open` is local UI state; the job is
+ * the store's, so closing the dialog leaves it running and the trigger is the
+ * way back in (R295). Reads go through `useLiveStore` so `renderToString`
+ * tests see `setState` (R257).
+ */
+export function useExportDialog(): UseExportDialog {
+  const [open, setOpen] = useState(false);
+  const job = useLiveStore((s) => s.exportJob);
+  const busy = useLiveStore(selectExportBusy);
+  const startExport = useLiveStore((s) => s.startExport);
+  const cancel = useLiveStore((s) => s.cancelExport);
+  const openDialog = useCallback(() => setOpen(true), []);
+  // Stable: `Modal` re-binds its native `close` listener whenever onClose changes.
+  const closeDialog = useCallback(() => setOpen(false), []);
+  const start = useCallback(
+    (kind: ExportKindId) => {
+      void startExport(kind).then((outcome) => {
+        if (closesDialogAfter(outcome)) setOpen(false);
+      });
+    },
+    [startExport],
+  );
+  return {
+    open,
+    openDialog,
+    closeDialog,
+    busy,
+    status: exportStatusView(job),
+    trigger: exportTriggerView(job),
+    start,
+    cancel,
+  };
 }

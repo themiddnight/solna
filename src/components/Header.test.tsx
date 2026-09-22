@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { ExportButton, FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, projectDisplayName, readStoredTheme, resolveInitialTheme, ScaleSelects, UNTITLED_PROJECT_LABEL } from './Header';
+import { FollowPlayheadToggle, ProjectNameLabel, TabButton, LAYER_META, layerToggleTarget, persistTheme, projectDisplayName, readStoredTheme, resolveInitialTheme, ScaleSelects, UNTITLED_PROJECT_LABEL } from './Header';
 import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
@@ -341,80 +341,18 @@ describe('FollowPlayheadToggle (song layer only)', () => {
   });
 });
 
-// Reads the store through useLiveStore, so a test's setState lands (see
-// ui/useLiveStore.ts). The LAYER comes from the prop, which is what makes
-// "song layer only" an assertable statement under renderToString.
-describe('ExportButton (song layer only)', () => {
-  // In afterEach rather than at the end of the one test that sets it: an
-  // assertion that throws above the reset would otherwise leak a job into
-  // every test that follows.
-  afterEach(() => {
-    useAppStore.setState({ exportJob: null });
+describe('export lives in its own feature folder', () => {
+  const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
+
+  test('Header renders the export root from src/components/export/', () => {
+    expect(src).toMatch(/import \{ ExportButton \} from ["']\.\/export\/ExportButton["']/);
+    expect(src).toContain('<ExportButton layer={layer} />');
   });
 
-  test('the song layer shows the trigger and its one item', () => {
-    const html = renderToString(<ExportButton layer="song" />);
-    expect(html).toContain('id="btn-export"');
-    expect(html).toContain('id="btn-export-mixdown"');
-    expect(html).toContain('Export mixdown (WAV)');
-  });
-
-  test('the loop layer never shows it — an export is an arrangement action', () => {
-    const html = renderToString(<ExportButton layer="loop" />);
-    expect(html).not.toContain('id="btn-export"');
-  });
-
-  test('the menu is shaped to take a stem row, and does not advertise one', () => {
-    const html = renderToString(<ExportButton layer="song" />);
-    // The row is out of scope, and a control that can never work on this build
-    // must not be advertised — the same rule the Drive rows follow when
-    // VITE_GOOGLE_CLIENT_ID is unset.
-    expect(html).not.toContain('stem');
-    expect(html).not.toContain('Stem');
-    expect(html).not.toContain('coming soon');
-    expect(html).not.toContain('disabled');
-  });
-
-  test('while exporting, the trigger is disabled and the item says so', () => {
-    useAppStore.setState({
-      exportJob: { kind: 'mixdown-wav', phase: 'rendering', percent: 35 },
-    });
-    const html = renderToString(<ExportButton layer="song" />);
-    const trigger = openTagContaining(html, 'id="btn-export"');
-    expect(trigger).toContain('disabled');
-    expect(trigger).toContain('aria-live="polite"');
-    expect(html).toContain('loading loading-spinner');
-    expect(html).toContain('Rendering mixdown… 35%');
-    expect(html).toContain('id="btn-cancel-export"');
-    expect(html).toContain('Cancel export');
-  });
-
-  test('while cancellation drains, the status is honest and cannot be cancelled twice', () => {
-    useAppStore.setState({
-      exportJob: { kind: 'mixdown-wav', phase: 'cancelling' },
-    });
-    const html = renderToString(<ExportButton layer="song" />);
-    expect(html).toContain('Cancelling…');
-    expect(html).not.toContain('id="btn-cancel-export"');
-  });
-
-  test('while handing the WAV to the browser, the trigger stays busy and says Downloading', () => {
-    useAppStore.setState({
-      exportJob: { kind: 'mixdown-wav', phase: 'downloading' },
-    });
-    const html = renderToString(<ExportButton layer="song" />);
-    const trigger = openTagContaining(html, 'id="btn-export"');
-    expect(trigger).toContain('disabled');
-    expect(html).toContain('loading loading-spinner');
-    expect(html).toContain('Downloading…');
-  });
-
-  test('the panel is focusable, like every other dropdown in the app', () => {
-    // daisyUI holds `dropdown-content` open on :focus-within, so a
-    // non-focusable panel closes the instant a pointer lands inside it.
-    const html = renderToString(<ExportButton layer="song" />);
-    const panel = openTagContaining(html, 'id="export-menu"');
-    expect(panel).toContain('tabindex="0"');
+  test('Header holds no export logic of its own', () => {
+    for (const symbol of ['startExport', 'cancelExport', 'exportJob', 'downloadBlob', 'mixdownProgressLabel', 'export-menu']) {
+      expect(src).not.toContain(symbol);
+    }
   });
 });
 

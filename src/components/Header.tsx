@@ -3,13 +3,10 @@ import {
   Sun,
   Moon,
   ChevronDown,
-  Download,
   LocateFixed,
   LocateOff,
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
-import { selectExportBusy } from "@/store/exportSlice";
-import type { ExportJob } from "@/store/exportJob";
 import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
 import { SCALES } from "@/data/scales";
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpelling";
@@ -21,6 +18,7 @@ import { IconButton } from "./ui/IconButton";
 import { LoopCopyButton } from "./loop/LoopCopyButton";
 import { LoopSelector } from "./loop/LoopSelector";
 import { ProjectMenu } from "./project/ProjectMenu";
+import { ExportButton } from "./export/ExportButton";
 import { VIEW_META } from "./viewMeta";
 
 /** The two layers in toggle order. Labels are user-facing copy. */
@@ -253,98 +251,6 @@ export function FollowPlayheadToggle({ layer }: { layer: Layer }) {
       }
       onClick={toggleFollowPlayhead}
     />
-  );
-}
-
-function mixdownProgressLabel(progress: ExportJob | null): string {
-  if (!progress || progress.phase === 'preparing') return 'Preparing arrangement…';
-  if (progress.phase === 'rendering') return `Rendering mixdown… ${progress.percent}%`;
-  if (progress.phase === 'encoding') return 'Encoding WAV…';
-  if (progress.phase === 'cancelling') return 'Cancelling…';
-  return 'Downloading…';
-}
-
-/**
- * Export ▾ — the song layer's one arrangement-wide action.
- *
- * Takes `layer` as a prop rather than deriving it, for the same testability
- * reason `FollowPlayheadToggle` and `ProjectNameLabel` do: `Header` derives
- * `layer` from `activeTab` through a plain `useAppStore` selector, which under
- * `renderToString` serves the store's creation-time state, so a rendered
- * `<Header />` can never reach the song layer. The prop is what makes
- * "song layer only" an assertable statement.
- *
- * The menu is SHAPED to take a stem row later — one row per export kind, each
- * owning its own action — and no row is built for it. A control that can never
- * work on this build must not be advertised.
- *
- * `busy` disables the trigger AND the row across rendering and browser
- * delivery: the row can otherwise be clicked twice before either phase
- * resolves, and the disabled attribute closes that gap for the pointer.
- */
-export function ExportButton({ layer }: { layer: Layer }) {
-  const busy = useLiveStore(selectExportBusy);
-  const exportJob = useLiveStore((s) => s.exportJob);
-  const startExport = useLiveStore((s) => s.startExport);
-  const cancelExport = useLiveStore((s) => s.cancelExport);
-  if (layer !== 'song') return null;
-  const progressLabel = mixdownProgressLabel(exportJob);
-
-  return (
-    <div className="flex items-center gap-1">
-      <div className="dropdown dropdown-end">
-        <button
-          id="btn-export"
-          type="button"
-          disabled={busy}
-          className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold"
-          aria-label={busy ? progressLabel : 'Export'}
-          aria-live="polite"
-          aria-busy={busy}
-        >
-          {busy ? (
-            <span className="loading loading-spinner loading-sm" aria-hidden="true" />
-          ) : (
-            <Download className="w-4 h-4" />
-          )}
-          <span className={busy ? undefined : 'hidden sm:inline'}>
-            {busy ? progressLabel : 'Export'}
-          </span>
-          {!busy && <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />}
-        </button>
-        <ul
-          id="export-menu"
-          // daisyUI's dropdown holds itself open on :focus-within, so the panel
-          // must be focusable or the menu closes the moment a pointer-down lands
-          // inside it. It is a plain container, not a control; the <li><button>
-          // row inside is what the keyboard actually reaches.
-          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-          tabIndex={0}
-          className="dropdown-content menu menu-sm z-50 mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
-        >
-          <li>
-            <button
-              id="btn-export-mixdown"
-              type="button"
-              disabled={busy}
-              onClick={() => { void startExport('mixdown-wav'); }}
-            >
-              {busy ? progressLabel : 'Export mixdown (WAV)'}
-            </button>
-          </li>
-        </ul>
-      </div>
-      {busy && exportJob?.phase !== 'cancelling' && (
-        <button
-          id="btn-cancel-export"
-          type="button"
-          className="btn btn-sm btn-ghost px-2 text-xs"
-          onClick={cancelExport}
-        >
-          Cancel export
-        </button>
-      )}
-    </div>
   );
 }
 
