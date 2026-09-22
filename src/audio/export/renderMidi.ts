@@ -11,8 +11,9 @@
  * itself, directly or otherwise): the MIDI export must run where
  * `OfflineAudioContext` does not exist.
  */
-import type { SongTrack, TimelineEvent } from '../playback/plan/songTimeline';
+import { planArrangement, type SongTrack, type TimelineEvent } from '../playback/plan/songTimeline';
 import { songTrackVoice, type MixdownSnapshot } from '../playback/plan/songSnapshot';
+import type { SmfEvent, SmfFile, SmfTrack } from './smfWriter';
 import type { BeatVoiceId } from '@/types';
 import type { MeterId } from '@/utils/meter';
 
@@ -137,4 +138,66 @@ export function resolveNoteOverlaps(notes: MidiNote[]): MidiNote[] {
   return result.sort(
     (a, b) => a.startTick - b.startTick || a.channel - b.channel || a.note - b.note,
   );
+}
+
+function metaText(type: number, text: string): SmfEvent {
+  return { tick: 0, kind: 'meta', type, data: new TextEncoder().encode(text) };
+}
+
+/** 24-bit big-endian, for `FF 51 03` tempo. */
+function u24(value: number): Uint8Array {
+  return Uint8Array.from([(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]);
+}
+
+function conductorTrack(snapshot: MixdownSnapshot, title: string, songEndTick: number): SmfTrack {
+  const timeSignature = MIDI_TIME_SIGNATURE[snapshot.meterId];
+  const microsPerQuarter = Math.round(60_000_000 / snapshot.bpm);
+  const events: SmfEvent[] = [
+    metaText(0x03, title),
+    {
+      tick: 0,
+      kind: 'meta',
+      type: 0x58,
+      data: Uint8Array.from([
+        timeSignature.numerator,
+        timeSignature.denominatorPow2,
+        timeSignature.clocksPerClick,
+        8,
+      ]),
+    },
+    { tick: 0, kind: 'meta', type: 0x51, data: u24(microsPerQuarter) },
+  ];
+  return { events, endTick: songEndTick };
+}
+
+function laneTrack(lane: (typeof MIDI_LANES)[number], notes: MidiNote[], songEndTick: number): SmfTrack {
+  const events: SmfEvent[] = [metaText(0x03, lane.name)];
+  let endTick = songEndTick;
+  for (const note of notes) {
+    if (note.lane !== lane.lane) continue;
+    events.push({
+      tick: note.startTick,
+      kind: 'noteOn',
+      channel: lane.channel,
+      note: note.note,
+      velocity: note.velocity,
+    });
+    events.push({ tick: note.endTick, kind: 'noteOff', channel: lane.channel, note: note.note });
+    endTick = Math.max(endTick, note.endTick);
+  }
+  return { events, endTick };
+}
+
+/**
+ * The whole song as an SMF format-1 file (§5): a conductor track (title, time
+ * signature, tempo) plus all six lane tracks, always in `MIDI_LANES` order.
+ * `notes` are taken as given — the caller has already resolved overlaps.
+ */
+export function songMidiFile(snapshot: MixdownSnapshot, notes: MidiNote[], title: string): SmfFile {
+  const songEndTick = (planArrangement(snapshot).totalSteps * MIDI_PPQ) / 4;
+  const tracks: SmfTrack[] = [
+    conductorTrack(snapshot, title, songEndTick),
+    ...MIDI_LANES.map((lane) => laneTrack(lane, notes, songEndTick)),
+  ];
+  return { ppq: MIDI_PPQ, tracks };
 }
