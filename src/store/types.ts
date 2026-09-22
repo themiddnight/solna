@@ -29,7 +29,7 @@ import type { MelodyTrackId } from './melodyTracks';
 import type { PlaybackScope } from './playbackScope';
 import type { DriveSlice } from './driveSlice';
 import type { ProjectSlice } from './projectSlice';
-import type { MixdownSlice } from './mixdownSlice';
+import type { ExportSlice } from './exportSlice';
 import type { SoloTrack } from './trackAudibility';
 import type { MixLayerId } from './focusTrack';
 
@@ -811,7 +811,7 @@ export interface AppStore
     LoopSlice,
     DriveSlice,
     ProjectSlice,
-    MixdownSlice {}
+    ExportSlice {}
 
 // The exact allow-list shape produced by the persist `partialize` config — this
 // interface and partializeAppState in store.ts must list the same keys. Project

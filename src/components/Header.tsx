@@ -8,11 +8,11 @@ import {
   LocateOff,
 } from "lucide-react";
 import { Layer, layerForTab, ViewMode } from "../types";
-import { selectMixdownBusy, type MixdownProgress, type MixdownResult } from "@/store/mixdownSlice";
+import { selectExportBusy } from "@/store/exportSlice";
+import type { ExportJob } from "@/store/exportJob";
 import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
 import { SCALES } from "@/data/scales";
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from "@/utils/noteSpelling";
-import { downloadBlob } from "@/utils/projectFileIO";
 import { readGuardedStorageValue, persistGuardedStorageValue } from "../utils/storage";
 import { useAppStore } from "../store/store";
 import { useLiveStore } from "./ui/useLiveStore";
@@ -256,81 +256,12 @@ export function FollowPlayheadToggle({ layer }: { layer: Layer }) {
   );
 }
 
-/** What a click handler needs, injected so the wiring is testable with no DOM. */
-export interface MixdownExportDeps {
-  exportMixdown: () => Promise<MixdownResult>;
-  download: (fileName: string, blob: Blob) => void;
-  setNotice: (message: string) => void;
-  setProgress: (progress: MixdownProgress | null) => void;
-  isCancelled: () => boolean;
-  yieldToBrowserPaint: () => Promise<void>;
-}
-
-/**
- * What a download that threw reads as. The same sentence — and the same
- * reasoning — as `ProjectMenu`'s `downloadCopy`: the anchor/blob path can throw
- * in a restricted embedding, and downloading is best-effort.
- */
-export const MIXDOWN_DOWNLOAD_FAILED_MESSAGE =
-  'Could not write the file. Check the browser’s download settings.';
-
-/**
- * The click handler's whole body: run the export, download on success, and say
- * so.
- *
- * Extracted and dependency-injected for the reason it is a plain function
- * rather than an inline arrow: the suite has no DOM and no testing-library, so
- * a handler that called `downloadBlob` and `setProjectNotice` directly would be
- * untestable — the buttons would render and nothing would prove they were
- * wired to anything.
- *
- * A RENDER failure writes NO notice here. The slice already wrote one, and a
- * second message on top of it would be the same fact told twice in two voices.
- * A DOWNLOAD failure is the opposite case and is the reason the download is
- * guarded: `downloadBlob` revokes in a `finally` but catches nothing, so it
- * rethrows — and on that path the user has waited out a full render, has no
- * file, and would otherwise be told nothing at all. The success notice is
- * written only after the download has actually returned.
- */
-export async function runMixdownExport(deps: MixdownExportDeps): Promise<MixdownResult> {
-  const result = await deps.exportMixdown();
-  if (result.ok) {
-    deps.setProgress({ phase: 'downloading' });
-    try {
-      await deps.yieldToBrowserPaint();
-      if (deps.isCancelled()) {
-        return { ok: false, reason: { kind: 'cancelled' } };
-      }
-      deps.download(result.fileName, result.blob);
-    } catch {
-      deps.setNotice(MIXDOWN_DOWNLOAD_FAILED_MESSAGE);
-      return result;
-    } finally {
-      deps.setProgress(null);
-    }
-    deps.setNotice(`Exported ${result.fileName}.`);
-  }
-  return result;
-}
-
-function mixdownProgressLabel(progress: MixdownProgress | null): string {
+function mixdownProgressLabel(progress: ExportJob | null): string {
   if (!progress || progress.phase === 'preparing') return 'Preparing arrangement…';
   if (progress.phase === 'rendering') return `Rendering mixdown… ${progress.percent}%`;
   if (progress.phase === 'encoding') return 'Encoding WAV…';
   if (progress.phase === 'cancelling') return 'Cancelling…';
   return 'Downloading…';
-}
-
-/** Let React commit the delivery phase for one visible frame before download. */
-function yieldToBrowserPaint(): Promise<void> {
-  if (typeof requestAnimationFrame !== 'function') {
-    return new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
 }
 
 /**
@@ -352,15 +283,12 @@ function yieldToBrowserPaint(): Promise<void> {
  * resolves, and the disabled attribute closes that gap for the pointer.
  */
 export function ExportButton({ layer }: { layer: Layer }) {
-  const busy = useLiveStore(selectMixdownBusy);
-  const mixdownProgress = useLiveStore((s) => s.mixdownProgress);
-  const setMixdownProgress = useLiveStore((s) => s.setMixdownProgress);
-  const cancelMixdown = useLiveStore((s) => s.cancelMixdown);
-  const isMixdownCancelled = useLiveStore((s) => s.isMixdownCancelled);
-  const exportMixdown = useLiveStore((s) => s.exportMixdown);
-  const setProjectNotice = useLiveStore((s) => s.setProjectNotice);
+  const busy = useLiveStore(selectExportBusy);
+  const exportJob = useLiveStore((s) => s.exportJob);
+  const startExport = useLiveStore((s) => s.startExport);
+  const cancelExport = useLiveStore((s) => s.cancelExport);
   if (layer !== 'song') return null;
-  const progressLabel = mixdownProgressLabel(mixdownProgress);
+  const progressLabel = mixdownProgressLabel(exportJob);
 
   return (
     <div className="flex items-center gap-1">
@@ -399,28 +327,19 @@ export function ExportButton({ layer }: { layer: Layer }) {
               id="btn-export-mixdown"
               type="button"
               disabled={busy}
-              onClick={() => {
-                void runMixdownExport({
-                  exportMixdown,
-                  download: downloadBlob,
-                  setNotice: setProjectNotice,
-                  setProgress: setMixdownProgress,
-                  isCancelled: isMixdownCancelled,
-                  yieldToBrowserPaint,
-                });
-              }}
+              onClick={() => { void startExport('mixdown-wav'); }}
             >
               {busy ? progressLabel : 'Export mixdown (WAV)'}
             </button>
           </li>
         </ul>
       </div>
-      {busy && mixdownProgress?.phase !== 'cancelling' && (
+      {busy && exportJob?.phase !== 'cancelling' && (
         <button
           id="btn-cancel-export"
           type="button"
           className="btn btn-sm btn-ghost px-2 text-xs"
-          onClick={cancelMixdown}
+          onClick={cancelExport}
         >
           Cancel export
         </button>

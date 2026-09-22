@@ -4,7 +4,7 @@ import { reportManualIncident } from '@/store/incidentReporter';
 import { defaultSaveName } from '@/utils/driveBrowser';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectSaveResult } from '@/store/projectSlice';
-import { selectMixdownBusy } from '@/store/mixdownSlice';
+import { selectExportBusy } from '@/store/exportSlice';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
 import type { AppStore } from '@/store/types';
@@ -524,7 +524,7 @@ export function ProjectMenu({ textClassName }: { textClassName?: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const projectName = useLiveStore((s) => s.projectName);
-  const exporting = useLiveStore(selectMixdownBusy);
+  const exporting = useLiveStore(selectExportBusy);
   const projectSource = useLiveStore((s) => s.projectSource);
   const driveAvailable = useLiveStore((s) => s.driveAvailable);
   const driveSignedIn = useLiveStore((s) => s.driveSignedIn);

@@ -23,9 +23,10 @@ export interface ObjectUrlApi {
  * The `<a download>` dance, in one place, with the URL revoked in a `finally`
  * so a click that throws — a blocked download, a sandboxed frame — does not
  * leak an object URL that pins the blob for the life of the page. `doc` and
- * `url` are injectable for exactly the reason `downloadTextFile`'s are: the
- * store never touches the DOM, so the component does, and the component's
- * helper is then testable with no DOM at all.
+ * `url` are injectable for exactly the reason `downloadTextFile`'s are:
+ * every caller — the project menu's `.solna` copy and the export job
+ * (`store/exportSlice.ts`, which injects it into `runExportJob` as its
+ * `download` dependency) — stays testable with no DOM at all.
  *
  * A Blob URL rather than a data URL, for the reason this file already
  * records: a rendered mixdown is far past any browser's data-URL length
