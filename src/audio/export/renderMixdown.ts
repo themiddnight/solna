@@ -317,7 +317,7 @@ type SongBufferResult =
   | { ok: true; buffer: AudioBuffer; sourcesWithEvents: ReadonlySet<string> }
   | { ok: false; reason: MixdownFailureReason };
 
-function renderFailed(err: unknown): MixdownFailureReason {
+export function renderFailed(err: unknown): MixdownFailureReason {
   return { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) };
 }
 

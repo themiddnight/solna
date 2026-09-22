@@ -66,6 +66,21 @@ describe('encodeZipStore', () => {
     expect(chunks.some((chunk) => chunk === data)).toBe(true);
   });
 
+  test('a precomputed crc is used verbatim, not recomputed from data', () => {
+    const data = ascii('hi');
+    const chunks = encodeZipStore([{ name: 'a.txt', data, crc: 0xdeadbeef }], SEPT_22);
+    const local = new DataView(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength);
+    expect(local.getUint32(14, true)).toBe(0xdeadbeef);
+    expect(local.getUint32(14, true)).not.toBe(crc32(data));
+  });
+
+  test('an omitted crc is computed from the entry data', () => {
+    const data = ascii('hi');
+    const chunks = encodeZipStore([{ name: 'a.txt', data }], SEPT_22);
+    const local = new DataView(chunks[0].buffer, chunks[0].byteOffset, chunks[0].byteLength);
+    expect(local.getUint32(14, true)).toBe(crc32(data));
+  });
+
   test('more than 65 535 entries throws a RangeError', () => {
     const entries: ZipEntry[] = Array.from({ length: 65_536 }, () => ({ name: 'e', data: new Uint8Array(0) }));
     expect(() => encodeZipStore(entries, SEPT_22)).toThrow(RangeError);

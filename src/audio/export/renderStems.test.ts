@@ -6,6 +6,7 @@ import * as zipStore from './zipStore';
 import { readZip } from './zipTestReader';
 import { mixdownLoop, mixdownMelodyBar } from './mixdownFixture';
 import { neutralSnapshot, silentBeatPattern } from './stemsFixture';
+import * as encodeWav from '@/utils/encodeWav';
 import type { MixdownBusState } from '../playback/plan/songSnapshot';
 
 (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = OfflineAudioContext;
@@ -129,6 +130,27 @@ describe('renderStems: progress, cancellation and failure', () => {
       if (progress.phase === 'encoding') controller.abort();
     }, controller.signal);
     expect(result).toEqual(CANCELLED);
+  });
+
+  test('an abort right after the last stem encode is cancelled and builds no Blob', async () => {
+    const controller = new AbortController();
+    const original = encodeWav.encodeWavBytes;
+    let calls = 0;
+    const encodeSpy = spyOn(encodeWav, 'encodeWavBytes').mockImplementation((channels, sampleRate) => {
+      calls += 1;
+      const bytes = original(channels, sampleRate);
+      if (calls === STEM_TRACKS.length) controller.abort();
+      return bytes;
+    });
+    const zipSpy = spyOn(zipStore, 'encodeZipStore');
+    try {
+      const result = await renderStems(neutralSnapshot(), 'song', DATE, undefined, controller.signal);
+      expect(result).toEqual(CANCELLED);
+      expect(zipSpy).not.toHaveBeenCalled();
+    } finally {
+      encodeSpy.mockRestore();
+      zipSpy.mockRestore();
+    }
   });
 
   test('a throwing ZIP writer is render-failed', async () => {

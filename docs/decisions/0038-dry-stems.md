@@ -67,9 +67,12 @@ stems are additive, never a rewrite of what already ships.
 
 The mixdown's golden hash and call log are unchanged: every opt-in `renderSongBuffer` takes is
 omitted by `renderMixdown`, so its call sequence is exactly what the golden already recorded. Peak
-memory for a stems export is the multichannel float buffer plus every encoded WAV at once; a song
-long enough to exhaust that allocation fails as `render-failed` with an incident, never a corrupt or
-partial file. Stems share the mixdown's length rule, so a `reverbDecay` change moves both — it sets
+memory for a stems export holds three things at once until `renderStems` returns: the 12-ch
+float32 buffer (≈ 127 MB per minute of song), the six encoded WAVs held in `entries` (≈ 63.5
+MB/min), and `new Blob(encodeZipStore(entries, modified))`, which copies that same WAV payload
+again in a browser (another ≈ 63.5 MB/min) — about 254 MB per minute of song (≈ 0.76 GB for a
+3-minute song). A song long enough to exhaust that allocation fails as `render-failed` with an
+incident, never a corrupt or partial file. Stems share the mixdown's length rule, so a `reverbDecay` change moves both — it sets
 the render's tail length and reseeds the reverb impulse before the walk, shifting every later random
 draw. `renderStems.ts` joins the list of walk consumers R287 already names for `renderMidi.ts`.
 

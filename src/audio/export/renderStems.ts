@@ -14,13 +14,14 @@ import type { AudioEngine } from '../engine';
 import type { MixdownSnapshot } from '../playback/plan/songSnapshot';
 import {
   MIXDOWN_SAMPLE_RATE,
+  renderFailed,
   renderSongBuffer,
   safeProgressReporter,
   type MixdownFailureReason,
   type MixdownProgressReporter,
   type SongRenderLayout,
 } from './renderMixdown';
-import { encodeZipStore, type ZipEntry } from './zipStore';
+import { crc32, encodeZipStore, type ZipEntry } from './zipStore';
 import { encodeWavBytes } from '@/utils/encodeWav';
 
 /**
@@ -89,20 +90,20 @@ export async function renderStems(
     for (const track of kept) {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       if (signal?.aborted) return { ok: false, reason: { kind: 'cancelled' } };
-      entries.push({
-        name: `${baseName}-${track.name}.wav`,
-        data: encodeWavBytes(
-          [buffer.getChannelData(2 * track.index), buffer.getChannelData(2 * track.index + 1)],
-          MIXDOWN_SAMPLE_RATE,
-        ),
-      });
+      const data = encodeWavBytes(
+        [buffer.getChannelData(2 * track.index), buffer.getChannelData(2 * track.index + 1)],
+        MIXDOWN_SAMPLE_RATE,
+      );
+      // CRC-32 runs here, inside the loop's own yield, so ZIP encoding never
+      // blocks the main thread in one uninterruptible pass over every WAV.
+      entries.push({ name: `${baseName}-${track.name}.wav`, data, crc: crc32(data) });
     }
+    // One more yield/abort point between the last encode and the ZIP + Blob step.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    if (signal?.aborted) return { ok: false, reason: { kind: 'cancelled' } };
     const blob = new Blob(encodeZipStore(entries, modified), { type: 'application/zip' });
     return { ok: true, buffer, blob, entries: entries.map((entry) => entry.name) };
   } catch (err) {
-    return {
-      ok: false,
-      reason: { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) },
-    };
+    return { ok: false, reason: renderFailed(err) };
   }
 }

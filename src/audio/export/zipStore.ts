@@ -10,6 +10,8 @@
 export interface ZipEntry {
   name: string;
   data: Uint8Array<ArrayBuffer>;
+  /** Precomputed `crc32(data)`; omit to let `encodeZipStore` compute it in one blocking pass. */
+  crc?: number;
 }
 
 const LOCAL_HEADER_BYTES = 30;
@@ -130,6 +132,9 @@ function endOfCentralDirectory(count: number, cdSize: number, cdOffset: number):
 /**
  * The archive as an ordered chunk list, ready for `new Blob(chunks)`. Entries
  * keep the given order. Throws `RangeError` past the format's 16/32-bit limits.
+ * Each entry's CRC-32 is taken from `entry.crc` when given, else computed here;
+ * a caller with several large entries should precompute it in its own yielding
+ * loop rather than block on this one call.
  */
 export function encodeZipStore(entries: readonly ZipEntry[], modified: Date): Uint8Array<ArrayBuffer>[] {
   if (entries.length > MAX_ENTRIES) {
@@ -145,7 +150,7 @@ export function encodeZipStore(entries: readonly ZipEntry[], modified: Date): Ui
     const size = entry.data.byteLength;
     assertZip32(size, 'entry size');
     assertZip32(offset, 'local header offset');
-    const record: EntryRecord = { name, size, crc: crc32(entry.data), date, time, offset };
+    const record: EntryRecord = { name, size, crc: entry.crc ?? crc32(entry.data), date, time, offset };
     chunks.push(localHeader(record), entry.data);
     central.push(centralHeader(record));
     offset += LOCAL_HEADER_BYTES + name.byteLength + size;

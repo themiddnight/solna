@@ -158,6 +158,12 @@ file. *Rejected:* (a) — six times the wait on every export to save memory only
 it stays the recorded fallback in ADR-0038 if field incidents under `'stems-export'` show
 allocation failures.
 
+**Post-review correction:** the ≈ 190 MB/min peak above counts the 12-ch float buffer and the six
+encoded WAVs but omits `new Blob(encodeZipStore(entries, modified))`, which copies that same WAV
+payload again in a browser and stays alive alongside `entries` until `renderStems` returns. The
+true peak is nearer 254 MB/min (≈ 0.76 GB for a 3-minute song): 127 MB/min (buffer) + 63.5 MB/min
+(WAVs in `entries`) + 63.5 MB/min (the `Blob`'s own copy). See ADR-0038 Consequences.
+
 ### 5.2 Shared body, extracted without changing the mixdown
 
 `renderMixdown.ts` gains one exported function; `renderMixdown` keeps its signature, result and
@@ -446,7 +452,7 @@ render-only stem edge off a bus is R307 (`export.md`); it feeds no gate" (no rul
 | # | Risk | Mitigation |
 |---|---|---|
 | K1 | The `renderSongBuffer` extraction drifts the mixdown | Own commit; golden hash + call log must pass unchanged (§7) |
-| K2 | Memory on long songs (≈ 190 MB/min peak) | Allocation failure is `render-failed` + incident; (a) is the recorded fallback |
+| K2 | Memory on long songs (≈ 254 MB/min peak, §5.1 correction) | Allocation failure is `render-failed` + incident; (a) is the recorded fallback |
 | K3 | A browser's `OfflineAudioContext` rejects 12 channels | The spec requires ≥ 32; a throw is `render-failed`, reported under `'stems-export'` |
 | K4 | A mono bus fills only the left stem channel | `stemTap` is explicit 2-ch `'speakers'` (§4); the sum test would fail on R ≠ mix |
 | K5 | Stems clip where the mixdown did not | Documented (§5.4); faders are the user's mix |
