@@ -1,20 +1,9 @@
 import type { StoreApi } from 'zustand';
-import type { LoopContent } from './loop';
-import { changeKeyAcrossLoops, type KeyChangeField } from './loopKeyChange';
-import type { AppStore, Loop, LoopSlice } from './types';
+import { changeKeyAcrossLoops, keyFieldsOf } from './loopKeyChange';
+import type { AppStore, LoopSlice } from './types';
 
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
-
-const KEY_CHANGE_FIELDS: readonly KeyChangeField[] = [
-  'scaleRoot', 'scaleType', 'chords', 'leadMelodySteps', 'fxMelodySteps',
-];
-
-function keyFieldsOf(loop: Loop): Pick<LoopContent, KeyChangeField> {
-  const out: Partial<Pick<LoopContent, KeyChangeField>> = {};
-  for (const field of KEY_CHANGE_FIELDS) (out as Record<string, unknown>)[field] = loop[field];
-  return out as Pick<LoopContent, KeyChangeField>;
-}
 
 /**
  * Batch key change. Each action is ONE set(): non-active loops land in

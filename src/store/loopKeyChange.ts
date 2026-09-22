@@ -1,6 +1,6 @@
 import { ROOTS } from '@/musicCore';
 import type { LoopContent } from './loop';
-import { changeKey, type KeyChangeOptions } from './keyChange';
+import { changeKey, type KeyChangeOptions, type KeyChangeSource } from './keyChange';
 import type { Loop } from './types';
 
 /** Set: every selected loop to one key. Transpose: each root shifted, each loop keeps its scale type. */
@@ -9,7 +9,18 @@ export type BatchKeyTarget =
   | { mode: 'transpose'; semitones: number };
 
 /** Exactly the fields `changeKey` can write — the undo snapshot restores these and nothing else. */
-export type KeyChangeField = 'scaleRoot' | 'scaleType' | 'chords' | 'leadMelodySteps' | 'fxMelodySteps';
+export type KeyChangeField = keyof KeyChangeSource;
+
+/** The five key fields, read off any loop-shaped value — the one place their names are listed. */
+export function keyFieldsOf(loop: Pick<LoopContent, KeyChangeField>): Pick<LoopContent, KeyChangeField> {
+  return {
+    scaleRoot: loop.scaleRoot,
+    scaleType: loop.scaleType,
+    chords: loop.chords,
+    leadMelodySteps: loop.leadMelodySteps,
+    fxMelodySteps: loop.fxMelodySteps,
+  };
+}
 
 export interface LoopKeySnapshot {
   loopId: string;
@@ -40,16 +51,7 @@ export function targetKeyFor(
 }
 
 function snapshotOf(loop: Loop): LoopKeySnapshot {
-  return {
-    loopId: loop.id,
-    content: {
-      scaleRoot: loop.scaleRoot,
-      scaleType: loop.scaleType,
-      chords: loop.chords,
-      leadMelodySteps: loop.leadMelodySteps,
-      fxMelodySteps: loop.fxMelodySteps,
-    },
-  };
+  return { loopId: loop.id, content: keyFieldsOf(loop) };
 }
 
 /**

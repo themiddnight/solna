@@ -29,7 +29,7 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 ## Batch key change
 
 - `applyLoopKeyChange` and `undoLoopKeyChange` are one `set()` each: non-active loops in `loops[]`, the active loop through its flat fields — never `crossLoopSeam` or `loadLoop`. <!-- R284 -->
-- The undo snapshot holds only the fields `changeKey` writes (`scaleRoot`, `scaleType`, `chords`, both melody rows); it is session-only and single-level; a loop deleted in between is skipped. <!-- R285 -->
+- The undo snapshot holds only the fields `changeKey` writes (`scaleRoot`, `scaleType`, `chords`, both melody rows); restoring it overwrites any edit made to those fields inside the Undo window, but every other field is untouched; it is session-only and single-level; a loop deleted in between is skipped. <!-- R285 -->
 - A project install dismisses a pending key-change Undo (loop ids collide across projects). <!-- R286 -->
 
 ([ADR-0033](../../docs/decisions/0033-batch-key-change-across-loops.md))

@@ -55,6 +55,11 @@ describe('applyLoopKeyChange', () => {
     expect(s.reharmonizedIndicator).toBe(false);
   });
 
+  test('the active loop with harmonizeChords: false leaves the badge false', () => {
+    useAppStore.getState().applyLoopKeyChange(['loop-default-1'], { mode: 'transpose', semitones: 2 }, { harmonizeChords: false });
+    expect(useAppStore.getState().reharmonizedIndicator).toBe(false);
+  });
+
   test('nothing to change returns null and writes nothing', () => {
     const n = count(() => {
       expect(

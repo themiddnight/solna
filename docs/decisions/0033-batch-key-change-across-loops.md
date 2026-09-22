@@ -29,7 +29,11 @@ transposed root is always `ROOTS`-spelled like every other stored root (R064).
 
 The undo snapshot (`LoopKeySnapshot`) holds exactly the fields `changeKey` can write —
 `scaleRoot`, `scaleType`, `chords`, `leadMelodySteps`, `fxMelodySteps` — and nothing else: it
-restores the key change, not the loop's state as a whole. It is session-only and single-level,
+restores the key change, not the loop's state as a whole. An Undo therefore reverts those five
+fields to their pre-batch value even if something else wrote one of them during the Undo window
+(a Header key change, a chord edit, a lead note recorded while armed); every other field on the
+loop — knobs, drums, mix — is untouched and keeps whatever it holds at Undo time. It is
+session-only and single-level,
 matching the loop-delete Undo ([ADR-0014](0014-atomic-loop-delete-with-undo.md)): a second batch
 key change replaces the pending Undo rather than stacking, and a project install dismisses it,
 because loop ids collide across projects. A loop deleted between the apply and the undo is
