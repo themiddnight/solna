@@ -7,14 +7,14 @@ import { TransportBar } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
 import { LayerPages } from './LayerPages';
+import { MobileTabBar } from './MobileTabBar';
 import type { ShellProps } from './shellProps';
 
 /**
- * The mobile frame (`useLayoutMode() === 'mobile'`, below Tailwind's `md`).
- * DEV-430 ships it as a deliberate copy of DesktopShell — no visible change on
- * a phone — so DEV-431 can diverge it (bottom nav, top bar + menu over
- * HEADER_TOOLS) without touching Workspace or the desktop frame. Same
- * ownership rule: the visible frame only (R316).
+ * The mobile frame (`useLayoutMode() === 'mobile'`, below Tailwind's `md`):
+ * the tab bar is its navigation, in place of the desktop's Loop/Song switch
+ * and per-layer tab row, without touching Workspace or the desktop frame.
+ * Same ownership rule: the visible frame only (R316).
  */
 export const MobileShell = React.memo(function MobileShell({
   keyboardProps,
@@ -24,6 +24,7 @@ export const MobileShell = React.memo(function MobileShell({
   onDismissUpdate,
 }: ShellProps) {
   const activeTab = useAppStore((s) => s.activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
   return (
     <>
       {/* Navigation Header */}
@@ -55,7 +56,11 @@ export const MobileShell = React.memo(function MobileShell({
       <UpdateBanner open={updateReady} onReload={onApplyUpdate} onDismiss={onDismissUpdate} />
 
       {/* Persistent Transport Bar at bottom */}
-      <TransportBar />
+      <TransportBar bottomInset={false} />
+
+      {/* Bottom navigation, last: the thumb's reach, and the frame's one
+          consumer of the bottom safe-area inset. */}
+      <MobileTabBar activeTab={activeTab} onSelect={setActiveTab} />
     </>
   );
 });

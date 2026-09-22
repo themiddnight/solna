@@ -12,6 +12,7 @@ import { SongPage } from './song/SongPage';
 import { PlaybackHost } from './playback/PlaybackHost';
 import { DesktopShell } from './shell/DesktopShell';
 import { MobileShell } from './shell/MobileShell';
+import { MobileTabBar } from './shell/MobileTabBar';
 import { LayerPages } from './shell/LayerPages';
 import { SHELL_PROPS } from './shell/shellPropsFixture';
 
@@ -70,6 +71,7 @@ const CASES: Array<[string, unknown, AnyProps]> = [
   ['LayerPages', LayerPages, {}],
   ['DesktopShell', DesktopShell, { ...SHELL_PROPS }],
   ['MobileShell', MobileShell, { ...SHELL_PROPS }],
+  ['MobileTabBar', MobileTabBar, { activeTab: 'sound', onSelect: () => {} }],
 ];
 
 describe('App-level children are memoized, and memoizing changed no markup', () => {

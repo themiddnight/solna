@@ -226,7 +226,11 @@ function MasterFader({
   );
 }
 
-export const TransportBar = React.memo(function TransportBar() {
+/**
+ * `bottomInset` — whether this bar consumes `env(safe-area-inset-bottom)`;
+ * the mobile frame gives it to the tab bar below (one consumer per frame).
+ */
+export const TransportBar = React.memo(function TransportBar({ bottomInset = true }: { bottomInset?: boolean }) {
   markDiagnosticRender('TransportBar');
   // Transport slice
   const playAll = useAppStore((s) => s.playAll);
@@ -310,7 +314,7 @@ export const TransportBar = React.memo(function TransportBar() {
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 pb-safe sm:pb-safe-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl">
+    <div className={`shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2${bottomInset ? ' pb-safe sm:pb-safe-lg' : ''} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl`}>
       {/* Left Transport Actions: Play All + Tempo + Meter.
           Below `sm` this is the bar's FIRST ROW rather than its left third:
           both side groups are content-sized, and at 375px they summed to 412px
