@@ -27,7 +27,7 @@ import { beatFilterPatch, beatPresetPatch, replaceBeatPatternPatch } from './bea
 import { chordsPatch } from './chordsSlice';
 import { loopTempNamePatch } from './loopSlice';
 import { loopMirrorPartial } from './loopSync';
-import { keyChangePatch } from './musicContextSlice';
+import { changeKey } from './keyChange';
 import { normalizePadIntervals } from './sanitize';
 import type { AppStore } from './types';
 import { clampBpm } from '../utils/musicTheory';
@@ -144,9 +144,12 @@ function putVibeContext(d: VibeDraft, vibe: ResolvedVibe): void {
   // the meter afterwards would leave the grid adapted to the OUTGOING vibe's
   // bar length.
   d.put({ meterId: vibe.meter });
-  // Every melody track follows the key, root first then scale — the same
-  // result as the two setters it replaces, in one patch.
-  d.put(keyChangePatch(d.state, { scaleRoot: vibe.scaleRoot, scaleType: vibe.scaleType }));
+  // Every melody track follows the key, root first then scale. The vibe's
+  // chords are NOT harmonized: they were built in this key and are written by
+  // the vibe's own chord step. The badge clears — those chords were replaced
+  // wholesale, not harmonized.
+  d.put(changeKey(d.state, { root: vibe.scaleRoot, scaleType: vibe.scaleType }, { harmonizeChords: false }));
+  d.put({ reharmonizedIndicator: false });
   d.put({ selectedVibeId: vibe.id });
   // A SNAPSHOT of the vibe's display name, on the loop being rewritten — not
   // the id, and not a pointer to the entry. Applying a vibe is a bulk setter,

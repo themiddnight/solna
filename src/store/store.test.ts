@@ -402,7 +402,8 @@ const NON_PERSISTED_KEYS = [
   'customChordHoldSteps',
   'customBassPattern',
   'customBassLoopLength',
-  'customBassHoldSteps',
+  // Trailing two: session-only reharmonize flags, never persisted, never in a project.
+  'customBassHoldSteps', 'autoReharmonize', 'reharmonizedIndicator',
 ];
 
 describe('persist partialize', () => {

@@ -83,9 +83,17 @@ export interface MusicContextSlice {
   scaleRoot: string;
   scaleType: string;
   selectedVibeId: string | null;
+  /** session-only: never persisted, never in a project. */
+  autoReharmonize: boolean;
+  /** session-only: never persisted, never in a project. */
+  reharmonizedIndicator: boolean;
   setScaleRoot: (root: string) => void;
   setScaleType: (type: string) => void;
   setSelectedVibeId: (id: string | null) => void;
+  /** session-only: never persisted, never in a project. */
+  setAutoReharmonize: (on: boolean) => void;
+  /** session-only: never persisted, never in a project. */
+  setReharmonizedIndicator: (on: boolean) => void;
 }
 
 export interface SynthSlice {

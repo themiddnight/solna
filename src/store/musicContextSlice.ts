@@ -1,35 +1,19 @@
 import type { StoreApi } from 'zustand';
 import type { AppStore, MusicContextSlice } from './types';
 import type { LoopContent } from './loop';
-import { remapLeadMelodyByScale, transposeLeadMelodyByRoot } from '../audio/leadMelody';
-import { MELODY_TRACKS, type MelodyTrack } from './melodyTracks';
+import { changeKey, type KeyChangeTarget } from './keyChange';
 
 type Set = StoreApi<AppStore>['setState'];
 
 /**
- * The whole write a key change makes: the new root and/or type, plus every
- * melody track in `MELODY_TRACKS` moved to follow it. The root is applied
- * first (a transpose under the OLD type), then the type (a remap under the NEW
- * root) — exactly the sequence `setScaleRoot` then `setScaleType` produces.
- * Pure, so a caller that writes a key alongside other fields (a vibe) can fold
- * it into one atomic `set()`.
+ * A Header key change: changeKey over the active (flat) content, harmonizing
+ * chords iff the session toggle is on, in ONE set() — the loopSync mirror
+ * carries it into loops[active]. The badge is raised only when the chords
+ * actually changed.
  */
-export function keyChangePatch(
-  state: Pick<AppStore, 'scaleRoot' | 'scaleType' | MelodyTrack['steps']>,
-  next: { scaleRoot?: string; scaleType?: string },
-): Partial<AppStore> {
-  const root = next.scaleRoot ?? state.scaleRoot;
-  const type = next.scaleType ?? state.scaleType;
-  const patch: Record<string, unknown> = {};
-  if (next.scaleRoot !== undefined) patch.scaleRoot = root;
-  if (next.scaleType !== undefined) patch.scaleType = type;
-  for (const track of MELODY_TRACKS) {
-    let steps = state[track.steps];
-    if (root !== state.scaleRoot) steps = transposeLeadMelodyByRoot(steps, state.scaleRoot, root);
-    if (type !== state.scaleType) steps = remapLeadMelodyByScale(steps, root, state.scaleType, type);
-    patch[track.steps] = steps;
-  }
-  return patch as Partial<AppStore>;
+function keyChangeWrite(state: AppStore, target: KeyChangeTarget): Partial<AppStore> {
+  const patch = changeKey(state, target, { harmonizeChords: state.autoReharmonize });
+  return 'chords' in patch ? { ...patch, reharmonizedIndicator: true } : patch;
 }
 
 /**
@@ -37,7 +21,7 @@ export function keyChangePatch(
  * that was last loaded. `selectedVibeId` is persisted so the vibe bar's
  * highlight survives a reload; it is written by applyVibeToStore, not
  * by the key/scale setters, so editing the key by hand does not clear it.
- * Every melody track in `MELODY_TRACKS` follows a key change (keyChangePatch);
+ * Every melody track in `MELODY_TRACKS` follows a key change (changeKey);
  * the loop-copy `key` group deliberately transposes none (see `impliesKeyCopy`).
  */
 export function createMusicContextSlice(set: Set, defaults: LoopContent): MusicContextSlice {
@@ -45,9 +29,16 @@ export function createMusicContextSlice(set: Set, defaults: LoopContent): MusicC
     scaleRoot: defaults.scaleRoot,
     scaleType: defaults.scaleType,
     selectedVibeId: null,
+    autoReharmonize: true,
+    reharmonizedIndicator: false,
 
-    setScaleRoot: (scaleRoot) => set((state) => keyChangePatch(state, { scaleRoot })),
-    setScaleType: (scaleType) => set((state) => keyChangePatch(state, { scaleType })),
+    setScaleRoot: (root) => set((state) => keyChangeWrite(state, { root })),
+    setScaleType: (scaleType) => set((state) => keyChangeWrite(state, { scaleType })),
     setSelectedVibeId: (selectedVibeId) => set({ selectedVibeId }),
+    // Turning it ON rewrites nothing: it applies to FUTURE key changes only.
+    // The Re-harmonize button is the deliberate snap.
+    setAutoReharmonize: (on) =>
+      set(on ? { autoReharmonize: true } : { autoReharmonize: false, reharmonizedIndicator: false }),
+    setReharmonizedIndicator: (on) => set({ reharmonizedIndicator: on }),
   };
 }

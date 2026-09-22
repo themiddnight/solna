@@ -1008,3 +1008,19 @@ describe("a vibe's Beat filter override", () => {
     expect(beatParams.voices).toEqual(beatPresetById(lofiVibe.beatPresetId)!.patch.voices);
   });
 });
+
+describe('a vibe apply and the reharmonize badge', () => {
+  // Same hygiene as the 'audible cut' block above: applyVibeToStore rewrites
+  // the key and chords wholesale, so a sibling file reading the store after
+  // this one must not see this test's vibe left behind.
+  afterEach(resetStore);
+
+  test('a vibe installs its own chords unharmonized and clears the reharmonized badge', () => {
+    const vibe = RESOLVED_VIBES.find((v) => v.scaleRoot !== useAppStore.getState().scaleRoot)!;
+    useAppStore.setState({ autoReharmonize: true, reharmonizedIndicator: true });
+    applyVibeToStore(vibe);
+    const s = useAppStore.getState();
+    expect(s.chords.map((c) => `${c.root}${c.quality}`)).toEqual(vibe.chords.map((c) => `${c.root}${c.quality}`));
+    expect(s.reharmonizedIndicator).toBe(false);
+  });
+});

@@ -3,8 +3,9 @@ import { useAppStore } from './store';
 import { MAX_STEPS_PER_BAR } from '../utils/meter';
 import type { LeadNote } from '../audio/leadMelody';
 import { readFileSync } from 'node:fs';
-import { keyChangePatch } from './musicContextSlice';
+import { changeKey } from './keyChange';
 import { MELODY_TRACKS } from './melodyTracks';
+import type { ChordItem } from '../types';
 
 function emptyMelody(): LeadNote[][] {
   return Array.from({ length: MAX_STEPS_PER_BAR }, () => [] as LeadNote[]);
@@ -73,8 +74,8 @@ describe('musicContextSlice — every melody track follows the key (MELODY_TRACK
     expect(useAppStore.getState().fxMelodySteps[1]).toEqual([{ note: 'F#4', len: 1 }]);
   });
 
-  test('keyChangePatch writes one steps field per MELODY_TRACKS row and nothing else', () => {
-    const patch = keyChangePatch(useAppStore.getState(), { scaleRoot: 'C' });
+  test('changeKey writes one steps field per MELODY_TRACKS row and nothing else', () => {
+    const patch = changeKey(useAppStore.getState(), { root: 'C' }, { harmonizeChords: false });
     const stepKeys = MELODY_TRACKS.map((t) => t.steps).sort();
     expect(Object.keys(patch).sort()).toEqual(['scaleRoot', ...stepKeys].sort());
   });
@@ -82,5 +83,55 @@ describe('musicContextSlice — every melody track follows the key (MELODY_TRACK
   test('source scan: no hand-written melody field in the slice', () => {
     const src = readFileSync(new URL('./musicContextSlice.ts', import.meta.url), 'utf8');
     expect(src).not.toMatch(/leadMelodySteps|fxMelodySteps/);
+  });
+});
+
+const PROG: ChordItem[] = [
+  { id: 'c1', root: 'A', quality: 'min', bars: 1 },
+  { id: 'c2', root: 'F', quality: 'maj', bars: 1 },
+];
+
+describe('musicContextSlice — chords follow the key in the same write', () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      scaleRoot: 'A', scaleType: 'Natural Minor', chords: PROG,
+      autoReharmonize: true, reharmonizedIndicator: false,
+    });
+  });
+
+  test('toggle on: one notification carries key, chords, indicator and the loops[] mirror', () => {
+    let notifications = 0;
+    const stop = useAppStore.subscribe(() => { notifications += 1; });
+    useAppStore.getState().setScaleRoot('C');
+    stop();
+    const s = useAppStore.getState();
+    expect(notifications).toBe(1);
+    expect(s.chords.map((c) => c.root)).toEqual(['C', 'G#']);
+    expect(s.reharmonizedIndicator).toBe(true);
+    expect(s.loops.find((l) => l.id === s.activeLoopId)!.chords).toBe(s.chords);
+  });
+
+  test('toggle off: chords untouched by reference, indicator stays false', () => {
+    useAppStore.getState().setAutoReharmonize(false);
+    useAppStore.getState().setScaleRoot('C');
+    expect(useAppStore.getState().chords).toBe(PROG);
+    expect(useAppStore.getState().reharmonizedIndicator).toBe(false);
+  });
+
+  test('turning the toggle off clears the indicator; turning it on rewrites nothing', () => {
+    useAppStore.getState().setScaleRoot('C');
+    useAppStore.getState().setAutoReharmonize(false);
+    expect(useAppStore.getState().reharmonizedIndicator).toBe(false);
+    const before = useAppStore.getState().chords;
+    useAppStore.getState().setAutoReharmonize(true);
+    expect(useAppStore.getState().chords).toBe(before);
+  });
+
+  test('root then type through the setters equals one combined changeKey', () => {
+    const start = useAppStore.getState();
+    const combined = changeKey(start, { root: 'C', scaleType: 'Major' }, { harmonizeChords: true });
+    useAppStore.getState().setScaleRoot('C');
+    useAppStore.getState().setScaleType('Major');
+    expect(useAppStore.getState().chords).toEqual(combined.chords!);
   });
 });
