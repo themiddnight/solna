@@ -572,3 +572,45 @@ describe('undoing a delete while the transport runs', () => {
     expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
   });
 });
+
+describe('batch key change around a song boundary', () => {
+  const songState = () => ({
+    loops: [createDefaultLoop(), { ...createDefaultLoop(), id: 'loop-b', name: 'B' }],
+    activeLoopId: 'loop-default-1',
+    songLoopIndex: 0,
+    sequencerPlayer: 'playing' as const,
+    playbackScope: { kind: 'song' as const },
+  });
+
+  test('a batch before the advance is what the next loop installs', () => {
+    const drop = spyOn(audioEngine, 'dropVoicesScheduledFrom').mockImplementation(() => {});
+    const reset = spyOn(audioEngine, 'resetClock').mockImplementation(() => {});
+    try {
+      useAppStore.setState(songState());
+      useAppStore.getState().applyLoopKeyChange(['loop-b'], { mode: 'set', root: 'E', scaleType: 'Dorian' }, { harmonizeChords: true });
+      loadLoop('loop-b', { atBoundary: 42.5 });
+      const s = useAppStore.getState();
+      expect(s.activeLoopId).toBe('loop-b');
+      expect([s.scaleRoot, s.scaleType]).toEqual(['E', 'Dorian']);
+    } finally {
+      drop.mockRestore();
+      reset.mockRestore();
+    }
+  });
+
+  test('a batch after the advance lands on the new active loop through its flat fields', () => {
+    const drop = spyOn(audioEngine, 'dropVoicesScheduledFrom').mockImplementation(() => {});
+    const reset = spyOn(audioEngine, 'resetClock').mockImplementation(() => {});
+    try {
+      useAppStore.setState(songState());
+      loadLoop('loop-b', { atBoundary: 42.5 });
+      useAppStore.getState().applyLoopKeyChange(['loop-b'], { mode: 'transpose', semitones: 2 }, { harmonizeChords: true });
+      const s = useAppStore.getState();
+      expect(s.scaleRoot).toBe('B');
+      expect(s.loops.find((l) => l.id === 'loop-b')!.scaleRoot).toBe('B');
+    } finally {
+      drop.mockRestore();
+      reset.mockRestore();
+    }
+  });
+});
