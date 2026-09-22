@@ -51,9 +51,9 @@ simply absent from `loops[]` and its snapshot entry is skipped.
 
 A loop that is not active and not playing only starts sounding its new key when song playback
 reaches it at the next loop boundary — the same lag any other non-active-loop edit already has.
-The key-change Undo toast and the loop-delete Undo toast now render through one shared daisyUI
-toast container in `ArrangeView`, since only one of the two is ever pending at a time per the
-single-level rule above.
+The single-level rule above is per Undo kind, not global: a loop delete and a batch key change
+can each have a pending Undo at the same time. `ArrangeView` renders both through one shared
+daisyUI toast container, which stacks the two alerts instead of letting them overlap.
 
 ## Rules this implies
 

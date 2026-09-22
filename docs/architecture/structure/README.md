@@ -6,7 +6,7 @@ the four detail pages cites `path:line`. Items that were only traced statically 
 
 | Page | Covers |
 |------|--------|
-| [01-ui.md](01-ui.md) | Component tree (5 diagrams), a 92-item feature inventory by UI location, per-view store dependencies, routing and mount gating |
+| [01-ui.md](01-ui.md) | Component tree (5 diagrams), a feature inventory by UI location, per-view store dependencies, routing and mount gating |
 | [02-store.md](02-store.md) | Every slice (keys, actions, cross-slice writes), bridges and subscriptions, persistence by storage zone, boot sequence, the loop model |
 | [03-audio.md](03-audio.md) | `audio/` module map, the Web Audio node graph, each lane's playback path, offline export, runtime lifecycle |
 | [04-domain-and-dependencies.md](04-domain-and-dependencies.md) | The import graph measured from real imports, cycles, what ESLint actually enforces, size tables, and `data/`, `musicCore/`, `utils/`, `incidents/`, `diagnostics/` |
