@@ -10,6 +10,7 @@ paths:
   - "src/store/loopDefaults.ts"
   - "src/store/loopSync.ts"
   - "src/store/keyChange.ts"
+  - "src/store/loopKeyChange*.ts"
   - "src/components/song/**"
   - "src/components/ui/Solo*.tsx"
 ---
@@ -24,6 +25,14 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 - `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop default is written; slices read it through their `defaults` parameter, or through the shared `default*State()` factories `createDefaultLoopContent` itself spreads. <!-- R283 -->
 
 ([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
+
+## Batch key change
+
+- `applyLoopKeyChange` and `undoLoopKeyChange` are one `set()` each: non-active loops in `loops[]`, the active loop through its flat fields — never `crossLoopSeam` or `loadLoop`. <!-- R284 -->
+- The undo snapshot holds only the fields `changeKey` writes (`scaleRoot`, `scaleType`, `chords`, both melody rows); it is session-only and single-level; a loop deleted in between is skipped. <!-- R285 -->
+- A project install dismisses a pending key-change Undo (loop ids collide across projects). <!-- R286 -->
+
+([ADR-0033](../../docs/decisions/0033-batch-key-change-across-loops.md))
 
 ## Loop delete
 
@@ -65,3 +74,6 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 - Solo overriding per-voice Beat mute <!-- R161 -->
 - A per-loop default literal in a slice <!-- R283 -->
 - A `Loop` field outside identity and `LOOP_FLAT_KEYS` <!-- R282 -->
+- Seaming or reloading the active loop for a batch key change <!-- R284 -->
+- A whole-`LoopContent` undo snapshot <!-- R285 -->
+- Keeping a pending key-change Undo across a project install <!-- R286 -->

@@ -142,7 +142,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `beat.md` | The Beat instrument's three fields, voices, presets, `check:drums` |
 | `pattern-grids.md` | Fixed-width storage, the three step layouts, span editing, custom Chord/Bass patterns |
 | `melody-tracks.md` | Lead/FX via `MELODY_TRACKS`, record arm, key changes, borrowed rows |
-| `loops-and-solo.md` | Loop content and defaults, atomic loop delete + undo, session-only solo, audibility |
+| `loops-and-solo.md` | Loop content and defaults, atomic loop delete + undo, batch key change, session-only solo, audibility |
 | `synth-voices.md` | `VoiceId`/owner, the frequency boundary, polyphony gain, voice lifetime, shared live/offline render |
 | `synth-patch.md` | Engine-tagged complete patches, presets, arp beside the patch, units in field names |
 | `persistence.md` | Persist write path, validation not migration, storage zones, project slot, autosave, Drive token |

@@ -17,7 +17,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | 2b | ↳ FX | Pattern | Second melody track (lead's twin) for risers / effects |
 | 2c | ↳ Accompaniment | Pattern | Chord progression, chord rhythm, bass pattern, pad — preset or custom span timelines |
 | 2d | ↳ Beat | Pattern | 11-voice drum step sequencer, drum-grid library |
-| 3 | **Arrange** view | Song layer | Order loops into a song, copy loops, song-mode playback, delete a loop with a timed Undo toast |
+| 3 | **Arrange** view | Song layer | Order loops into a song, copy loops, song-mode playback, delete a loop with a timed Undo toast, change the key of several loops (Set/Transpose) with Undo |
 | 4 | **Master** view | Song layer | Master effects rack: reverb, delay, distortion, 3-band EQ, compressor, limiter (with gain-reduction meters), Monitor visualizer. The Beat bus is dry-only here: drums reach reverb through per-voice sends and never reach master delay or distortion (per-track FX is deferred) |
 | 5 | Loops | Loop selector | Multiple loops per project, copy/paste loops and modules |
 | 6 | Instant Vibes | Top bar | 8 genre presets (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) + dice reroll |
