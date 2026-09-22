@@ -40,16 +40,20 @@ type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
 export function createExportSlice(set: Set, get: Get): ExportSlice {
-  let activeJob: { controller: AbortController } | null = null;
+  let activeJob: { controller: AbortController; kind: ExportKindId } | null = null;
 
   return {
     exportJob: null,
 
+    // The lock alone decides: reading `kind` off the closure job (not
+    // `get().exportJob`) means a store desync — a timed-out test's `afterEach`
+    // resetting `exportJob` while the closure job is still running, say —
+    // can never make this a silent no-op.
     cancelExport: () => {
-      const current = get().exportJob;
-      if (activeJob === null || current === null) return;
-      activeJob.controller.abort();
-      set({ exportJob: { kind: current.kind, phase: 'cancelling' } });
+      if (activeJob === null) return;
+      const { controller, kind } = activeJob;
+      controller.abort();
+      set({ exportJob: { kind, phase: 'cancelling' } });
     },
 
     startExport: async (kindId) => {
@@ -59,7 +63,7 @@ export function createExportSlice(set: Set, get: Get): ExportSlice {
       // from its name.
       const state = get();
       const snapshot: ExportSnapshot = { song: buildMixdownSnapshot(state), projectName: state.projectName };
-      const job = { controller: new AbortController() };
+      const job = { controller: new AbortController(), kind: kindId };
       activeJob = job;
       set({ exportJob: { kind: kindId, phase: 'preparing' } });
       const publish = (phase: ExportJobPhase) => {

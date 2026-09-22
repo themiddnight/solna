@@ -4,6 +4,9 @@ import { useAppStore } from './store';
 import { setOperationFailureSink } from '@/incidents/operationFailure';
 import { MIXDOWN_FAILURE_MESSAGE } from './exportKinds';
 import { selectExportBusy } from './exportSlice';
+import { createDefaultLoop } from './loopSlice';
+import type { ExportJob } from './exportJob';
+import type { Loop } from './types';
 
 (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = OfflineAudioContext;
 
@@ -45,8 +48,22 @@ function installFakeDownloads(): FakeDownloads {
 const initial = useAppStore.getState();
 let downloads: FakeDownloads;
 
+/**
+ * The default loop's chord progression is `INITIAL_CHORDS` (4 bars); a full
+ * mixdown render of it runs long enough (~1.5s through node-web-audio-api)
+ * that this file's 5 real renders together crowd bun's per-test timeout. A
+ * one-bar progression renders in milliseconds instead, and nothing in this
+ * file asserts on the rendered audio — only the job lifecycle and the
+ * downloaded file name — so a shorter arrangement changes nothing a test
+ * checks.
+ */
+function fastLoop(): Loop {
+  return { ...createDefaultLoop(), chords: [{ id: 'chord-1', root: 'C', quality: 'maj', bars: 1 }] };
+}
+
 beforeEach(() => {
   downloads = installFakeDownloads();
+  useAppStore.setState({ loops: [fastLoop()] });
 });
 
 afterEach(() => {
@@ -55,8 +72,11 @@ afterEach(() => {
     projectNotice: initial.projectNotice,
     loops: initial.loops,
     projectName: initial.projectName,
-    exportJob: null,
   });
+  // A stranded job (the lock still held while the store thinks it is idle)
+  // must fail the test that left it that way, not the next test that
+  // happens to call startExport.
+  expect(useAppStore.getState().exportJob).toBeNull();
 });
 
 describe('startExport — a successful job', () => {
@@ -129,10 +149,42 @@ describe('startExport — cancellation', () => {
   });
 
   test('replacing the project cancels the export before installing new content', async () => {
+    const before = useAppStore.getState();
     const pending = useAppStore.getState().startExport('mixdown-wav');
-    void useAppStore.getState().newProject();
+    await useAppStore.getState().newProject();
     expect(useAppStore.getState().exportJob).toEqual({ kind: 'mixdown-wav', phase: 'cancelling' });
     expect(await pending).toEqual({ status: 'cancelled' });
+    // newProject() installs a whole factory project, far more than the three
+    // fields the shared afterEach resets; restore everything it touched so
+    // later tests see this file's own fixture again.
+    useAppStore.setState(before);
+  });
+
+  test('cancel mid-render drops every later phase (the publish guard, not a store reset)', async () => {
+    const phases: ExportJob[] = [];
+    let cancelled = false;
+    const unsubscribe = useAppStore.subscribe((state) => {
+      const job = state.exportJob;
+      if (job === null) return;
+      phases.push(job);
+      if (!cancelled && job.phase === 'rendering') {
+        cancelled = true;
+        useAppStore.getState().cancelExport();
+      }
+    });
+    let outcome: unknown;
+    try {
+      outcome = await useAppStore.getState().startExport('mixdown-wav');
+    } finally {
+      unsubscribe();
+    }
+    expect(outcome).toEqual({ status: 'cancelled' });
+    const cancellingIndex = phases.findIndex((job) => job.phase === 'cancelling');
+    expect(cancellingIndex).toBeGreaterThanOrEqual(0);
+    // Every phase published after the cancel is dropped by startExport's own
+    // `publish` guard (`activeJob === job && !signal.aborted`) — nothing later
+    // ever reaches the store, so `cancelling` is the last phase observed.
+    expect(phases.slice(cancellingIndex + 1)).toEqual([]);
   });
 });
 
