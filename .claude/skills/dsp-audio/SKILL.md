@@ -121,15 +121,15 @@ Key consequences:
   is already tracking) and crossfades the lane gains for a type change. Both banks are built by
   `buildBeatFilterBank`, which is what keeps the dry and send paths in lockstep. A repeat of the
   SAME type books no ramp, so a knob drag does not re-arm six gains per frame.
-- Drums never reach master delay or distortion, and reach reverb only through their authored
-  send. The dry bank `drumBusFilter` feeds `getSourceTap('sequencer')`, and the `sequencer` bus
-  feeds `dryGain` only: `getSourceBus` skips the generic `delaySendGate`/`reverbSendGate`/
-  `distortionSendGate` for every source named in `SOURCES_WITHOUT_MASTER_SENDS` (`masterRack.ts`).
-  The exclusion is BY NAME, so it holds whatever order the graph is built in, live and in a
-  render engine; `masterRack.sendGates.test.ts` rebuilds the bus after the gates to prove it.
-  There is no per-voice delay tap either. The snare/clap/crash reverb send is a per-voice gain (the kit's authored `reverbSend` LEVEL,
-  not a boolean) that feeds a second shared `drumSendFilter` — a mirror of `drumBusFilter` kept in
-  lockstep by `setBeatFilter` — so the wet path is filtered too, then on to `reverbNode`.
+- The Beat bus feeds `dryGain` and, through its own send nodes (`sourceSends.ts`), the delay and
+  distortion gates like any other track (DEV-423). Drum reverb stays a separate, per-voice path:
+  when a voice's authored `reverbSend` LEVEL is > 0, a per-voice send gain feeds the shared
+  `drumSendFilter` bank (a mirror of `drumBusFilter` kept in lockstep by `setBeatFilter`), into
+  `drumSendGate`, then into the Beat track's own reverb send node, and on to `reverbNode` as the
+  convolver's SECOND input — connected after `reverbSendGate`, never merged into it (C1: float
+  addition is not associative, so folding the two feeds together would risk changing the golden's
+  rendered bytes). There is no per-voice delay tap. `masterRack.sendGates.test.ts` pins both the
+  Beat bus's ordinary delay/distortion sends and the reverb feed's convolver-input order.
 - `masterGain` is the user's master trim only (`setMasterVolume()`, clamped 0..1, seeded at
   unity). The master compressor and limiter are explicit, toggleable master FX
   (`compressorEnabled` / `limiterEnabled` in `MasterEffects`). `compressorEnabled` defaults
@@ -243,9 +243,11 @@ Follow how distortion is wired — it is the smallest complete example.
    - add private node fields (`fooNode`, `fooGain`);
    - create them in `setupMasterChain()`, set `fooGain.gain.value` to a default, and
      `fooNode.connect(fooGain)` then `fooGain.connect(this.eqLowNode)`;
-   - add a send gate and connect it inside `getSourceBus()`'s `SOURCES_WITHOUT_MASTER_SENDS`
-     guard, so every source except the Beat bus feeds the new send (this is the step that is
-     easy to forget — without it the effect is wired but receives nothing);
+   - add the effect to `SEND_EFFECTS`, a gate in `createSendGates`, and one send node per bus in
+     `getSourceBus` (`createSourceSendNodes` in `sourceSends.ts` builds them) so every source
+     feeds the new send through its own node (this is the step that is easy to forget — without
+     it the effect is wired but receives nothing); extend `TrackSends` defaults in
+     `createDefaultLoopContent`;
    - in `updateEffects()`, compute `const fooWet = fx.fooBypass ? 0 : fx.fooWet;` and apply with
      `setTargetAtTime(fooWet, this.ctx.currentTime, 0.05)`.
 3. `src/store/initialState.ts`: add the default to `INITIAL_EFFECTS`.

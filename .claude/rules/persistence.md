@@ -52,8 +52,9 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - `toChordItem` (`store/sanitize.ts`) rebuilds a fresh `{id, root, quality, bars, bassNote?}` literal, never casts raw input through. <!-- R072 --> ([ADR-0007](../../docs/decisions/0007-chord-notes-derived-not-stored.md))
 - `asLeadNoteMatrix` (`sanitize.ts`) returns `undefined` for the pre-DEV-369 `string[][]` shape (blank payload, no throw, no warning); do not "fix" it. <!-- R259 -->
 - A stale-but-valid pre-tick-resolution `LeadNote[][]` passes through unchanged at its written tick density. <!-- R260 -->
+- `sanitizeTrackSends` (`sanitizeLoops`) validates `trackSends` on every loop read: not a plain object → default; bad row → that row's default; non-number or non-finite → that effect's default; out of range → clamped; unknown keys dropped; nothing returned by reference. No version gate. <!-- R302 -->
 
-([ADR-0023](../../docs/decisions/0023-validation-instead-of-migration.md))
+([ADR-0023](../../docs/decisions/0023-validation-instead-of-migration.md), [ADR-0037](../../docs/decisions/0037-per-track-sends.md))
 
 ## Storage zones, project slot, autosave
 
@@ -86,6 +87,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - A second non-test caller of `sanitizeLoops` <!-- R217 -->
 - Casting raw input through `toChordItem` <!-- R072 -->
 - "Fixing" the blank read of a pre-DEV-369 `string[][]` melody <!-- R259 -->
+- A version gate or migration for `trackSends` <!-- R302 -->
 - Touching IndexedDB outside `store/projectStore.ts` <!-- R245 -->
 - A storage failure thrown instead of returned as a typed result <!-- R246 -->
 - `source` inside the project body or `serializeProject` <!-- R248 -->

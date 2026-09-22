@@ -8,6 +8,7 @@ paths:
   - "src/audio/playback/**"
   - "src/audio/export/**"
   - "src/components/useInputDeck.ts"
+  - "src/audio/sourceSends.ts"
 ---
 
 # Synth voices
@@ -61,6 +62,13 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 
 ([ADR-0021](../../docs/decisions/0021-shared-live-and-offline-render.md))
 
+## Master sends
+
+- Each source bus reaches the three send gates only through its own three send nodes (`sourceSends.ts`), taken after the fader and mute. No bus connects straight to a gate, and there is no per-source exclusion set — the one exception is R304. `getSourceBus` requires the gates and throws without them. The audition bus `'preview'` is not a track and is told unity sends by `presetPreview.ts`. <!-- R303 -->
+- Beat has no bus→reverb send. Its reverb is the per-voice path `drumSendFilter → drumSendGate → send[sequencer].reverb → convolver`; that feed is the convolver's second input, connected after `reverbSendGate`, and `drumSendGate` is written only by the bus level/mute path (`applySourceLevel`). Sends are set only through `setSourceSends`, never `setSourceState`. <!-- R304 -->
+
+([ADR-0037](../../docs/decisions/0037-per-track-sends.md))
+
 ## Deferred
 
 - The FX synth voice has no pitch riser (the filter envelope ramps `filter.frequency` only) and its LFO restarts per note — deferred, not bugs. <!-- R142 --> ([ADR-0013](../../docs/decisions/0013-melody-tracks-table-and-record-arm.md))
@@ -83,3 +91,5 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 - Treating `maxVoicesPerSource` as a leak guard <!-- R205 -->
 - `ctx.currentTime` read in the voice module <!-- R207 -->
 - A render-only copy of shared audio code <!-- R209 -->
+- A bus→gate edge, or a per-source send exclusion set <!-- R303 -->
+- Feeding Beat reverb from the bus, or folding the Beat feed into `reverbSendGate` <!-- R304 -->

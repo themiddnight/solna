@@ -21,9 +21,9 @@ loopCopy, project, export, drive.
 
 `AppStore` (`types.ts:756-772`) extends only **16** interfaces. `loopCopySlice` has no interface
 of its own: it returns `Pick<LoopSlice, 'applyLoopCopy'>` (`loopCopySlice.ts:9`), and
-`applyLoopCopy` is declared inside `LoopSlice` (`types.ts:753`). Three slice interfaces live in
+`applyLoopCopy` is declared inside `LoopSlice` (`types.ts:753`). Four slice interfaces live in
 their slice files rather than in `types.ts`: `ProjectSlice` (`projectSlice.ts:59`), `DriveSlice`
-(`driveSlice.ts:22`), `ExportSlice` (`exportSlice.ts`).
+(`driveSlice.ts:22`), `ExportSlice` (`exportSlice.ts`), `TrackSendsSlice` (`trackSendsSlice.ts`).
 
 A **second, separate** zustand store exists: `audioRecoveryStore`, a vanilla `createStore`
 (`audioRecovery.ts:58`, exported at `:173`). The incident store (`@/incidents/incidentStore`) is
@@ -54,6 +54,7 @@ summarised as "setters".
 | **presets** `presetsSlice.ts` (164) | `customSynthPresets`, `customChordProgressions`, `customBeatPresets` | `saveCustomPreset`, `deleteCustomPreset`, `saveCustomChordProgression`, `deleteCustomChordProgression`, `saveCustomBeatPreset`, `deleteCustomBeatPreset`; `MAX_LIBRARY_ENTRIES` cap on save (`:16`) | beat `beatParams` | beat: `saveCustomBeatPreset` also sets `beatParams.basePresetId` (`:143`) |
 | **loop** `loopSlice.ts` (273) | `loops`, `activeLoopId` | `addLoop`, `duplicateLoop`, `deleteLoop`, `reorderLoops`, `reorderLoopsArray`, `setLoopName`, `setLoopTempName`, `setLoopRepeatCount`, `setLoopMix`, `setActiveLoop` | transport `playbackScope`, `songLoopIndex`, player fields | transport: `playbackScope` (`:114`, `:149`), `songLoopIndex`, stops every player on delete (`:175-178`); flat per-loop mix keys via `setLoopMix` (`:260-269`) |
 | **loopCopy** `loopCopySlice.ts` (61) | — | `applyLoopCopy` | loop | `loops`, then calls `loadLoop` (engine side effects) when the target is active (`:26-29`) |
+| **trackSends** `trackSendsSlice.ts` | `trackSends` | `setTrackSends` | — | — |
 | **loopKeyChange** `loopKeyChangeSlice.ts` | — | `applyLoopKeyChange`, `undoLoopKeyChange` | loop | `loops` plus, when the active loop is among the changed/restored ones, its flat key fields — one `set()` per action, never `crossLoopSeam` or `loadLoop` |
 | **project** `projectSlice.ts` (474) | `projectName`, `projectSource`, `projectStoreStatus`, `projectNotice` | `setProjectNotice`, `setProjectName`, `loadProject`, `save`, `saveProject`, `saveProjectAsLocal`, `saveAsBody`, `adoptSaveAs`, `applyProjectSource`, `newProject`, `openProjectFile`, `exportProjectFile` | everything in `PROJECT_CONTENT_KEYS`; presets `customBeatPresets` | `installProject` (`:155-203`) writes all project content, every per-loop flat key, `activeLoopId`, `selectedVibeId`, `songLoopIndex`, `soloTracks`, `recordingTrack`, `loopClipboard`; it also calls `cancelExport`, `hardStopAll` and `audioEngine.stopSource` directly (`:165-169`); `saveProject` calls drive's `saveToDrive` (`:307`) |
 | **export** `exportSlice.ts` | `exportJob` | `startExport`, `cancelExport` (kinds registered in `exportKinds.ts`: `mixdown-wav`, `midi` — incident operations `mixdown`, `midi-export`) | all content via `buildMixdownSnapshot` (`mixdownSnapshot.ts`) | project `projectNotice` |
@@ -98,7 +99,7 @@ actually implements either interface.
 | `loadLoop.ts` | Atomic loop switch: hard-stop + cut + load the flat patch + restart, or the seamless `atBoundary` path (`:65-150`) | **yes**: `dropVoicesScheduledFrom`, `stopSource`, `resetClock` |
 | `vibes.ts` `applyVibeToStore` | Installs a resolved vibe in **one atomic `set()`** (**Fixed on `fix/structure-audit-bugs`:** it made about 40 sequential setter calls), with the key change from `changeKey` (**Fixed on `refactor/dev-424-loop-content`:** `store/keyChange.ts`, `harmonizeChords: false`) | **yes**: `stopSource` |
 | `synthPresetInstall.ts` | Cuts the bus, then installs a preset (`:77-92`) | **yes**: `stopSource` (`:56`) |
-| `synthPatchPreview.ts`, `effectsPreview.ts`, `beatPreview.ts` | Draft previews that bypass the store | **yes**: `updateSynthPatch` / `updateEffects` / `applyBeatParams` |
+| `synthPatchPreview.ts`, `effectsPreview.ts`, `beatPreview.ts`, `trackSendsPreview.ts` | Draft previews that bypass the store | **yes**: `updateSynthPatch` / `updateEffects` / `applyBeatParams` / `setSourceSends` |
 | `stopAndRestart.ts` | `commitRestartAfterStop` — the restart decision after a stop (`:47-64`) | no (direct `useAppStore.setState`, `:60`) |
 | `sourceTransition.ts` | A module-global "transition time" that `loadLoop` sets and `engineSync` reads (`:15-27`) | no (ambient coupling) |
 | `loopClipboard.ts` | Copy/paste loop sections (`:17-36`) | no |

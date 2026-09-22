@@ -85,7 +85,7 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 
 | # | Finding | Where | Status |
 |---|---------|-------|--------|
-| A1 | ~~Drums pass through the delay and distortion sends.~~ **The finding was wrong.** The Beat (`sequencer`) bus never reached master delay, reverb or distortion: `setupMasterChain` created it (via the drum bus filter bank) *before* the send gates existed, so `getSourceBus`'s `if (this.delaySendGate)` guards were all false when it was built. That was true by accident of construction order, not by rule. | `masterRack.ts` `setupMasterChain`, `getSourceBus` | **Corrected + made explicit.** `SOURCES_WITHOUT_MASTER_SENDS` in `masterRack.ts` now excludes the bus by name, so it holds in any build order and in a render engine; `masterRack.sendGates.test.ts` pins it. Audible routing unchanged. Drums still reach reverb only through the per-voice `reverbSend` → `drumSendGate`. |
+| A1 | ~~Drums pass through the delay and distortion sends.~~ **The finding was wrong.** The Beat (`sequencer`) bus never reached master delay, reverb or distortion: `setupMasterChain` created it (via the drum bus filter bank) *before* the send gates existed, so `getSourceBus`'s `if (this.delaySendGate)` guards were all false when it was built. That was true by accident of construction order, not by rule. | `masterRack.ts` `setupMasterChain`, `getSourceBus` | **Superseded by DEV-423:** Beat now has delay and distortion sends; its reverb stays per-voice × track send ([ADR-0037](../../decisions/0037-per-track-sends.md)). |
 | — | **Found and fixed during the branch (not in the audit):** song mode never left its first loop. `audioEngine.scheduleAfterClockStep` had become a silent no-op without an audio session, dropping `songMode`'s `loadLoop` advance. | `audio/engine.ts` `scheduleAfterClockStep` | **Fixed.** With no session it defers to a microtask, as the clock does outside a dispatch (`clock.test.ts`). |
 | S4 | A key/scale change transposes Lead but not FX. | `musicContextSlice.ts` | **Fixed.** `keyChangePatch` moves every `MELODY_TRACKS` row; vibes reuse it. **Fixed on `refactor/dev-424-loop-content`:** renamed to `changeKey` (`store/keyChange.ts`). |
 | S5 | MIDI-recorded notes were stored flat-spelled (`Db4`), breaking the ROOTS-spelled identity rule. | `midiInput.ts` → `leadSlice.ts` | **Fixed.** Incoming MIDI notes are spelled sharp. |
@@ -118,9 +118,9 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 
 ### Deferred work
 
-- **Per-track FX** (user decision 2026-09-21): drums become an ordinary track with sends like the
-  others; decide then whether the per-voice `reverbSend` becomes a voice-level send into the
-  track's reverb or is removed. Until then `SOURCES_WITHOUT_MASTER_SENDS` states today's rule.
+- ~~Per-track FX~~ **Done** in DEV-423 ([ADR-0037](../../decisions/0037-per-track-sends.md)): every
+  track, drums included, has reverb/delay/distortion sends; the per-voice `reverbSend` became a
+  multiplier of the Beat track's reverb send.
 - Everything in the smells list below, plus A5 (hook half), D3, D-cyc and moving the controllers
   out of `components/` — see the plan's "Deferred" section for the full list.
 

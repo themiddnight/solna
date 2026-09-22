@@ -23,8 +23,9 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 
 - `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to compile if a `Loop` field is neither. <!-- R282 -->
 - `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop default is written; slices read it through their `defaults` parameter, or through the shared `default*State()` factories `createDefaultLoopContent` itself spreads. <!-- R283 -->
+- `trackSends` is per-loop content: in `LOOP_FLAT_KEYS` and the `mix` copy group, keyed by engine source id (`synth`, `chord`, `bass`, `pad`, `fx`, `sequencer`), levels linear 0..1. Its default is written only in `createDefaultLoopContent`: 1/1/1 on every track except `sequencer` delay 0 and distortion 0; `mixdownFixture.ts` is the one test copy and a test pins it equal. <!-- R301 -->
 
-([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
+([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md), [ADR-0037](../../docs/decisions/0037-per-track-sends.md))
 
 ## Batch key change
 
@@ -74,6 +75,7 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 - Solo overriding per-voice Beat mute <!-- R161 -->
 - A per-loop default literal in a slice <!-- R283 -->
 - A `Loop` field outside identity and `LOOP_FLAT_KEYS` <!-- R282 -->
+- A `trackSends` default literal outside `createDefaultLoopContent` (the mixdown fixture excepted) <!-- R301 -->
 - Seaming or reloading the active loop for a batch key change <!-- R284 -->
 - A whole-`LoopContent` undo snapshot <!-- R285 -->
 - Keeping a pending key-change Undo across a project install <!-- R286 -->

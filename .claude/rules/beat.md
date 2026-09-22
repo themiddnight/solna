@@ -37,8 +37,9 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 - A Beat patch is complete: every voice states every field; no `Partial` over a default, no `mergeDrumKit`. <!-- R108 -->
 - `DEFAULT_BEAT_VOICES` is the default preset's own voices object; `beatPresets.test.ts` pins the identity. <!-- R109 -->
 - A Beat preset is installed whole (`structuredClone`), never merged. <!-- R110 -->
+- A voice's `reverbSend` multiplies the Beat track's reverb send; it is not a direct send to the master reverb. The effective drum reverb is `reverbSend × voice track gain × Beat bus level × Beat track reverb send`. <!-- R305 -->
 
-([ADR-0010](../../docs/decisions/0010-beat-instrument-three-fields.md))
+([ADR-0010](../../docs/decisions/0010-beat-instrument-three-fields.md), [ADR-0037](../../docs/decisions/0037-per-track-sends.md))
 
 ## Grids and mute
 
@@ -75,6 +76,7 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 - A `Partial` Beat patch merged over a default, or `mergeDrumKit` <!-- R108 -->
 - A copy of the default preset's voices as `DEFAULT_BEAT_VOICES` <!-- R109 -->
 - Merging a Beat preset instead of installing a clone <!-- R110 -->
+- Treating `reverbSend` as a direct master-reverb send <!-- R305 -->
 - A grid apply that merges into the existing pattern <!-- R088 -->
 - Letting solo reach per-voice mute, or dropping either mute applier <!-- R161 --> <!-- R162 -->
 - A new `check:drums` parameter added to `PAIRWISE_PARAMS` <!-- R111 -->

@@ -45,7 +45,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - The metronome is a click only: `setMetronomeEnabled` arms the click `clockTick` emits; it never starts the clock or blocks idle suspend. To record to a click, press play on the lead. <!-- R221 -->
 - `src/store/engineSync.ts`: one `subscribeWithSelector` subscription per engine-settable value with `fireImmediately`, started once by `useEngineSync()` in `App.tsx`. <!-- R222 -->
 - The `AudioContext` is created on the first user click; `applyEngineSnapshot()` then re-applies persisted audio state. <!-- R223 -->
-- Direct `audioEngine` calls from `src/store/` are only for cuts, previews and lifecycle, each with a docblock reason. The set (`loadLoop`, `vibes`, `projectSlice`, `synthPatchPreview`, `effectsPreview`, `beatPreview`, `synthPresetInstall`, `audioRecovery`, `incidentReporter`, `sourceBuses`) is a snapshot — re-derive with `grep -ln audioEngine src/store/*.ts`. <!-- R225 -->
+- Direct `audioEngine` calls from `src/store/` are only for cuts, previews and lifecycle, each with a docblock reason. The set (`loadLoop`, `vibes`, `projectSlice`, `synthPatchPreview`, `effectsPreview`, `beatPreview`, `synthPresetInstall`, `audioRecovery`, `incidentReporter`, `sourceBuses`, `trackSendsPreview`) is a snapshot — re-derive with `grep -ln audioEngine src/store/*.ts`. <!-- R225 -->
 - A persistent value (a MIDI CC patch edit included) reaches the engine only through its `engineSync` subscription. <!-- R226 -->
 
 ([ADR-0026](../../docs/decisions/0026-clock-and-engine-bridge.md))
@@ -73,6 +73,10 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ([ADR-0034](../../docs/decisions/0034-pure-song-event-timeline.md))
 
+- Sends reach the engine only through `engineSync`'s per-bus `trackSends` subscription (plus its settle pushes), the drag preview `store/trackSendsPreview.ts`, and `renderMixdown`'s per-pass `setSourceSends` beside `setSourceState`. Sends never read solo or audibility. <!-- R306 -->
+
+([ADR-0037](../../docs/decisions/0037-per-track-sends.md))
+
 ## Prohibited
 
 - The playback step or playhead beat in a slice <!-- R017 -->
@@ -97,3 +101,4 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - Collecting the song walk into an array before performing it, or reordering its per-step emit order <!-- R288 -->
 - A runtime import from `plan/` that reaches `audio/engine` or `playbackEngine` <!-- R289 -->
 - Deciding drum voices or velocity outside `planBeatStep` <!-- R290 -->
+- Sends routed through `setSourceState`; a component calling the send preview for anything but a drag <!-- R306 -->

@@ -32,6 +32,7 @@ physical lines pass it.
 |---|---|---|---|
 | `engine.ts` | `AudioEngine` facade. Owns one `AudioSession` per context generation, the idle-suspend timer, the health monitor and realtime recovery. Nearly every method delegates one-to-one to a subsystem (`engine.ts:132-392`) | `AudioEngine`, `audioEngine` singleton (`:719`), `createRenderEngine(ctx)` (`:732`), `AudioRecoveryResult`, `SESSION_CLOSE_TIMEOUT_MS`; re-exports `STEPS_PER_BAR` (`:713`) and `DRUM_ALIASES`/`METAL_*` (`:717`) | `types`, `utils/musicTheory` (`STEPS_PER_BAR`), `utils/meter`, `types/synth` |
 | `masterRack.ts` | Master graph: source taps and buses, send gates, delay, distortion, reverb (with an impulse cache), 3-band EQ, master gain, the analysers, compressor and limiter, and the Beat filter banks. Also hosts shared helpers (`release`, `cancelAndHold`, `createNoiseNode`) | `MasterRack`, `EngineHooks`, `SourceBusState`, `BeatFilterLane`, `BEAT_FILTER_XFADE_SEC` | `types`, `utils/gainUnits` |
+| `sourceSends.ts` | Per-source send nodes: build, clamp, automate. Owns the DSP for a bus's own three send taps (delay/reverb/distortion), taken after its fader and mute | `SourceSendNodes`, `clampSendLevels`, `createSourceSendNodes`, `applySourceSendLevels` | `types` |
 | `drumSynth.ts` | The 11-voice Beat synthesizer. `triggerDrum` dispatch, per-voice track gains, `setDrumKit`, `setBeatFilter` | `DrumSynth`, `DRUM_ALIASES`, `METAL_RATIOS`, `METAL_BAND_B_HZ` | `data/beatPresets`, `utils/gainUnits`, `types` |
 | `clock.ts` | The shared 16th-note lookahead scheduler, the metronome click, and transport-origin listeners | `Clock` | `utils/meter`, `utils/musicTheory` |
 | `beatAdapter.ts` | `applyBeatParams(engine, params, time?)`: the single hop from a Beat patch to the DSP | `applyBeatParams` | `types` |
@@ -124,16 +125,19 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
 Verified edges:
 
 - Source entry is a unity **tap** → **bus**: `getSourceTap` connects tap → bus, and
-  `getSourceBus` connects bus → `dryGain`, plus `delaySendGate`, `reverbSendGate` and
-  `distortionSendGate` for every source **not** in `SOURCES_WITHOUT_MASTER_SENDS` (today only
-  `'sequencer'`, the Beat bus). Both are lazy, one per source string.
+  `getSourceBus` connects bus → `dryGain`, plus its own three send nodes (`sourceSends.ts`) into
+  `delaySendGate`, `reverbSendGate` and `distortionSendGate` — for every source, the Beat bus
+  included (`SOURCES_WITHOUT_MASTER_SENDS` was removed in DEV-423, ADR-0037). Both are lazy, one
+  per source string. The Beat bus alone skips the bus→`reverbSendGate` edge: its reverb reaches
+  the convolver only through the per-voice path (below).
 - Delay: `delaySendGate` → `delayNode` (2 s max, fixed 0.25 s) ↔ `delayFeedbackGain`, then
   `delayNode` → `delayGain` (`:575-586`). The gate connection is a `DebouncedSendGate` that
   disconnects after a computed tail once the send is idle (`:95-129`, `:824-834`).
 - Distortion: `distortionSendGate` → `WaveShaper` (4x oversample) → `distortionGain`
   (`:589-597`). Disconnects 250 ms after going idle (`:82`, `:758-765`).
-- Reverb: `reverbSendGate` → `ConvolverNode` → `reverbGain`; `drumSendGate` → the same
-  convolver (`:600-613`). Both feeds share one tail timer (`:785-813`).
+- Reverb: `reverbSendGate` → `ConvolverNode` → `reverbGain`; `drumSendGate` → the Beat track's own
+  reverb send node → the same convolver, connected as its second input, after `reverbSendGate`
+  (C1, ADR-0037). Both feeds share one tail timer.
 - EQ is in series: `dryGain`, `delayGain`, `reverbGain` and `distortionGain` go to `eqLow`
   (lowshelf 250 Hz) → `eqMid` (peaking 1.5 kHz, Q 1) → `eqHigh` (highshelf 4 kHz) → `masterGain`.
   EQ bypass reroutes the four returns straight to `masterGain` (`rewireEq`, `:737-750`).
@@ -154,12 +158,11 @@ Verified edges:
   gain → `drumSendFilter` bank → `drumSendGate` → convolver.
   - Each bank is input gain → three biquads (lowpass, bandpass, highpass) → one gain per lane →
     output (`masterRack.ts:395-413`).
-  - The dry bank's output is `getSourceTap('sequencer')`, and the `sequencer` bus feeds
-    **`dryGain` only** — it is in `SOURCES_WITHOUT_MASTER_SENDS`, so drums never reach master
-    delay, reverb or distortion through the bus. Their only effect path is the per-voice
-    `reverbSend` → `drumSendGate` → convolver. (The audit originally said the opposite; see F1.)
-  - The sequencer fader is applied to both the bus and `drumSendGate` (`applySourceLevel`,
-    `:948-961`).
+  - The dry bank's output is `getSourceTap('sequencer')`; the `sequencer` bus now has its own
+    delay and distortion send nodes like any other track (DEV-423, ADR-0037), so it can reach
+    master delay and distortion through the bus. Reverb is still not a bus edge: the only reverb
+    path is the per-voice `reverbSend` → `drumSendGate` → `send[sequencer].reverb` → convolver.
+  - The sequencer fader is applied to both the bus and `drumSendGate` (`applySourceLevel`).
 - **Synth voice** (`subtractiveVoice.ts:547-660`), built per physical voice (unison creates N):
   - Sources: osc1/osc2 each → own level gain; sub → `subGain`; noise → `noiseGain`.
   - Chain: sources → `drive` (WaveShaper) → `filter` (Biquad) → `ampGain` (ENV1) →
@@ -197,14 +200,15 @@ flowchart LR
   BUS -. post-fader .-> SLA[(sourceLevelAnalyser fft2048)]
 
   BUS --> DRY[dryGain]
-  BUS --> RSG[reverbSendGate]
-  BUS --> DSGt[delaySendGate]
-  BUS --> XSG[distortionSendGate]
+  BUS --> SND["send nodes ×3"] --> RSG[reverbSendGate]
+  SND --> DSGt[delaySendGate]
+  SND --> XSG[distortionSendGate]
   SBUS --> DRY
-  %% 'sequencer' is in SOURCES_WITHOUT_MASTER_SENDS: no edge to RSG, DSGt or XSG
+  SBUS --> SSND["Beat send nodes (dly, dist)"] --> DSGt
+  SSND --> XSG
 
   RSG --> CONV[Convolver] --> RG[reverbGain]
-  DSG --> CONV
+  DSG --> BRS["send[sequencer].reverb"] --> CONV
   DSGt --> DLY[DelayNode 0.25s] --> DG[delayGain]
   DLY <--> FB[delayFeedbackGain]
   XSG --> WS[WaveShaper 4x] --> XG[distortionGain]
@@ -424,7 +428,9 @@ and `MIXDOWN_SEED` with the renderer.
   bus by name, so it holds in any build order and in a render engine;
   `masterRack.sendGates.test.ts` checks the bus-level wiring the voice-level
   `drumSynth.test.ts` could not see. Giving drums real sends is **per-track FX**, deferred to its
-  own design.
+  own design. **Superseded by DEV-423 (ADR-0037):** `SOURCES_WITHOUT_MASTER_SENDS` is gone; the
+  Beat bus now has its own delay and distortion send nodes like every other track, and reverb
+  stays the per-voice path into the Beat track's own reverb send node.
 - **F2 — MIDI is split in two, not a straight edge to the engine.** Notes go through
   `synthPlayback` (`store/midiInput.ts`), unlike the old `feature-overview.md` diagram
   (`MIDI --> Engine`). **Fixed on `fix/structure-audit-bugs`:** CC patch edits no longer call

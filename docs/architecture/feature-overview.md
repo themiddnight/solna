@@ -11,7 +11,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 
 | # | Feature | Where | What it does |
 |---|---------|-------|--------------|
-| 1 | **Sound** view | Loop layer | Per-track synth design (oscillator, filter, envelopes, LFO, voice, arp), preset library, Beat kit editor, sound mixer |
+| 1 | **Sound** view | Loop layer | Per-track synth design (oscillator, filter, envelopes, LFO, voice, arp), preset library, Beat kit editor, sound mixer with per-track reverb/delay/distortion sends |
 | 2 | **Pattern** view | Loop layer | Sequencing, split into 4 segments ↓ |
 | 2a | ↳ Lead | Pattern | Pitch-matrix melody grid, note length/resize, live Rec |
 | 2b | ↳ FX | Pattern | Second melody track (lead's twin) for risers / effects |
