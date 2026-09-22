@@ -6,13 +6,24 @@ paths:
   - "src/store/soloNav.ts"
   - "src/store/trackAudibility.ts"
   - "src/store/engineSync.ts"
+  - "src/store/loop.ts"
+  - "src/store/loopDefaults.ts"
+  - "src/store/loopSync.ts"
+  - "src/store/keyChange.ts"
   - "src/components/song/**"
   - "src/components/ui/Solo*.tsx"
 ---
 
 # Loops and solo
 
-Atomic loop delete with Undo, and the session-only track solo set.
+Loop content and defaults, atomic loop delete with Undo, and the session-only track solo set.
+
+## Loop content
+
+- `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to compile if a `Loop` field is neither. <!-- R282 -->
+- `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop default is written; slices read it through their `defaults` parameter. <!-- R283 -->
+
+([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
 
 ## Loop delete
 
@@ -52,3 +63,5 @@ Atomic loop delete with Undo, and the session-only track solo set.
 - Clearing solo on a `focusTrack` change <!-- R159 -->
 - Computing audibility outside `engineSync.ts` <!-- R160 -->
 - Solo overriding per-voice Beat mute <!-- R161 -->
+- A per-loop default literal in a slice <!-- R283 -->
+- A `Loop` field outside identity and `LOOP_FLAT_KEYS` <!-- R282 -->

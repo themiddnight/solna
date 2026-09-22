@@ -14,6 +14,9 @@ paths:
   - "src/components/loop/lead/melodyGrid.ts"
   - "src/components/ui/Keyboard.tsx"
   - "src/components/loop/chord/**"
+  - "src/store/keyChange.ts"
+  - "src/store/reharmonizeNav.ts"
+  - "src/store/musicContextSlice.ts"
 ---
 
 # Music domain
@@ -72,6 +75,14 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 
 ([ADR-0008](../../docs/decisions/0008-reharmonization-category-and-roman-numerals.md))
 
+## Key change
+
+- A key change's chord harmonize runs only in `changeKey` (`store/keyChange.ts`), transpose then snap; never in a component effect. <!-- R279 -->
+- `autoReharmonize` and `reharmonizedIndicator` are session-only store fields (not in `partializeAppState`, `PROJECT_CONTENT_KEYS` or `LOOP_FLAT_KEYS`); turning the toggle on rewrites nothing. <!-- R280 -->
+- The badge clears only where chords are replaced wholesale: a vibe's single write, `applyLoopCopy` with `chord-progression`, library apply, toggle off, and the `reharmonizeNav.ts` subscription (loop change, project install). <!-- R281 -->
+
+([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
+
 ## Prohibited
 
 - Importing `tonal` outside `src/musicCore/tonalAdapter.ts` <!-- R044 -->
@@ -90,3 +101,6 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - Casting raw input through `toChordItem` <!-- R072 -->
 - Reading a substring of a quality token in `snapProgressionToScale` <!-- R076 -->
 - `bIII` on the mediant, or an accidental on a scale under seven degrees <!-- R079 --> <!-- R080 -->
+- Harmonizing chords on a key change outside `changeKey` <!-- R279 -->
+- Persisting the reharmonize toggle or badge <!-- R280 -->
+- A per-writer badge clear on loop change instead of `reharmonizeNav.ts` <!-- R281 -->

@@ -58,7 +58,7 @@ own spec — they are not bugs to fix in passing.
 
 ### A key change moves every melody track, and the table says which
 
-`keyChangePatch` (`store/musicContextSlice.ts`) is the whole write a root or scale change makes —
+`changeKey` (`store/keyChange.ts`) is the whole write a root or scale change makes —
 the new key plus every `MELODY_TRACKS` row transposed (root) and remapped (scale) to follow it — so
 Lead and FX can never disagree about the key, and a vibe folds the same patch into its own single
 `set()`. The loop-copy `key` group is the deliberate exception: it copies a key and transposes
@@ -112,7 +112,7 @@ semitones the key leaves out.
 - **R141** — Nothing couples the arm back to the audition target.
 - **R142** — Known deferred limits, not bugs: FX synth voice has no pitch riser (filter env ramps
   `filter.frequency` only); LFO restarts per note.
-- **R143** — `keyChangePatch` (`store/musicContextSlice.ts`) is the whole write for a root/scale
+- **R143** — `changeKey` (`store/keyChange.ts`) is the whole write for a root/scale
   change, transposing/remapping every `MELODY_TRACKS` row; a vibe folds it into its single
   `set()`.
 - **R144** — Loop-copy `key` group copies the key and transposes neither melody

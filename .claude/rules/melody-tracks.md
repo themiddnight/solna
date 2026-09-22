@@ -5,6 +5,7 @@ paths:
   - "src/store/fxSlice.ts"
   - "src/store/leadRecord.ts"
   - "src/store/musicContextSlice.ts"
+  - "src/store/keyChange.ts"
   - "src/store/loopCopy*.ts"
   - "src/audio/leadMelody.ts"
   - "src/components/loop/lead/**"
@@ -27,7 +28,7 @@ The `MELODY_TRACKS` table, the record arm, key changes and borrowed out-of-scale
 - `startRecordArmSync` clears the arm on a layer change (not a Sound ↔ Pattern hop), an `activeLoopId` change and a focus change; a project install clears it in the same atomic patch that clears solo. <!-- R140 -->
 - Nothing couples the arm back to the audition target. <!-- R141 -->
 - Deferred limits, not bugs: the FX synth voice has no pitch riser (the filter envelope ramps `filter.frequency` only) and its LFO restarts per note. <!-- R142 -->
-- `keyChangePatch` (`store/musicContextSlice.ts`) is the whole write for a root/scale change, transposing/remapping every `MELODY_TRACKS` row; a vibe folds it into its single `set()`. <!-- R143 -->
+- `changeKey` (`store/keyChange.ts`) is the whole write for a root/scale change, transposing/remapping every `MELODY_TRACKS` row; a vibe folds it into its single `set()` with `harmonizeChords: false`. <!-- R143 --> ([ADR-0013](../../docs/decisions/0013-melody-tracks-table-and-record-arm.md), [ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
 - The loop-copy `key` group copies the key and transposes neither melody (`impliesKeyCopy`). <!-- R144 -->
 
 ## Borrowed rows
