@@ -1,6 +1,5 @@
 import React from 'react';
 import { useAppStore } from '@/store/store';
-import { useSequencerPlayback } from '@/components/useSequencerPlayback';
 import { useSegmentGatedStep } from '@/components/playbackStep';
 import { StepHeader } from '@/components/ui/StepHeader';
 import { TrackRow } from './TrackRow';
@@ -23,8 +22,9 @@ export interface SequencerGridProps {
  * re-render 8-16 times a second — including while the Sequencer tab is hidden,
  * which App.tsx keeps mounted by design.
  *
- * `useSequencerPlayback` must be mounted EXACTLY once (it subscribes the clock
- * and owns the soft stop); SequencerView renders this child exactly once.
+ * The Beat lane's controller is NOT mounted here: `useSequencerPlayback` lives
+ * in `PlaybackHost` (components/playback/), mounted once in App.tsx, so the
+ * lane sounds whether or not this grid is mounted.
  *
  * TrackRow's memo contract (TrackRow.tsx) is unchanged on purpose: currentStep
  * is still a real prop, so a transport tick still re-renders every row — the
@@ -34,9 +34,9 @@ export interface SequencerGridProps {
  * The step subscription is also gated on Pattern-segment focus
  * (`useSegmentGatedStep`, `'beat'`): every Pattern segment stays mounted, so
  * without the gate this grid kept re-rendering at the clock's rate even while
- * Lead, FX or Accompaniment was the segment on screen. `useSequencerPlayback`
- * above is unaffected — it schedules the Beat audio unconditionally, whatever
- * segment is focused.
+ * Lead, FX or Accompaniment was the segment on screen. The Beat audio is
+ * unaffected: `useSequencerPlayback`, in `PlaybackHost`,
+ * schedules it unconditionally, whatever segment is focused.
  */
 export function SequencerGrid({
   pattern,
@@ -47,7 +47,6 @@ export function SequencerGrid({
   onPreview,
   onVolumeChange,
 }: SequencerGridProps) {
-  useSequencerPlayback();
   const currentStep = useSegmentGatedStep('sequencer', 'beat');
   const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
 

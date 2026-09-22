@@ -74,7 +74,7 @@ describe('sequencer stepper in a non-4/4 meter', () => {
 describe('the clock effect resubscribes only on isPlaying/hardStop', () => {
   test('subscribePlaybackClock\'s useEffect dep array is exactly [isPlaying, hardStop]', () => {
     const source = readFileSync(
-      join(process.cwd(), 'src/components/useSequencerPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useSequencerPlayback.ts'),
       'utf8',
     );
     const match = source.match(
@@ -90,9 +90,9 @@ describe('the clock effect resubscribes only on isPlaying/hardStop', () => {
 });
 
 import { fireBeatStepEvents } from './useSequencerPlayback';
-import { audioEngine } from '../audio/engine';
-import { DEFAULT_VELOCITY } from '../audio/constants';
-import { useAppStore } from '../store/store';
+import { audioEngine } from '@/audio/engine';
+import { DEFAULT_VELOCITY } from '@/audio/constants';
+import { useAppStore } from '@/store/store';
 
 describe('the Beat fader is a bus gain, never a velocity', () => {
   const initialVolume = useAppStore.getState().beatMix.levelDb;
@@ -140,7 +140,7 @@ describe('the Beat fader is a bus gain, never a velocity', () => {
   // longer a path from a sequencer step to a synth note at all.
   test('the source no longer threads the Beat bus fader into a velocity argument', () => {
     const source = readFileSync(
-      join(process.cwd(), 'src/components/useSequencerPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useSequencerPlayback.ts'),
       'utf8',
     );
     expect(source).not.toContain('triggerPad(event.voice, live.beatMix.levelDb');
@@ -159,7 +159,7 @@ describe('the Beat fader is a bus gain, never a velocity', () => {
 describe('the clock callback plays the Beat pattern', () => {
   test('it reads beatPattern/beatMix live off the store and fires the voices they name', () => {
     const source = readFileSync(
-      join(process.cwd(), 'src/components/useSequencerPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useSequencerPlayback.ts'),
       'utf8',
     );
     expect(source).toContain(

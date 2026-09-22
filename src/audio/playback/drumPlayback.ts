@@ -2,7 +2,7 @@ import { audioEngine } from '../engine';
 
 /**
  * `init()` is idempotent but not free — and triggerPad is called from inside
- * the sequencer's clock callback (useSequencerPlayback.ts), i.e. ~8x per
+ * the sequencer's clock callback (components/playback/useSequencerPlayback.ts), i.e. ~8x per
  * second during playback. Callers that fire on a user gesture call this once;
  * the per-step path does not call it at all.
  */

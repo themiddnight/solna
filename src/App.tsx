@@ -6,6 +6,7 @@ import { InstantVibesBar } from './components/InstantVibesBar';
 import { ProjectLoading } from './components/ProjectLoading';
 import { LoopPage } from './components/loop/LoopPage';
 import { SongPage } from './components/song/SongPage';
+import { PlaybackHost } from './components/playback/PlaybackHost';
 import { TransportBar } from './components/TransportBar';
 import { IncidentDialog } from './components/ui/IncidentDialog';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
@@ -99,6 +100,8 @@ function Workspace() {
   useRouteSync();
 
   // Shared clock -> store playhead, so every tab can show the beat position.
+  // The lane controllers are NOT hooks here: they live in <PlaybackHost />
+  // below, whose tree position fixes their clock-listener order.
   usePlayheadSync();
 
   // Song-mode coordinator (store-level, mounted once). The loop live-write
@@ -187,6 +190,10 @@ function Workspace() {
         <div className={isSongLayer(activeTab) ? 'hidden' : 'block'}>
           <LoopPage />
         </div>
+        {/* Every transport controller, mounted once (DEV-422). Here, after the
+            Loop page, while the Lead/FX/Chord controllers are still mounted by
+            their views, so the clock-listener order is unchanged. */}
+        <PlaybackHost />
         <div className={isSongLayer(activeTab) ? 'block' : 'hidden'}>
           <SongPage />
         </div>

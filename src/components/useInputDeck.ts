@@ -282,7 +282,7 @@ export const selectSynthRelease = (s: AppStore): number =>
  * which re-rendered the entire application tree on every knob pointermove.
  * Zustand notifies synchronously on `set()`, so the ref is refreshed strictly
  * EARLIER than the old post-commit effect did it — the arp can never read
- * staler params than before. Same pattern as `useSequencerPlayback.ts:69-78`.
+ * staler params than before. Same pattern as `components/playback/useSequencerPlayback.ts`.
  */
 export function subscribeArpState(ref: ArpStateRef): () => void {
   // A single selector over the FOCUSED channel's params, not always

@@ -1,14 +1,14 @@
 import { useEffect, useRef } from "react";
-import { useAppStore } from "../store/store";
-import { publishStepAt, resetStep } from "./playbackStep";
-import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
+import { useAppStore } from "@/store/store";
+import { publishStepAt, resetStep } from "@/components/playbackStep";
+import { ensureDrumEngine, triggerPad } from "@/audio/playback/drumPlayback";
 import { planBeatStep, type BeatStepEvent } from "@/audio/playback/plan/beatPlan";
-import { STEPS_PER_BAR } from "../utils/musicTheory";
-import { subscribePlaybackClock } from "../audio/playback/playbackEngine";
-import { getMeter } from "../utils/meter";
-import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
-import { beatPlanSnapshot } from "../store/playbackPlanSnapshots";
-import type { PlayerState } from "../store/types";
+import { STEPS_PER_BAR } from "@/utils/musicTheory";
+import { subscribePlaybackClock } from "@/audio/playback/playbackEngine";
+import { getMeter } from "@/utils/meter";
+import { armOnBarLine, isSoftStopBoundary } from "@/components/playerStop";
+import { beatPlanSnapshot } from "@/store/playbackPlanSnapshots";
+import type { PlayerState } from "@/store/types";
 
 /** Whether the stepper has caught a bar line and started running. */
 export interface SequencerArming {
@@ -67,6 +67,7 @@ export function fireBeatStepEvents(events: readonly BeatStepEvent[], time: numbe
 // store/) — the hook reads store state, so it is a component-layer concern;
 // the engine is reached only through the audio-layer bridge in
 // playbackEngine.ts (layering rule 3).
+// Mounted once, by PlaybackHost (this folder) — never by a grid.
 export function useSequencerPlayback(): void {
   // beatPattern and beatMix are deliberately NOT
   // selected here: they are read LIVE inside the clock callback below. As

@@ -9,6 +9,7 @@ import { SequencerView } from './loop/SequencerView';
 import { SoundView } from './loop/SoundView';
 import { ArrangeView } from './song/ArrangeView';
 import { SongPage } from './song/SongPage';
+import { PlaybackHost } from './playback/PlaybackHost';
 
 // A React.memo result is an OBJECT with $$typeof === Symbol.for('react.memo')
 // and the wrapped component on `.type` — NOT a function carrying `compare`,
@@ -77,4 +78,12 @@ describe('App-level children are memoized, and memoizing changed no markup', () 
       expect(normalizeDndIds(outer)).toBe(normalizeDndIds(inner));
     });
   }
+});
+
+describe('PlaybackHost is memoized', () => {
+  // Not a CASES row: that loop asserts non-empty markup, and the host renders
+  // nothing by design.
+  test('PlaybackHost is a React.memo wrapper', () => {
+    expect(typeof memoInner(PlaybackHost)).toBe('function');
+  });
 });

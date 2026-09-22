@@ -1,8 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { audioEngine } from '../audio/engine';
-import { freshEngine } from '../audio/testFakes';
-import { planBeatStep } from '../audio/playback/plan/beatPlan';
-import { defaultBeatState } from '../store/beatPresets';
+import { audioEngine } from '@/audio/engine';
+import { freshEngine } from '@/audio/testFakes';
+import { planBeatStep } from '@/audio/playback/plan/beatPlan';
+import { defaultBeatState } from '@/store/beatPresets';
 import { fireBeatStepEvents, sequencerStepAction } from './useSequencerPlayback';
 
 /**

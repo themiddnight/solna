@@ -112,7 +112,7 @@ const WIRINGS: Array<{
   {
     player: 'sequencer',
     producer: {
-      file: 'src/components/useSequencerPlayback.ts',
+      file: 'src/components/playback/useSequencerPlayback.ts',
       regex: /publishStepAt\(\s*'([^']+)'/,
     },
     consumer: {
