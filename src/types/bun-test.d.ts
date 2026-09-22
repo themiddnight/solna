@@ -68,7 +68,7 @@ declare module 'bun:test' {
     toHaveBeenCalledTimes(expected: number): void;
     toHaveBeenCalledWith(...expected: unknown[]): void;
     toHaveBeenLastCalledWith(...expected: unknown[]): void;
-    toThrow(expected?: string | RegExp | Error): void;
+    toThrow(expected?: string | RegExp | Error | (new (...args: never[]) => Error)): void;
   }
 
   export function expect<T>(actual: T, message?: string): Matchers<T>;
