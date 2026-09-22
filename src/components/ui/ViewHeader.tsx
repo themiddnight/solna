@@ -96,7 +96,7 @@ export function HeaderCard({
   return (
     <PanelCard className="relative">
       <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
-        <div className="flex items-center flex-wrap gap-2 min-h-8">
+        <div className="flex items-center flex-wrap gap-2 min-h-8 min-w-0 max-w-full">
           <div className="p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary">
             <Icon className="w-4 h-4" />
           </div>

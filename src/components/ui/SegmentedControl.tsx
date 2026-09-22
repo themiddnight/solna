@@ -29,7 +29,7 @@ import { HEADER_GROUP } from './fieldClasses';
  * header card never sees.
  */
 const SEGMENTED_BUTTON =
-  'btn btn-sm join-item min-w-0 px-2 sm:px-3 gap-1 sm:gap-1.5 text-xs font-bold';
+  'btn btn-sm join-item shrink min-w-0 px-2 sm:px-3 gap-1 sm:gap-1.5 text-xs font-bold';
 
 /** The one place selected-vs-not is spelled for a segmented button. */
 function segmentedButtonClass(active: boolean): string {
@@ -40,9 +40,13 @@ export interface SegmentedGroupProps {
   children: React.ReactNode;
 }
 
-/** The `join` shell the tab bar and the layer switcher also wear. */
+/**
+ * The `join` shell the tab bar and the layer switcher also wear. `max-w-full`
+ * caps HEADER_GROUP's `shrink-0` at its container, so on a 320px phone the
+ * buttons (`min-w-0`, labels `truncate`) shrink instead of running off it.
+ */
 export function SegmentedGroup({ children }: SegmentedGroupProps) {
-  return <div className={`${HEADER_GROUP} inline-flex items-center`}>{children}</div>;
+  return <div className={`${HEADER_GROUP} inline-flex items-center max-w-full`}>{children}</div>;
 }
 
 export interface SegmentedButtonProps {

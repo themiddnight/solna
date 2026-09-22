@@ -21,9 +21,12 @@ export function AdjustSynthButton({
       onClick={() => focusSynthTarget(target, { setFocusTrack, setActiveTab })}
       className={`btn btn-xs btn-ghost gap-1 ${className}`}
       title={`Open the synth view with the ${label} target selected`}
+      aria-label="Adjust Synth"
     >
       <SlidersHorizontal className="w-3.5 h-3.5" />
-      <span>Adjust Synth</span>
+      {/* Icon-only below `sm`: beside the solo and paste buttons the words
+          overran a module card's header on a phone. */}
+      <span className="hidden sm:inline">Adjust Synth</span>
     </button>
   );
 }

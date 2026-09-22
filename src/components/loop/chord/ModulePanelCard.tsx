@@ -65,13 +65,15 @@ export function ModulePanelCard({ target, title, description, actions, children 
   return (
     <div role="group" aria-labelledby={titleId} className={`card bg-panel ${tint} border ${border} p-4`}>
       <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
+        {/* `min-w-0` lets a long description wrap rather than push the
+            cluster (`shrink-0`) past the card's edge. */}
+        <div className="min-w-0">
           <h3 id={titleId} className={SECTION_HEADER}>
             {title}
           </h3>
           <p className="text-[10px] text-base-content/60">{description}</p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {actions}
           <SoloButton track={target} />
           <AdjustSynthButton target={target} className={accent} />

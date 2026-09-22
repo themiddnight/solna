@@ -83,29 +83,33 @@ function ChordCardHeader({
           label="Drag to reorder"
           icon={<GripVertical className="w-3.5 h-3.5" />}
           size="xs"
-          className="cursor-grab active:cursor-grabbing text-base-content/50 hover:text-base-content focus:outline-none"
+          className="cursor-grab active:cursor-grabbing touch-none text-base-content/50 hover:text-base-content focus:outline-none"
         />
-        <span className="badge badge-sm badge-ghost tabular-nums font-bold">
+        <span className="badge badge-sm badge-ghost tabular-nums font-bold whitespace-nowrap">
           Bar {startBar}
         </span>
       </div>
       <div className="flex items-center gap-1">
-        <IconButton
-          label="Move Left"
-          icon={<ChevronLeft className="w-3.5 h-3.5" />}
-          size="xs"
-          className="disabled:opacity-30"
-          disabled={idx === 0}
-          onClick={() => onMove(idx, -1)}
-        />
-        <IconButton
-          label="Move Right"
-          icon={<ChevronRight className="w-3.5 h-3.5" />}
-          size="xs"
-          className="disabled:opacity-30"
-          disabled={idx === totalChords - 1}
-          onClick={() => onMove(idx, 1)}
-        />
+        {/* Below `sm` a card is half a phone wide: the grip reorders it
+            (`touch-none` lets a touch drag it instead of scrolling). */}
+        <div className="hidden sm:flex items-center gap-1">
+          <IconButton
+            label="Move Left"
+            icon={<ChevronLeft className="w-3.5 h-3.5" />}
+            size="xs"
+            className="disabled:opacity-30"
+            disabled={idx === 0}
+            onClick={() => onMove(idx, -1)}
+          />
+          <IconButton
+            label="Move Right"
+            icon={<ChevronRight className="w-3.5 h-3.5" />}
+            size="xs"
+            className="disabled:opacity-30"
+            disabled={idx === totalChords - 1}
+            onClick={() => onMove(idx, 1)}
+          />
+        </div>
         <IconButton
           id={`btn-remove-chord-${chordId}`}
           label="Delete Chord"
@@ -166,20 +170,20 @@ function ChordTriggerPad({
       onMouseLeave={(e) => onUp(e, chord)}
       onTouchStart={(e) => onDown(e, chord)}
       onTouchEnd={(e) => onUp(e, chord)}
-      className={`w-full py-4 rounded-field flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
+      className={`w-full py-3 sm:py-4 rounded-field flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
         isActive
           ? "bg-module-chord text-module-chord-content shadow-lg scale-95"
           : "bg-base-200 hover:bg-base-300 text-base-content"
       }`}
       title="Hold to Preview Chord"
     >
-      <span className="text-2xl font-black tracking-tight flex items-baseline gap-1">
+      <span className="text-xl sm:text-2xl font-black tracking-tight flex items-baseline gap-1">
         {spellChordRoot(chord.root, { scaleRoot, scaleType })}
         <span className="text-sm font-semibold opacity-70">
           {formatChordQuality(chord.quality)}
         </span>
       </span>
-      <span className="text-[10px] opacity-70 mt-1">
+      <span className="hidden sm:block text-[10px] opacity-70 mt-1">
         {spelledNotes.join(" • ")}
       </span>
       <BeatDots
@@ -194,10 +198,21 @@ function ChordTriggerPad({
   );
 }
 
+/** Below `md` the fields read at a glance, so their captions stay for screen readers only. */
+const LABEL_BELOW_MD = 'max-md:sr-only';
+
+/** Below `md` a select gives its text the padding daisyUI keeps clear of the arrow's left (drawn 12–24px from the right edge). */
+const SELECT_BELOW_MD = 'max-md:ps-2 max-md:pe-6';
+
 /**
- * Root, quality and duration. Root and quality are written back as `ROOTS`-
- * spelled / union values — only the root's LABEL is spelled for display, which
- * is the same split KEY_OPTIONS makes.
+ * Root, quality and duration, on two rows at every width: Root and Duration
+ * share the first, Quality takes the whole second. One row of three clipped
+ * the widest options at every width — a card is 230–330px from `md` up and
+ * under 200px on a phone.
+ *
+ * Root and quality are written back as `ROOTS`-spelled / union values — only
+ * the root's LABEL is spelled for display, which is the same split KEY_OPTIONS
+ * makes.
  */
 function ChordEditControls({
   chord,
@@ -209,16 +224,16 @@ function ChordEditControls({
   updateChord: SortableChordCardProps['updateChord'];
 }) {
   return (
-    <div className="flex gap-2 pt-1 border-t border-base-300/60">
-      <div className="shrink min-w-0">
-        <label className={FIELD_LABEL} htmlFor={`select-chord-root-${chord.id}`}>
+    <div className="grid grid-cols-[3.125rem_minmax(0,1fr)] md:grid-cols-[4rem_minmax(0,1fr)] gap-1 md:gap-2 pt-1 border-t border-base-300/60">
+      <div className="min-w-0">
+        <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD}`} htmlFor={`select-chord-root-${chord.id}`}>
           Root
         </label>
         <select
           id={`select-chord-root-${chord.id}`}
           value={chord.root}
           onChange={(e) => updateChord(chord.id, { root: e.target.value })}
-          className="select select-xs w-full"
+          className={`select select-xs w-full ${SELECT_BELOW_MD}`}
         >
           {ROOTS.map((r) => (
             <option key={r} value={r}>
@@ -228,30 +243,8 @@ function ChordEditControls({
         </select>
       </div>
 
-      <div className="flex-1 min-w-0">
-        <label className={FIELD_LABEL} htmlFor={`select-chord-quality-${chord.id}`}>
-          Quality
-        </label>
-        <select
-          id={`select-chord-quality-${chord.id}`}
-          value={chord.quality}
-          onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordQuality })}
-          className="select select-xs w-full"
-        >
-          {CHORD_QUALITY_GROUPS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.options.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
-
-      <div className="shrink min-w-0">
-        <label className={FIELD_LABEL} htmlFor={`select-chord-bars-${chord.id}`}>
+      <div className="min-w-0">
+        <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD}`} htmlFor={`select-chord-bars-${chord.id}`}>
           Duration (Bars)
         </label>
         <select
@@ -260,12 +253,45 @@ function ChordEditControls({
           onChange={(e) =>
             updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
           }
-          className="select select-xs w-full"
+          className={`select select-xs w-full ${SELECT_BELOW_MD}`}
         >
           <option value={1}>1 Bar</option>
           <option value={2}>2 Bars</option>
           <option value={4}>4 Bars</option>
         </select>
+      </div>
+
+      <div className="col-span-2 min-w-0">
+        <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD}`} htmlFor={`select-chord-quality-${chord.id}`}>
+          Quality
+        </label>
+        {/* Below `md` the closed select shows the quality token ("min7")
+            instead of its picker label ("Minor 7th (min7)"), which does not
+            fit a phone's half-width card. The select keeps its value and its
+            full option labels; only its closed face is painted over. The text
+            is hidden through its fill colour, not `color`: daisyUI draws the
+            arrow in `currentColor`. */}
+        <div className="relative">
+          <select
+            id={`select-chord-quality-${chord.id}`}
+            value={chord.quality}
+            onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordQuality })}
+            className={`select select-xs w-full ${SELECT_BELOW_MD} max-md:[-webkit-text-fill-color:transparent] [&_optgroup]:[-webkit-text-fill-color:initial] [&_option]:[-webkit-text-fill-color:initial]`}
+          >
+            {CHORD_QUALITY_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <span aria-hidden="true" className="md:hidden pointer-events-none absolute inset-y-0 left-0 right-6 flex items-center pl-2 text-[11px]">
+            <span className="truncate">{chord.quality}</span>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -316,7 +342,7 @@ export const SortableChordCard = React.memo(function SortableChordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`card bg-panel border border-base-300 p-4 flex flex-col justify-between space-y-3 transition-colors ${
+      className={`card bg-panel border border-base-300 p-2 sm:p-4 flex flex-col justify-between space-y-2 sm:space-y-3 transition-colors ${
         isActive
           ? "border-module-chord ring-2 ring-module-chord/50 bg-base-200"
           : "border-base-300 hover:border-base-content/30"

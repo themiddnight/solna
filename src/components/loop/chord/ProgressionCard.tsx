@@ -213,14 +213,16 @@ function ProgressionActions({
   pasteButton,
 }: ProgressionActionsProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Below `sm` the actions are icons: their words overran a phone. */}
       <button
         id="btn-add-chord"
         onClick={onAddChord}
+        aria-label="Add Chord"
         className="btn btn-xs gap-1 [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]"
       >
         <Plus className="w-3.5 h-3.5" />
-        <span>Add Chord</span>
+        <span className="hidden sm:inline">Add Chord</span>
       </button>
 
       {/* Option B Re-harmonize Button */}
@@ -229,9 +231,10 @@ function ProgressionActions({
         onClick={onReharmonize}
         className="btn btn-xs btn-secondary btn-outline gap-1.5"
         title="Option B: Diatonically snap current chord progression to active key and scale"
+        aria-label="Re-harmonize"
       >
         <Sparkles className="w-3.5 h-3.5" />
-        <span>Re-harmonize</span>
+        <span className="hidden sm:inline">Re-harmonize</span>
       </button>
 
       {/* Auto-Reharmonize Toggle */}
@@ -242,11 +245,15 @@ function ProgressionActions({
           autoReharmonize ? '' : 'btn-soft'
         }`}
         title="Toggle automatic re-harmonization when loading presets or changing scales"
+        aria-label="Auto-Reharmonize"
+        aria-pressed={autoReharmonize}
       >
         <Sparkles
           className={`w-3.5 h-3.5 ${autoReharmonize ? 'text-base' : 'text-secondary'}`}
         />
-        <span>Auto-Reharmonize: {autoReharmonize ? 'ON' : 'OFF'}</span>
+        {/* Keeps a word below `sm`, or it would be a second bare sparkle beside Re-harmonize. */}
+        <span className="sm:hidden">Auto</span>
+        <span className="hidden sm:inline">Auto-Reharmonize: {autoReharmonize ? 'ON' : 'OFF'}</span>
       </button>
 
       {/* Paste a copied chord progression into this card. Far right so
@@ -277,7 +284,7 @@ function SortableProgression({ state, editor, previews }: SortableProgressionPro
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={chordIds} strategy={rectSortingStrategy}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 pt-2">
           {chords.map((chord, idx) => {
             const startBar = chords
               .slice(0, idx)

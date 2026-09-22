@@ -198,8 +198,8 @@ function MasterTransport({
  * The taper, the readout, the -inf detent and double-click-to-unity all live in
  * VolumeFader — this bar states only the width and which readout it can afford.
  * The readout's visibility tracks the bar's own layout, not screen size in the
- * usual direction: below `sm` the bar is two rows and the readout fits, from
- * `sm` to `lg` it is ONE row whose two content-sized groups summed to 803px at
+ * usual direction: below `md` the bar is two rows and the readout fits, from
+ * `md` to `lg` it is ONE row whose two content-sized groups summed to 803px at
  * a 768px tablet, so the 56px readout is what has to go there, and it returns
  * at `lg`. The level stays readable from the fader position and exact in the
  * `title` wherever it is hidden.
@@ -220,7 +220,7 @@ function MasterFader({
         valueDb={valueDb}
         onChangeDb={onChangeDb}
         className="range range-xs range-primary w-16"
-        readoutClassName="tabular-nums text-[10px] text-base-content/60 w-14 text-right inline sm:hidden lg:inline"
+        readoutClassName="tabular-nums text-[10px] text-base-content/60 w-14 text-right inline md:hidden lg:inline"
       />
     </div>
   );
@@ -314,21 +314,23 @@ export const TransportBar = React.memo(function TransportBar({ bottomInset = tru
     // sits dead-centre in the viewport) whenever there is room, and floored at
     // their own content width when there isn't — which degrades to an off-centre
     // readout instead of side groups overlapping or overflowing the bar.
-    <div className={`shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2${bottomInset ? ' pb-safe sm:pb-safe-lg' : ''} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl`}>
+    <div className={`shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2${bottomInset ? ' pb-safe sm:pb-safe-lg' : ''} flex flex-col md:flex-row md:items-center md:justify-between gap-1 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl`}>
       {/* Left Transport Actions: Play All + Tempo + Meter.
-          Below `sm` this is the bar's FIRST ROW rather than its left third:
+          Below `md` this is the bar's FIRST ROW rather than its left third:
           both side groups are content-sized, and at 375px they summed to 412px
           — the bar clipped its own master fader with no way to scroll to it.
           `w-full` + `justify-between` spreads transport and tempo across that
-          row; from `sm` up the group goes back to hugging its content on the
-          left of a single row. */}
-      <div className="flex items-center gap-1 sm:gap-1.5 w-full sm:w-auto justify-between sm:justify-start sm:shrink-0 min-w-0">
+          row; from `md` up the group goes back to hugging its content on the
+          left of a single row. The switch is `md`, the layout-mode width, not
+          `sm`: the single row needs ~685px, so between 640px and the desktop
+          frame it ran off the mobile frame's edge. */}
+      <div className="flex items-center gap-1 sm:gap-1.5 w-full md:w-auto justify-between md:justify-start md:shrink-0 min-w-0">
         {/* What is playing, as one cluster: on the mobile first row it is the
             left half of a `justify-between`, so transport + target must not
-            spread apart from each other. `sm:contents` dissolves the wrapper
+            spread apart from each other. `md:contents` dissolves the wrapper
             once the bar is a single row again, leaving the original flat
             child order and gaps untouched. */}
-        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 sm:contents">
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 md:contents">
           <MasterTransport
             displayState={displayState}
             hardStopDisabled={hardStopDisabled}
@@ -341,9 +343,9 @@ export const TransportBar = React.memo(function TransportBar({ bottomInset = tru
         </div>
 
         {/* Tempo and meter, the mobile first row's right half. Same
-            `sm:contents` trick: one cluster below `sm`, two flat siblings
+            `md:contents` trick: one cluster below `md`, two flat siblings
             above it. */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 sm:contents">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 md:contents">
         {/* Tempo BPM Control */}
         <TempoField bpm={bpm} setBpm={setBpm} />
 
@@ -357,17 +359,17 @@ export const TransportBar = React.memo(function TransportBar({ bottomInset = tru
         <PlayheadReadout />
       </div>
 
-      {/* Right Meter & Master Gain — the bar's SECOND ROW below `sm` (see the
+      {/* Right Meter & Master Gain — the bar's SECOND ROW below `md` (see the
           left group's note). Metronome/MIDI and meter/fader are wrapped as two
           clusters so `justify-between` spreads them to the row's two ends
           instead of scattering five controls evenly. */}
-      <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto justify-between sm:justify-start shrink-0">
-        <div className="flex items-center gap-1 sm:gap-2 sm:contents">
+      <div className="flex items-center gap-1 sm:gap-2 w-full md:w-auto justify-between md:justify-start shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 md:contents">
         {/* Metronome Toggle. Engine mirror happens via useEngineSync (one render later) */}
         <MetronomeToggle active={metronomeActive} onToggle={toggleMetronome} />
 
         {/* MIDI Activity Indicator. Visible at every width now that the bar
-            wraps to two rows below `sm` — the row it shares with the meter and
+            wraps to two rows below `md` — the row it shares with the meter and
             the fader has the space the single row did not. */}
         <MidiIndicator />
 
@@ -375,7 +377,7 @@ export const TransportBar = React.memo(function TransportBar({ bottomInset = tru
         <IncidentWarning />
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 sm:contents">
+        <div className="flex items-center gap-1 sm:gap-2 md:contents">
         {/* Real-time output level meter */}
         <VuMeter isPlaying={isPlaying} />
 

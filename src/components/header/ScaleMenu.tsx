@@ -72,18 +72,12 @@ export function ScaleMenu() {
       </div>
 
       {/* Below `xl` (mobile and landscape/portrait tablet): Compact Scale Picker Dropdown */}
-      {/* Centre-aligned on a phone, NOT `dropdown-end`. The panel is
-          224px wide and this summary's right edge sits ~169px into a
-          375px phone, so right-aligning it put both selects 50px off the
-          left of the screen — and the header clips (the app root is
-          `overflow-hidden`), so there was nothing to scroll to.
-          Start-aligning fixes that width and breaks 320px, where the
-          summary sits far enough right to push the panel off the other
-          edge; centring on the summary is the one alignment that clears
-          BOTH, because the summary sits near the middle of a phone
-          header either way. From `sm` up there is room to spare and the
-          panel goes back to hanging off the trigger's right edge. */}
-      <details className="dropdown dropdown-center sm:dropdown-end xl:hidden">
+      {/* Right-aligned (`dropdown-end`): the 224px panel hangs left from the
+          trigger's right edge. Below `md` the trigger sits at the right end of
+          the mobile top bar, beside the menu button, so a centred panel ran
+          ~31px off a 375px phone; from `md` up the trigger sits far enough
+          right in the desktop header for the same alignment to clear. */}
+      <details className="dropdown dropdown-end xl:hidden">
         <summary
           id="btn-scale-dropdown"
           className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
