@@ -14,12 +14,13 @@ import {
   type MixdownRenderProgress,
 } from '@/audio/export/renderMixdown';
 import { renderMidi } from '@/audio/export/renderMidi';
+import { renderStems } from '@/audio/export/renderStems';
 import type { MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
 import type { reportOperationFailure } from '@/incidents/operationFailure';
 import { slugifyProjectName } from '@/utils/projectFileIO';
 
-/** Kinds shipped on this build. DEV-429 adds stems. */
-export type ExportKindId = 'mixdown-wav' | 'midi';
+/** Kinds shipped on this build. */
+export type ExportKindId = 'mixdown-wav' | 'midi' | 'stems';
 
 /** A kind reports the renderer's phases: preparing, rendering(percent), encoding. */
 export type ExportProgress = MixdownRenderProgress;
@@ -110,10 +111,38 @@ const MIDI_EXPORT: ExportKindSpec = {
   },
 };
 
+/** One sentence per failure, in the same voice as `MIXDOWN_FAILURE_MESSAGE`. */
+export const STEMS_FAILURE_MESSAGE: Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string> = {
+  'empty-arrangement': 'There is nothing to export — the arrangement has no loops or no notes.',
+  'unsupported-context': 'This browser cannot render audio offline, so the stems could not be written.',
+  'render-failed': 'The stems could not be rendered. Your project is unchanged; try again.',
+};
+
+/** The file name a stems export downloads: the project's slug, `-stems.zip`. */
+export function stemsFileName(projectName: string | null): string {
+  return `${slugifyProjectName(projectName ?? '')}-stems.zip`;
+}
+
+/** One ZIP of dry per-track WAVs (ADR-0038): one Blob, so the runner downloads it unchanged (R293). */
+const STEMS_EXPORT: ExportKindSpec = {
+  id: 'stems',
+  label: 'Export stems (WAV, .zip)',
+  progressLabels: { rendering: 'Rendering stems', encoding: 'Encoding stems' },
+  failureMessages: STEMS_FAILURE_MESSAGE,
+  incidentOperation: 'stems-export',
+  run: async (snapshot, onProgress, signal) => {
+    const baseName = slugifyProjectName(snapshot.projectName ?? '');
+    const rendered = await renderStems(snapshot.song, baseName, new Date(), onProgress, signal);
+    if (!rendered.ok) return rendered;
+    return { ok: true, blob: rendered.blob, fileName: stemsFileName(snapshot.projectName) };
+  },
+};
+
 /** The one table. A `Record` over the id union: a declared, unregistered kind is a compile error. */
 const EXPORT_KIND_BY_ID: Record<ExportKindId, ExportKindSpec> = {
   'mixdown-wav': MIXDOWN_WAV_EXPORT,
   midi: MIDI_EXPORT,
+  stems: STEMS_EXPORT,
 };
 
 /** Every kind, in dialog order (insertion order of the table above). */

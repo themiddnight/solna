@@ -45,8 +45,6 @@ describe('ExportDialog', () => {
 
   test('advertises no kind this build cannot export', () => {
     const html = render(false, null);
-    expect(html).not.toContain('stem');
-    expect(html).not.toContain('Stem');
     expect(html).not.toContain('coming soon');
   });
 });
