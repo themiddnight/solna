@@ -6,6 +6,10 @@ import type { ArpSettings } from '@/types/synth';
 import { TRACK_ARP_DEFAULTS } from '@/store/initialState';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import type { AudioEngine } from '@/audio/engine';
+// A test, not a planner: the plan/ purity block and this file's own import-graph
+// guard both cover production code only (R227, R053), so exercising the engine-
+// touching `playFullHoldChord` here to pin its velocity against `fullHoldVelocity`
+// is not the banned planner-calls-chordPlayback edge.
 import { playFullHoldChord } from '../chordPlayback';
 import {
   arpEventsForStep,

@@ -68,4 +68,8 @@ declare module 'bun:test' {
   }
 
   export function expect<T>(actual: T, message?: string): Matchers<T>;
+  export namespace expect {
+    /** An asymmetric matcher: a `toEqual`/`toHaveBeenCalledWith` array need only contain `sample`. */
+    function arrayContaining(sample: unknown[]): unknown;
+  }
 }

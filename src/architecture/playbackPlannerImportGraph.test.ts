@@ -83,12 +83,6 @@ describe('playback planner runtime import graph (R289)', () => {
 
   test('the walker starts from at least the known planners', () => {
     const names = plannerFiles().map((f) => relative(PLAN_DIR, f));
-    // The repo's bun:test shim (src/types/bun-test.d.ts) types `expect` as a
-    // plain function with no static members, so `arrayContaining` needs a
-    // local cast rather than a change to that shared ambient module.
-    const expectWithArrayContaining = expect as typeof expect & {
-      arrayContaining(sample: unknown[]): unknown;
-    };
-    expect(names).toEqual(expectWithArrayContaining.arrayContaining(['chordPlan.ts', 'padPlan.ts', 'melodyPlan.ts']));
+    expect(names).toEqual(expect.arrayContaining(['chordPlan.ts', 'padPlan.ts', 'melodyPlan.ts']));
   });
 });
