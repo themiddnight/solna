@@ -1,5 +1,6 @@
 import type { KnobScale } from '@/utils/knob';
 import type { BeatFilterParams, BeatVoiceId, BeatVoices } from '@/types';
+import { formatPercent } from '@/utils/gainUnits';
 
 /**
  * The Beat editor's declarative control registry: one descriptor per stored
@@ -86,11 +87,6 @@ function formatHz(value: number): string {
 /** Time: ms below a second, seconds above it. Drum times are mostly ms. */
 function formatTime(value: number): string {
   return value < 1 ? `${Math.round(value * 1000)} ms` : `${value.toFixed(2)} s`;
-}
-
-/** Linear gain, send level and balance, all 0..1, all read as percent. */
-function formatPercent(value: number): string {
-  return `${Math.round(value * 100)}%`;
 }
 
 /** Q: a bare number, one decimal — there is no unit to print. */

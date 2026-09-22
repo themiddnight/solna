@@ -156,3 +156,8 @@ export const formatDb = (db: number): string => {
   const value = db === 0 ? 0 : db;
   return `${value.toFixed(1)} dB`;
 };
+
+/** A 0..1 level (linear gain, a send, a balance) read as a whole percent. */
+export function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}

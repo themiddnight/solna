@@ -5,9 +5,11 @@ import { isAnyPlayerActive } from '@/store/transportSlice';
 import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import { SectionCard } from '../ui/SectionCard';
 import { ChannelStrip, layerVolumeSliderId } from '../ui/ChannelStrip';
+import { Knob } from '../ui/Knob';
 import { PowerToggle } from '../ui/PowerToggle';
 import { SourceMeter } from '../ui/SourceMeter';
 import { useLiveStore } from '../ui/useLiveStore';
+import { useTrackSendsDraft } from './useTrackSendsDraft';
 import {
   MIX_GROUP_IDS,
   MIX_GROUP_LABELS,
@@ -17,7 +19,8 @@ import {
   type MixLayerId,
 } from '../mixLayers';
 import { FIELD_LABEL, GROUP_LABEL } from '../ui/fieldClasses';
-import { formatDb } from '@/utils/gainUnits';
+import { formatDb, formatPercent } from '@/utils/gainUnits';
+import { SEND_EFFECTS, type SendEffect } from '@/types';
 
 /**
  * A mix layer plus the two things only THIS surface has: the slice actions it
@@ -108,6 +111,45 @@ export const MIXER_GROUP_PLACEMENT: Record<MixGroupId, string> = {
   accompaniment: 'lg:col-start-2 lg:row-start-1 lg:row-span-2',
   beat: 'lg:col-start-1 lg:row-start-2',
 };
+
+/** Each send knob's short label and the accessible name's tail. */
+const SEND_KNOB_TEXT: Record<SendEffect, { label: string; aria: string }> = {
+  reverb: { label: 'Rev', aria: 'reverb send' },
+  delay: { label: 'Dly', aria: 'delay send' },
+  distortion: { label: 'Dist', aria: 'distortion send' },
+};
+
+/**
+ * One row's sends into the shared master reverb, delay and distortion
+ * (DEV-423): post-fader, per loop. The master wet knobs on the Master tab
+ * still set each effect's overall amount. All logic is in the hook; the value
+ * being dragged never reaches the store until release.
+ */
+function TrackSendKnobs({ channel }: { channel: MixerChannel }) {
+  const { sends, onChangeFor, onCommit, onCancel } = useTrackSendsDraft(channel.engineSource);
+  return (
+    <div className="flex gap-2">
+      {SEND_EFFECTS.map((effect) => (
+        <Knob
+          key={effect}
+          id={`knob-send-${channel.idPrefix}-${effect}`}
+          value={sends[effect]}
+          onChange={onChangeFor[effect]}
+          onCommit={onCommit}
+          onCancel={onCancel}
+          min={0}
+          max={1}
+          step={0.01}
+          size="xs"
+          color={channel.accentClass}
+          label={SEND_KNOB_TEXT[effect].label}
+          ariaLabel={`${channel.label} ${SEND_KNOB_TEXT[effect].aria}`}
+          format={formatPercent}
+        />
+      ))}
+    </div>
+  );
+}
 
 /**
  * One row = one layer. The store subscriptions live HERE, not in SoundMixer:
@@ -220,6 +262,7 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
             isPlaying={isPlaying}
             className="h-4 min-w-0"
           />
+          <TrackSendKnobs channel={channel} />
         </div>
       </div>
     </div>

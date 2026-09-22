@@ -80,6 +80,34 @@ describe('MIXER_CHANNELS', () => {
   });
 });
 
+describe('per-track send knobs', () => {
+  const html = renderToString(<SoundMixer />);
+  const EFFECTS = [
+    ['reverb', 'reverb send'],
+    ['delay', 'delay send'],
+    ['distortion', 'distortion send'],
+  ] as const;
+  const valueNow = (id: string) => openTagContaining(html, `id="${id}"`).match(/aria-valuenow="([^"]+)"/)?.[1];
+
+  test('every row carries Rev, Dly and Dist: eighteen knobs, named for their row', () => {
+    for (const c of MIXER_CHANNELS) {
+      for (const [effect, name] of EFFECTS) {
+        expect(openTagContaining(html, `id="knob-send-${c.idPrefix}-${effect}"`))
+          .toContain(`aria-label="${c.label} ${name}"`);
+      }
+    }
+    expect(html.match(/id="knob-send-/g)).toHaveLength(18);
+  });
+
+  test("each row shows its own committed sends: Beat is dry into delay and distortion", () => {
+    expect(valueNow('knob-send-drum-reverb')).toBe('1');
+    expect(valueNow('knob-send-drum-delay')).toBe('0');
+    expect(valueNow('knob-send-drum-distortion')).toBe('0');
+    expect(valueNow('knob-send-chord-delay')).toBe('1');
+    expect(openTagContaining(html, 'id="knob-send-drum-delay"')).toContain('aria-valuetext="0%"');
+  });
+});
+
 describe('SoundMixer', () => {
   const html = renderToString(<SoundMixer />);
 

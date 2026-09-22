@@ -7,6 +7,7 @@ import {
   DISPLAY_FLOOR_DBFS,
   FADER_MAX_DB,
   formatDb,
+  formatPercent,
   gainToDb,
   gainToDbfs,
   SILENCE_DB,
@@ -157,5 +158,13 @@ describe('formatDb', () => {
     // detent and true silence are the same place (contract divergence 2).
     expect(formatDb(SILENCE_DB)).toBe('-∞ dB');
     expect(formatDb(-59.9)).toBe('-59.9 dB');
+  });
+});
+
+describe('formatPercent', () => {
+  test('reads a 0..1 level as a whole percent', () => {
+    expect(formatPercent(0)).toBe('0%');
+    expect(formatPercent(0.254)).toBe('25%');
+    expect(formatPercent(1)).toBe('100%');
   });
 });
