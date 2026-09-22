@@ -17,7 +17,7 @@ grids that show it. (Superseded by ADR-0039: they are mounted once, in PlaybackH
 **Every one of the layers, tab views and Pattern segments stays mounted simultaneously**, gated
 `block`/`hidden` at three levels:
 
-- `App.tsx` on the layer (`isSongLayer(activeTab)`),
+- `App.tsx` on the layer (`isSongLayer(activeTab)`; since ADR-0040, `components/shell/LayerPages.tsx`),
 - `LoopPage.tsx` on `activeTab`,
 - `PatternView.tsx` on `segmentForFocus(focusTrack)`.
 
@@ -50,8 +50,8 @@ each travel through a module-level pub/sub in `src/components/` (`playbackStep.t
 ## Rules this implies
 
 - **R014** — Every layer (Loop, Song), tab view (Sound, Pattern, Arrange, Master) and Pattern
-  segment (Lead, FX, Accompaniment, Beat) stays mounted; gated `block`/`hidden` in `App.tsx`
-  (`isSongLayer(activeTab)`), `LoopPage.tsx` (`activeTab`), `PatternView.tsx`
+  segment (Lead, FX, Accompaniment, Beat) stays mounted; gated `block`/`hidden` in
+  `shell/LayerPages.tsx` (`isSongLayer(activeTab)`), `LoopPage.tsx` (`activeTab`), `PatternView.tsx`
   (`segmentForFocus(focusTrack)`).
 - **R015** — Audio never stops when switching tabs.
 - **R016** — High-frequency state (playback step, playhead beat, knob drag value) stays local to

@@ -53,14 +53,16 @@ Details: `.claude/rules/boundaries-and-gates.md`; why: `docs/decisions/0029-veri
 
 Single-page audio workstation ("Solna"): two layers (Loop, Song) holding four tab views — Sound
 and Pattern on the loop layer, Arrange and Master on the song layer — plus Pattern's four
-segments (Lead, FX, Accompaniment, Beat).
+segments (Lead, FX, Accompaniment, Beat). `Workspace` (`App.tsx`) keeps the coordinators,
+`PlaybackHost` and the dialogs; `useLayoutMode()` picks `DesktopShell` or `MobileShell`
+(`src/components/shell/`) for the visible frame. <!-- R316 -->
 
 ### Everything stays mounted
 
 - **Every layer, tab view and Pattern segment stays mounted**, gated `block`/`hidden` at three
-  levels: `App.tsx` (`isSongLayer(activeTab)`), `LoopPage.tsx` (`activeTab`), `PatternView.tsx`
-  (`segmentForFocus(focusTrack)`). Views stay mounted to keep their UI state (scroll, drag, meter
-  history, local state). <!-- R014 -->
+  levels: `shell/LayerPages.tsx` (`isSongLayer(activeTab)`), `LoopPage.tsx` (`activeTab`),
+  `PatternView.tsx` (`segmentForFocus(focusTrack)`). Views stay mounted to keep their UI state
+  (scroll, drag, meter history, local state). <!-- R014 -->
 - Audio never stops when switching tabs: it does not depend on mounting at all (R040). <!-- R015 -->
 - High-frequency state (playback step, playhead beat, a knob value mid-drag) stays local to the
   subtree that shows it, **never in a store slice** — a slice write re-renders every mounted
@@ -68,7 +70,8 @@ segments (Lead, FX, Accompaniment, Beat).
 - Transport controllers are mounted once, in `PlaybackHost`: **a lane sounds because the host is
   mounted, never because its grid is**. <!-- R040 -->
 
-Why: `docs/decisions/0001-always-mounted-views.md`, `docs/decisions/0039-playback-host.md`.
+Why: `docs/decisions/0001-always-mounted-views.md`, `docs/decisions/0039-playback-host.md`,
+`docs/decisions/0040-layout-shell.md`.
 
 ### Layer map
 
@@ -153,7 +156,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `theming.md` | Theme tokens and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |
 | `note-input.md` | The note-input dispatcher and focus-routed input |
-| `components.md` | Component logic in a colocated hook, narrow store selectors, placement |
+| `components.md` | Component logic in a colocated hook, narrow store selectors, placement, the layout shell and `HEADER_TOOLS` |
 | `utils.md` | One theme per `utils/` file, utils layering, placement |
 
 **Decisions:** the ADR index and template are in [`docs/decisions/README.md`](docs/decisions/README.md).

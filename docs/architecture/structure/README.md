@@ -30,7 +30,7 @@ playback controllers live there (see finding U1).
 ```mermaid
 flowchart TB
   subgraph Views["components/ — views AND playback controllers"]
-    Shell["App · Header (tabs, key/scale, export menu, theme)<br/>InstantVibesBar · TransportBar (play, BPM, meter, metronome)"]
+    Shell["App · layout shell (useLayoutMode → DesktopShell / MobileShell)<br/>Header (tabs, HEADER_TOOLS: key/scale, export, theme)<br/>InstantVibesBar · TransportBar (play, BPM, meter, metronome)"]
     LoopViews["Loop layer: SoundView · PatternView<br/>(Lead · FX · Accompaniment · Beat)"]
     SongViews["Song layer: ArrangeView · EffectsRackView"]
     Dock["BottomInputDock<br/>focus chip · keyboard · drum pads"]
@@ -128,8 +128,8 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 
 - **Misplaced logic.** `audio/` root holds about 8 files that build no audio (`leadMelody.ts` is 548 lines and is imported by `store/types.ts`). Preset lookups are spread across `audio/`, `store/` and `utils/`, which gives 8 duplicate filenames. Mixdown orchestration and the theme live in `Header.tsx`. (A6, D5, U7)
   **Mixdown half of U7 fixed on `refactor/dev-421-export-feature`:** export is its own feature
-  (`store/exportSlice.ts`, `store/exportJob.ts`, `store/exportKinds.ts`, `components/export/`);
-  the theme still lives in `Header.tsx`.
+  (`store/exportSlice.ts`, `store/exportJob.ts`, `store/exportKinds.ts`, `components/export/`).
+  **Theme half fixed (DEV-430):** the theme is `components/header/useTheme.ts`.
 - **Duplicated shapes.** The per-loop field list is written out in 5+ places, and slice defaults duplicate `createDefaultLoop`. (S7) **Fixed on `refactor/dev-424-loop-content`:** `LoopContent` is bound to `LOOP_FLAT_KEYS` and slice defaults read `createDefaultLoopContent()`; `sanitizeLoops` still validates field by field on purpose and `LOOP_COPY_GROUPS` stays a test-pinned partition.
 - **Large files.** `MasterRack` (1,286 lines, with 23 external field accesses from `DrumSynth`), `SortableLoopCard.tsx` (886), `PresetLibrary.tsx` (798), `useInputDeck.ts` (776). (A7, U)
 - **Naming.**

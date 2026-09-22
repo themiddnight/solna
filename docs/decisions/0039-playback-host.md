@@ -16,8 +16,9 @@ instead of being only a UI-state guarantee.
 - `components/playback/` holds the transport controllers: code used by the transport, not by any
   single view.
 - `PlaybackHost` returns `null`, wrapped in `React.memo`, and is rendered once in `Workspace`
-  (`App.tsx`) before `<LoopPage />`, ahead of `ArrangeView`; its hook order is the clock-listener
-  order — lead, lead publisher, fx, fx publisher, chord, sequencer.
+  (`App.tsx`) before `<LoopPage />`, ahead of `ArrangeView` (amended by ADR-0040: the first child
+  of `Workspace`'s root, before the layout shell — still ahead of every page); its hook order is
+  the clock-listener order — lead, lead publisher, fx, fx publisher, chord, sequencer.
 - `useLeadStepPublisher` moves with the rest: store and clock in, the `playbackStep` pub/sub out.
 - The chord controller splits into `useChordClockPlayback` (mounted by the host: clock
   subscription, note-on/off) and `useChordAudition` (mounted by the chord view: pattern preview).

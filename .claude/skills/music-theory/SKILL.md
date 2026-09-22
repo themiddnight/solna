@@ -72,7 +72,7 @@ Helpers: `getScaleNotes(root, scaleType)`, `isNoteInScale(note, root, scaleType)
 
 `src/store/musicContextSlice.ts` — `scaleRoot` (default `'A'`), `scaleType` (default `'Natural Minor'`),
 `projectTitle`, plus `applyTemplate(name)` which sets bpm + root + scale + title in one atomic `set()`.
-`Header.tsx` renders the pickers from `ROOTS` / `Object.keys(SCALES)`. The sequencer is **not**
+`header/ScaleMenu.tsx` renders the pickers from `ROOTS` / `Object.keys(SCALES)`. The sequencer is **not**
 scale-aware; only the chord tools, the bass engine and the scale-locked keyboard read these.
 
 ## Chord generation

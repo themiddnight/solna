@@ -19,7 +19,7 @@ Adopted from the e-form repos' conventions and adapted to solna's always-mounted
 - Never spread one props bag across several children; destructure and pass explicit props. A `ui/` primitive forwarding the rest of its native attributes to its one DOM element, or a thin wrapper forwarding its whole props to the one component it wraps, is not this. <!-- R270 -->
 - Do not pre-split a small component into hook + context + parts; extract when it grows. <!-- R271 -->
 - A colocated hook is extracted **in place**: it never lifts high-frequency state (the playback step, the playhead beat, a value mid-drag) above the subtree that shows it — not into a slice, not into a context provided higher up. That state stays local, or in the module pub/subs (`playbackStep.ts`, `playheadBeat.ts`), because every view stays mounted (R016). The `useXxxDraft` hooks and `useChordView.ts` are the precedent. <!-- R272 -->
-- Scope: new components, and an existing component when it is substantially edited. No mass refactor. Known debt, the largest files by `wc -l`: `song/SortableLoopCard.tsx`, `ui/PresetLibrary.tsx`, `loop/ChordPresetLibrary.tsx`, `song/EffectsRackView.tsx`, `Header.tsx`, `loop/SoundSynthSection.tsx` — tracked in DEV-426 / DEV-430. <!-- R273 -->
+- Scope: new components, and an existing component when it is substantially edited. No mass refactor. Known debt, the largest files by `wc -l`: `song/SortableLoopCard.tsx`, `ui/PresetLibrary.tsx`, `loop/ChordPresetLibrary.tsx`, `song/EffectsRackView.tsx`, `loop/SoundSynthSection.tsx` — tracked in DEV-426. <!-- R273 -->
 
 ```tsx
 // ✅ useLoopCard.ts beside it: export interface UseLoopCard { label; isActive; onSelect }
@@ -58,6 +58,14 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 
 ([ADR-0031](../../docs/decisions/0031-component-hook-store-selector-and-placement-conventions.md))
 
+## Layout shell
+
+- The layout mode is `useLayoutMode()` (`components/shell/useLayoutMode.ts`): viewport width at Tailwind's `md`, never persisted, never a slice, no user override; nothing else reads the viewport to pick a frame. <!-- R315 -->
+- `Workspace` owns everything that must survive a layout switch — the coordinators, `PlaybackHost` and the app-level dialogs; a shell (`DesktopShell`, `MobileShell`) owns only the visible frame and never mounts one of those. <!-- R316 -->
+- A Header tool is a `HEADER_TOOLS` row (`components/header/headerTools.ts`) whose `layers` is its only availability gate; a new tool is a row, never JSX in `Header.tsx`, and never gates itself on the layer. <!-- R317 -->
+
+([ADR-0040](../../docs/decisions/0040-layout-shell.md))
+
 ## Prohibited
 
 - `useState`/`useMemo`/`useCallback`/`useEffect`/handlers inline in a new or substantially edited component instead of a colocated hook <!-- R265 -->
@@ -73,3 +81,6 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - `useAppStore()` or `useAppStore((s) => s)` <!-- R274 -->
 - A plain selector returning a fresh object or array (use `useShallow`) <!-- R275 -->
 - One-area code in a shared folder, or shared code left inside one area <!-- R276 -->
+- A viewport read that picks a frame outside `useLayoutMode`, or the layout mode in a slice or storage <!-- R315 -->
+- A coordinator, `PlaybackHost` or an app-level dialog mounted inside a shell <!-- R316 -->
+- A Header tool written as JSX in `Header.tsx`, or a tool gating itself on the layer <!-- R317 -->

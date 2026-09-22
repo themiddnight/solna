@@ -53,9 +53,9 @@ is untouched. A store test of the slice needs a fake `document` for `downloadBlo
 
 - **R291** — Export state is one session-only `exportJob` in `src/store/exportSlice.ts`, never in `partializeAppState` or `PROJECT_CONTENT_KEYS`; "is an export busy" is `selectExportBusy` and nothing else.
 - **R292** — One job at a time: `startExport` while a job is active — `cancelling` and `downloading` included — returns `{ status: 'ignored' }` and changes nothing; there is no queue.
-- **R293** — An export kind is data: one `ExportKindSpec` in `src/store/exportKinds.ts`. Adding a kind adds its id and its spec there and edits nothing in `exportJob.ts`, `exportSlice.ts`, `Header.tsx` or `src/components/export/`.
+- **R293** — An export kind is data: one `ExportKindSpec` in `src/store/exportKinds.ts`. Adding a kind adds its id and its spec there and edits nothing in `exportJob.ts`, `exportSlice.ts`, `Header.tsx`, `header/headerTools.ts` or `src/components/export/`.
 - **R294** — The steps every kind shares — capture in the click's task, the paint yields, download, the success/failure notices, the incident on `render-failed`, clearing the job — live only in `startExport` and `runExportJob`; a kind's `run` renders and names its file and does nothing else.
-- **R295** — Closing the export dialog never cancels; only `cancelExport` does (the dialog's Cancel, or `installProject`). The Header holds only the song-layer `ExportButton` from `src/components/export/`, which is never disabled because it is the way back into a running job.
+- **R295** — Closing the export dialog never cancels; only `cancelExport` does (the dialog's Cancel, or `installProject`). The Header's tool list (`header/headerTools.ts`) holds only the song-layer `ExportButton` from `src/components/export/`, which is never disabled because it is the way back into a running job.
 
 ## Sources
 

@@ -32,7 +32,7 @@ return null.
 ### Storage access is always guarded
 
 `store.ts` falls back to an in-memory `StateStorage` when `localStorage` is unusable, and helpers
-like `Header.tsx`'s theme functions take an injectable storage param and read it *inside* a `try`,
+like `components/header/useTheme.ts`'s theme functions take an injectable storage param and read it *inside* a `try`,
 never in a default-parameter expression (a default-parameter expression evaluates outside the
 `try`, so a throwing `localStorage` would escape it).
 
@@ -57,7 +57,7 @@ never in a default-parameter expression (a default-parameter expression evaluate
 - **R213** — Tests/live reads call `flushPersistedWrites()` before asserting on `localStorage`.
 - **R244** — Storage access is guarded: `localStorage` can throw; `store.ts` falls back to in-memory
   `StateStorage`; helpers take an injectable storage param read inside a `try`, never in a
-  default-parameter expression (`Header.tsx` theme functions).
+  default-parameter expression (`header/useTheme.ts` theme functions).
 
 ## Sources
 

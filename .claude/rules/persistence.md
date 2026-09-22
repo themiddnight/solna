@@ -13,7 +13,7 @@ paths:
   - "src/utils/localFileSave.ts"
   - "src/utils/driveBrowser.ts"
   - "src/utils/projectFileIO.ts"
-  - "src/components/Header.tsx"
+  - "src/components/header/useTheme.ts"
   - "src/components/project/**"
 ---
 
@@ -35,7 +35,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - The `localStorage` write goes through `utils/coalescedStorage.ts` (idle callback, flush on `pagehide`/`visibilitychange`). <!-- R211 -->
 - Pointer-, clock- or animation-frame-driven code never writes persisted state directly (each such write re-serialises everything). <!-- R212 -->
 - Tests and live reads call `flushPersistedWrites()` before asserting on `localStorage`. <!-- R213 -->
-- Storage access is guarded: `localStorage` can throw; `store.ts` falls back to an in-memory `StateStorage`; helpers take an injectable storage param read inside a `try`, never in a default-parameter expression (`Header.tsx` theme functions). <!-- R244 -->
+- Storage access is guarded: `localStorage` can throw; `store.ts` falls back to an in-memory `StateStorage`; helpers take an injectable storage param read inside a `try`, never in a default-parameter expression (`header/useTheme.ts` theme functions). <!-- R244 -->
 
 ([ADR-0022](../../docs/decisions/0022-persist-write-path-and-guarded-storage.md))
 
