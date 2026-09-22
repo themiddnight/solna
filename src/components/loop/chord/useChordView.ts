@@ -38,10 +38,6 @@ import {
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import { isProgressionAvailable } from './progressionAvailability';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
-import {
-  applyKeyScaleChange,
-  shouldClearReharmonizeIndicator,
-} from './progressionHarmonize';
 import type { ChordItem, CustomChordProgressionItem } from '@/types';
 
 /**
@@ -305,77 +301,27 @@ export type ProgressionEditor = ReturnType<typeof useProgressionEditor>;
  * effects and the two buttons are one mechanism — split them and the
  * declaration order that keeps the refs fresh stops being visible.
  */
+/**
+ * The progression's harmonize controls. The key change itself — melodies AND
+ * chords — is one store write (`changeKey`, store/keyChange.ts); this hook only
+ * reads the session toggle and badge and offers the two buttons.
+ */
 export function useProgressionHarmonize(state: ChordViewState, saves: ProgressionSaves) {
   const { chords, setChords, scaleRoot, scaleType } = state;
-  const [autoReharmonize, setAutoReharmonize] = useState<boolean>(true);
-  const [isAutoReharmonizedIndicator, setIsAutoReharmonizedIndicator] = useState<boolean>(false);
+  const autoReharmonize = useAppStore((s) => s.autoReharmonize);
+  const isAutoReharmonizedIndicator = useAppStore((s) => s.reharmonizedIndicator);
+  const setAutoReharmonize = useAppStore((s) => s.setAutoReharmonize);
+  const setReharmonizedIndicator = useAppStore((s) => s.setReharmonizedIndicator);
 
-  // Auto-harmonize refs. The effect must not re-run when the toggle changes —
-  // only when the key or the chords do — so the toggle is read through a ref
-  // kept fresh by an effect declared above it (effects run in declaration
-  // order, so this is current by the time the next one runs).
-  const keyRef = useRef({ root: scaleRoot, scaleType });
-  const chordsRef = useRef(chords);
-  const autoReharmonizeRef = useRef(autoReharmonize);
-
-  useEffect(() => {
-    autoReharmonizeRef.current = autoReharmonize;
-  });
-
-  useEffect(() => {
-    const previousKey = keyRef.current;
-    const chordsReplaced = chordsRef.current !== chords;
-    chordsRef.current = chords;
-    keyRef.current = { root: scaleRoot, scaleType };
-
-    // A wholesale replacement that also changes the key (Instant Vibe swap)
-    // does not go through handleApplyLibraryChords, so a badge left over from
-    // an earlier real harmonization would otherwise stay on screen and wrongly
-    // claim the new chords were reharmonized. Re-harmonize and manual chord
-    // edits also replace the array but leave the key alone, so they must not
-    // trip this — see shouldClearReharmonizeIndicator's doc comment. This
-    // can't be retriggered by the effect's own setChords below:
-    // chordsRef.current is assigned before that call, so the follow-up run
-    // sees chordsReplaced === false.
-    if (shouldClearReharmonizeIndicator(previousKey, keyRef.current, chordsReplaced)) {
-      setIsAutoReharmonizedIndicator(false);
-    }
-
-    if (!autoReharmonizeRef.current) return;
-
-    const next = applyKeyScaleChange(
-      chords,
-      previousKey,
-      keyRef.current,
-      chordsReplaced,
-    );
-    if (!next) return;
-
-    // Remember what we wrote, so the run this setChords triggers sees the
-    // chords as unreplaced rather than harmonizing its own output.
-    chordsRef.current = next;
-    setChords(next);
-    setIsAutoReharmonizedIndicator(true);
-  }, [scaleRoot, scaleType, chords, setChords]);
-
-  const toggleAutoReharmonize = () => {
-    // Turning this ON must not rewrite the current chords: a snap
-    // here would reproduce the exact scramble this feature exists
-    // to remove (e.g. key change made while OFF, then toggled back
-    // ON would snap chords still sitting in the old key). Flipping
-    // the flag only starts applying `applyKeyScaleChange` to
-    // *future* key/scale changes; it is not itself a harmonize
-    // action. The explicit "Re-harmonize" button is the
-    // deliberate, user-requested snap — leave that one alone.
-    const nextVal = !autoReharmonize;
-    setAutoReharmonize(nextVal);
-    if (!nextVal) setIsAutoReharmonizedIndicator(false);
-  };
+  // Turning this ON must not rewrite the current chords (a snap here would
+  // reproduce the scramble this feature exists to remove); the store action
+  // only flips the flag, and turning it OFF clears the badge.
+  const toggleAutoReharmonize = () => setAutoReharmonize(!autoReharmonize);
 
   const reharmonizeNow = () => {
     const updated = snapProgressionToScale(chords, scaleRoot, scaleType);
     setChords(updated);
-    setIsAutoReharmonizedIndicator(true);
+    setReharmonizedIndicator(true);
     saves.setSaveToast(
       `Re-harmonized progression to ${formatKeyLabel(scaleRoot, scaleType)} (Option B)!`,
     );
@@ -387,7 +333,7 @@ export function useProgressionHarmonize(state: ChordViewState, saves: Progressio
     isAutoReharmonizedIndicator,
     toggleAutoReharmonize,
     reharmonizeNow,
-    clearReharmonizeBadge: () => setIsAutoReharmonizedIndicator(false),
+    clearReharmonizeBadge: () => setReharmonizedIndicator(false),
   };
 }
 

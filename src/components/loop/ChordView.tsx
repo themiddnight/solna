@@ -27,11 +27,6 @@ import {
   type PatternPreviews,
 } from './chord/useChordView';
 
-// Both helpers moved to `chord/progressionHarmonize.ts` when this component was
-// split; they are re-exported here because ChordView is where they are read
-// from (repo convention: a component exports its testable helpers).
-export { applyKeyScaleChange, shouldClearReharmonizeIndicator } from './chord/progressionHarmonize';
-
 /** The two header actions, and the saved-toast they fire. */
 interface ChordViewHeaderProps {
   onOpenQuickSave: () => void;
