@@ -1,19 +1,29 @@
 /**
- * MIDI lane/drum/meter tables and the pure mappers that turn a timeline event
- * into a `MidiNote`.
+ * The MIDI export: lane/drum/meter tables, the pure mappers that turn a
+ * timeline event into a `MidiNote`, and `renderMidi`, the seeded walk that
+ * writes the whole song as a Standard MIDI File.
  *
  * Built from the song timeline only (R296): nothing here re-derives an arp, a
  * chord rhythm, a strum or a hold — `walkSongTimeline` (`../playback/plan/songTimeline`)
  * already resolved every note and drum hit, and this file only converts that
  * resolved event into MIDI's units (ticks, a 0..127 velocity, a channel and a
- * note number). It imports only TYPES from `./renderMixdown` (never today —
+ * note number). It imports only TYPES from `./renderMixdown` (never a value —
  * that file pulls in `createRenderEngine` — and never the engine module
  * itself, directly or otherwise): the MIDI export must run where
  * `OfflineAudioContext` does not exist.
  */
-import { planArrangement, type SongTrack, type TimelineEvent } from '../playback/plan/songTimeline';
+import {
+  planArrangement,
+  walkSongTimeline,
+  type ArrangementPlan,
+  type SongTrack,
+  type TimelineEvent,
+} from '../playback/plan/songTimeline';
 import { songTrackVoice, type MixdownSnapshot } from '../playback/plan/songSnapshot';
-import type { SmfEvent, SmfFile, SmfTrack } from './smfWriter';
+import { MIXDOWN_SEED, withSeededRandom, yieldPreservingRandomStream } from '../rng';
+import { encodeSmf, type SmfEvent, type SmfFile, type SmfTrack } from './smfWriter';
+import type { MixdownFailureReason, MixdownProgressReporter } from './renderMixdown';
+import { noteMidi } from '@/musicCore';
 import type { BeatVoiceId } from '@/types';
 import type { MeterId } from '@/utils/meter';
 
@@ -200,4 +210,103 @@ export function songMidiFile(snapshot: MixdownSnapshot, notes: MidiNote[], title
     ...MIDI_LANES.map((lane) => laneTrack(lane, notes, songEndTick)),
   ];
   return { ppq: MIDI_PPQ, tracks };
+}
+
+/**
+ * Steps between progress reports, cooperative yields and abort checks — the
+ * same cadence as the WAV renderer's scheduling walk.
+ */
+const MIDI_YIELD_INTERVAL_STEPS = 200;
+
+type MidiRenderResult = { ok: true; blob: Blob } | { ok: false; reason: MixdownFailureReason };
+
+const CANCELLED: MidiRenderResult = { ok: false, reason: { kind: 'cancelled' } };
+
+/** One audible timeline event as a `MidiNote`, or `null` when it is dropped (§5.3, §8). */
+function midiNoteFor(snapshot: MixdownSnapshot, e: TimelineEvent): MidiNote | null {
+  if (!eventAudible(snapshot, e)) return null;
+  const lane: MidiLane = e.kind === 'note' ? e.track : 'beat';
+  const note = e.kind === 'note' ? noteMidi(e.noteName) : GM_DRUM_NOTE[e.voice];
+  if (note === null || note < 0 || note > 127) return null;
+  const velocity = midiVelocity(e.velocity);
+  if (velocity === null) return null;
+  const startTick = secondsToTicks(e.kind === 'note' ? e.startSec : e.timeSec, snapshot.bpm);
+  const endTick =
+    e.kind === 'note'
+      ? Math.max(startTick + 1, secondsToTicks(e.endSec, snapshot.bpm))
+      : startTick + MIDI_PPQ / 4;
+  const channel = MIDI_LANES.find((entry) => entry.lane === lane)!.channel;
+  return { lane, channel, note, velocity, startTick, endTick };
+}
+
+/**
+ * Drains the song walk into `MidiNote`s, reporting, yielding and checking the
+ * signal every `MIDI_YIELD_INTERVAL_STEPS` steps. Returns `null` when cancelled.
+ */
+async function collectMidiNotes(
+  snapshot: MixdownSnapshot,
+  plan: ArrangementPlan,
+  report: MixdownProgressReporter,
+  signal?: AbortSignal,
+): Promise<MidiNote[] | null> {
+  const notes: MidiNote[] = [];
+  let steps = 0;
+  for (const item of walkSongTimeline(snapshot, plan)) {
+    if (item.kind === 'pass') continue;
+    if (item.kind === 'stepEnd') {
+      steps += 1;
+      if (steps % MIDI_YIELD_INTERVAL_STEPS !== 0) continue;
+      report({ phase: 'rendering', percent: Math.floor((100 * (item.step + 1)) / plan.totalSteps) });
+      await yieldPreservingRandomStream();
+      if (signal?.aborted) return null;
+      continue;
+    }
+    const note = midiNoteFor(snapshot, item);
+    if (note) notes.push(note);
+  }
+  return notes;
+}
+
+/**
+ * The song as a Standard MIDI File (§8): the song timeline walked under
+ * `MIXDOWN_SEED`, so two exports of one song are byte-identical. Never throws —
+ * a failure is a `render-failed` result — and never touches an audio context.
+ *
+ * Arp `'random'` notes are deterministic per export but may differ from the
+ * WAV's: the WAV interleaves engine draws (noise offsets, sample-and-hold
+ * buffers) with the arp's on the same seeded stream, and the MIDI walk makes
+ * only the arp's (spec §9 R2, ADR-0036).
+ */
+export async function renderMidi(
+  snapshot: MixdownSnapshot,
+  title: string,
+  onProgress?: MixdownProgressReporter,
+  signal?: AbortSignal,
+): Promise<MidiRenderResult> {
+  const report: MixdownProgressReporter = (progress) => {
+    try {
+      onProgress?.(progress);
+    } catch {
+      // A progress observer never fails the export.
+    }
+  };
+  try {
+    if (signal?.aborted) return CANCELLED;
+    if (snapshot.loops.length === 0) return { ok: false, reason: { kind: 'empty-arrangement' } };
+    report({ phase: 'preparing' });
+
+    const plan = planArrangement(snapshot);
+    const notes = await withSeededRandom(MIXDOWN_SEED, () => collectMidiNotes(snapshot, plan, report, signal));
+    if (notes === null) return CANCELLED;
+
+    report({ phase: 'encoding' });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    if (signal?.aborted) return CANCELLED;
+    const bytes = encodeSmf(songMidiFile(snapshot, resolveNoteOverlaps(notes), title));
+    // Re-wrapped because `encodeSmf` types its bytes as `Uint8Array<ArrayBufferLike>`,
+    // which `BlobPart` rejects (it could be a SharedArrayBuffer view).
+    return { ok: true, blob: new Blob([new Uint8Array(bytes)], { type: 'audio/midi' }) };
+  } catch (err) {
+    return { ok: false, reason: { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) } };
+  }
 }
