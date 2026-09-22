@@ -1,23 +1,19 @@
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { BottomInputDock } from './components/ui/BottomInputDock';
-import { Header } from './components/Header';
-import { InstantVibesBar } from './components/InstantVibesBar';
 import { ProjectLoading } from './components/ProjectLoading';
-import { LoopPage } from './components/loop/LoopPage';
-import { SongPage } from './components/song/SongPage';
 import { PlaybackHost } from './components/playback/PlaybackHost';
-import { TransportBar } from './components/TransportBar';
+import { DesktopShell } from './components/shell/DesktopShell';
+import { MobileShell } from './components/shell/MobileShell';
+import { useLayoutMode } from './components/shell/useLayoutMode';
 import { IncidentDialog } from './components/ui/IncidentDialog';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { ProjectNotice } from './components/project/ProjectNotice';
-import { UpdateBanner } from './components/ui/UpdateBanner';
 import { installGlobalIncidentCapture } from './incidents/globalCapture';
 import { reportOperationFailure } from './incidents/operationFailure';
 import { hydrateLatestIncident } from './incidents/incidentStore';
 import { reportGlobalIncident, reportRenderIncident } from './store/incidentReporter';
 import { audioEngine } from './audio/engine';
-import { bootProject, useAppStore } from './store/store';
+import { bootProject } from './store/store';
 import { applyEngineSnapshot, useEngineSync } from './store/engineSync';
 import { startAudioRecoveryBridge } from './store/audioRecovery';
 import { useRouteSync } from './routing/useRouteSync';
@@ -29,7 +25,6 @@ import { useSoloNavClear } from './store/soloNav';
 import { useVibeNavClear } from './store/vibeNav';
 import { useReharmonizeNavClear } from './store/reharmonizeNav';
 import { useServiceWorkerUpdate } from './pwa/useServiceWorkerUpdate';
-import { isSongLayer } from './types';
 
 /** Minimal event-target shape `registerFirstGesture` needs — satisfied by
  * `window` in the app and by a fake target in tests (no DOM required). */
@@ -133,8 +128,9 @@ function Workspace() {
   // call in an app that is usually making sound.
   const { updateReady, applyPendingUpdate, dismissUpdate } = useServiceWorkerUpdate();
 
-  // UI slice
-  const activeTab = useAppStore((s) => s.activeTab);
+  // Desktop or mobile frame, by viewport width only (R315). Everything above
+  // and every element outside the shell below survives a switch (R316).
+  const mode = useLayoutMode();
 
   // Initialize audio engine on first user interaction (click, keydown, or
   // pointerdown — the global input deck's keyboard can start audio before any
@@ -168,49 +164,29 @@ function Workspace() {
       // background sits under the home indicator.
       className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
     >
-      {/* Navigation Header */}
-      <Header />
+      {/* Every transport controller, mounted once (DEV-422, R312): a lane
+          sounds because this is mounted, never because its grid is. Outside
+          the shell, so a layout switch never remounts it; before it, so its
+          hook order stays ahead of every page's clock listener. */}
+      <PlaybackHost />
 
-      {/* 1-Click Instant Vibes Quick Starter Bar. Loop-layer only: a vibe
-          rewrites the loop's chords, drums, presets and BPM, which is not an
-          action the song layer offers — showing it over the arrangement
-          invites a click that silently rewrites the loop being arranged. */}
-      {!isSongLayer(activeTab) && <InstantVibesBar />}
-
-      {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity.
-          Both layers stay mounted; the active layer gates which page is visible,
-          and each page toggles its own sub-tabs (block/hidden). */}
-      {/* `pb-9` reserves the strip the input dock's toggle floats over. The
-          dock's header is absolutely positioned above the dock body so a
-          collapsed deck costs no layout height, which also means it sits ON
-          TOP of whatever the page has scrolled to its bottom edge — without
-          this padding it covers the last row of chord chips or FX knobs and
-          swallows their clicks. */}
-      <main className="flex-1 min-h-0 relative overflow-y-auto pb-9">
-        {/* Every transport controller, mounted once (DEV-422, R312): a lane
-            sounds because this is mounted, never because its grid is. Before
-            the pages, so its hook order is the clock-listener order. */}
-        <PlaybackHost />
-        <div className={isSongLayer(activeTab) ? 'hidden' : 'block'}>
-          <LoopPage />
-        </div>
-        <div className={isSongLayer(activeTab) ? 'block' : 'hidden'}>
-          <SongPage />
-        </div>
-      </main>
-
-      {/* Bottom Input Dock — Keyboard | Drums, reachable from any page */}
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />
-
-      {/* A waiting service worker, announced above the transport bar. */}
-      <UpdateBanner
-        open={updateReady}
-        onReload={applyPendingUpdate}
-        onDismiss={dismissUpdate}
-      />
-
-      {/* Persistent Transport Bar at bottom */}
-      <TransportBar />
+      {mode === 'desktop' ? (
+        <DesktopShell
+          keyboardProps={keyboardProps}
+          drumProps={drumProps}
+          updateReady={updateReady}
+          onApplyUpdate={applyPendingUpdate}
+          onDismissUpdate={dismissUpdate}
+        />
+      ) : (
+        <MobileShell
+          keyboardProps={keyboardProps}
+          drumProps={drumProps}
+          updateReady={updateReady}
+          onApplyUpdate={applyPendingUpdate}
+          onDismissUpdate={dismissUpdate}
+        />
+      )}
 
       <IncidentDialog />
 

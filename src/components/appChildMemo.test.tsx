@@ -10,6 +10,10 @@ import { SoundView } from './loop/SoundView';
 import { ArrangeView } from './song/ArrangeView';
 import { SongPage } from './song/SongPage';
 import { PlaybackHost } from './playback/PlaybackHost';
+import { DesktopShell } from './shell/DesktopShell';
+import { MobileShell } from './shell/MobileShell';
+import { LayerPages } from './shell/LayerPages';
+import { SHELL_PROPS } from './shell/shellPropsFixture';
 
 // A React.memo result is an OBJECT with $$typeof === Symbol.for('react.memo')
 // and the wrapped component on `.type` — NOT a function carrying `compare`,
@@ -63,6 +67,9 @@ const CASES: Array<[string, unknown, AnyProps]> = [
   ['BottomInputDock', BottomInputDock, { keyboardProps, drumProps }],
   ['LoopPage', LoopPage, {}],
   ['SongPage', SongPage, {}],
+  ['LayerPages', LayerPages, {}],
+  ['DesktopShell', DesktopShell, { ...SHELL_PROPS }],
+  ['MobileShell', MobileShell, { ...SHELL_PROPS }],
 ];
 
 describe('App-level children are memoized, and memoizing changed no markup', () => {
