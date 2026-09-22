@@ -435,6 +435,39 @@ export default tseslint.config(
     },
   },
   {
+    // DEV-428: the MIDI export runs where OfflineAudioContext does not exist.
+    // renderMixdown.ts imports createRenderEngine, so only its TYPES may be
+    // imported here; the engine and its DSP neighbours never. The base rule
+    // is off because the TS-aware variant (needed for allowTypeImports) only
+    // runs without it; the src/audio/** bans are restated because this block
+    // REPLACES that one for these files (flat config, last match wins).
+    files: ['src/audio/export/renderMidi.ts', 'src/audio/export/smfWriter.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [TONAL_IMPORT_BAN],
+          patterns: [
+            TONAL_SCOPED_PACKAGE_BAN,
+            { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
+            { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
+            TAPER_CONVERSION_BAN,
+            {
+              group: ['../engine', '**/engine', '**/audio/engine', '**/beatAdapter', '**/drumSynth', '**/masterRack', '**/synth/**'],
+              message: 'the MIDI export builds no audio: no engine import (DEV-428, R296).',
+            },
+            {
+              group: ['./renderMixdown', '**/export/renderMixdown'],
+              allowTypeImports: true,
+              message: 'renderMixdown.ts pulls in the engine: import its types only (DEV-428).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // DEV-399: the audio ENGINE is a domain-agnostic runtime. It takes a
     // resolved frequency in Hz, an opaque VoiceId and an owner; it parses no
     // note name and reads no scale, chord, spelling or reharmonization module.
