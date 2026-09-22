@@ -19,7 +19,7 @@ import {
   eventsForCycleStep,
   type BarInvariantEvent,
   type StepEvent,
-} from '../chordPlayback';
+} from './chordEvents';
 
 /**
  * Everything the chord and bass lanes read when a chord is ARMED.

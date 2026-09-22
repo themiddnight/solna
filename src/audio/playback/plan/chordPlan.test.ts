@@ -6,7 +6,7 @@ import {
   planChordStep,
   type ChordPlanSnapshot,
 } from './chordPlan';
-import { arpEventsForStep, buildChordEvents, eventsForCycleStep } from '../chordPlayback';
+import { arpEventsForStep, buildChordEvents, eventsForCycleStep } from './chordEvents';
 import {
   cycleHoldScale,
   feelToHoldScale,

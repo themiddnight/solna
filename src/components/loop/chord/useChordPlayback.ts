@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store/store";
 import {
-  buildChordEvents,
-  chordPlanPosition,
   emitStepEvents,
   playFullHoldChord,
   scheduleWholeChord,
 } from "@/audio/playback/chordPlayback";
+import { buildChordEvents, chordPlanPosition } from "@/audio/playback/plan/chordEvents";
 import type { RhythmPattern } from "@/data/chordRhythms";
 import {
   cycleHoldScale,

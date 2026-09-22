@@ -24,7 +24,7 @@ import { AudioEngine, audioEngine } from '../engine';
 import { random } from '../rng';
 import { cycleHoldScale, resolvePlaybackBassCycle, resolvePlaybackRhythmCycle } from '../chordRhythms';
 import { planChordArm, planChordStep } from '../playback/plan/chordPlan';
-import { buildChordEvents, eventsForCycleStep } from '../playback/chordPlayback';
+import { buildChordEvents, eventsForCycleStep } from '../playback/plan/chordEvents';
 import { isApproachToken, resolveBassSteps } from '../bassPatterns';
 import { patternStoredIndexAt } from '@/utils/patternTimeline';
 import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
