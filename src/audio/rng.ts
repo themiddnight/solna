@@ -17,13 +17,14 @@
  * What the rule buys is that the ordinary ways to write this by accident, or
  * to route around the seam without thinking about it, all fail the gate.
  * It exists so an offline render can be made reproducible by installing a
- * seeded generator for the duration of the render. THREE callers install a
+ * seeded generator for the duration of the render. FOUR callers install a
  * replacement: the calibration harness in scripts/calibration/, the tests in
  * this directory, and — since the mixdown export shipped — the offline
  * renderer in src/audio/export/renderMixdown.ts, which is the first
- * PRODUCTION path to do so. Its replacement is scoped to one render and is
- * restored on every exit path; a caller that leaves one installed would make
- * every later caller, in the same process, silently non-random.
+ * PRODUCTION path to do so, and, since DEV-428, the MIDI export in
+ * src/audio/export/renderMidi.ts. Its replacement is scoped to one render and
+ * is restored on every exit path; a caller that leaves one installed would
+ * make every later caller, in the same process, silently non-random.
  */
 let randomSource: () => number = Math.random;
 
@@ -103,5 +104,51 @@ export async function withSeededRandom<T>(seed: number, run: () => T | Promise<T
     return await run();
   } finally {
     setRandomSource(null);
+  }
+}
+
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Yields exactly like `yieldToMainThread`, but additionally protects the
+ * seeded RNG stream `withSeededRandom` installed for this render from being
+ * corrupted by a concurrent caller.
+ *
+ * `rng.ts`'s `randomSource` is a module GLOBAL, and this render's own draws
+ * (a drum voice's noise start offset, a reverb impulse sample, an LFO's
+ * random waveform sample) all go through the shared `random()` seam with no
+ * argument identifying who is asking. Between two of THIS walk's own
+ * synchronous bursts nothing else can run — JS has one thread — so the only
+ * window where a foreign draw can land on our stream is the macrotask gap
+ * `setTimeout(resolve, 0)` opens. If the user is ALSO playing the project
+ * live while exporting (nothing pauses live playback for an export — see
+ * `store/exportSlice.ts`), the live 16th-clock's `setInterval` tick is a
+ * macrotask too, and a live note triggered in that gap would otherwise steal
+ * a draw from this render's mulberry32 generator, silently shifting every
+ * value the render reads after it resumes.
+ *
+ * The fix is to hand the generator itself, not just the intent to use it,
+ * out of scope for the gap: capture whatever `withSeededRandom` installed,
+ * swap the global to the ambient default so a foreign draw lands on
+ * `Math.random` instead (harmless — live playback has no determinism
+ * contract), then reassert this render's own generator before drawing from
+ * it again. The generator's internal counter is therefore only ever
+ * advanced by calls this render itself makes.
+ *
+ * Used by both offline exports (`export/renderMixdown.ts`, `export/renderMidi.ts`)
+ * and driven directly by `export/renderMixdownRngIsolation.test.ts` — proving
+ * this needs no `OfflineAudioContext`, only a seeded generator and a foreign
+ * `random()` call landing mid-yield, so the test drives this function
+ * directly rather than a whole render.
+ */
+export async function yieldPreservingRandomStream(): Promise<void> {
+  const ownRandomSource = getRandomSource();
+  setRandomSource(null);
+  try {
+    await yieldToMainThread();
+  } finally {
+    setRandomSource(ownRandomSource);
   }
 }

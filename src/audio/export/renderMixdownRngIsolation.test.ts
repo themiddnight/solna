@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getRandomSource, random, withSeededRandom } from '../rng';
-import { yieldPreservingRandomStream } from './renderMixdown';
+import { getRandomSource, random, withSeededRandom, yieldPreservingRandomStream } from '../rng';
 
 /**
  * Final-review fix (perf/audio-engine-fixes, Finding 2): Task 3 made

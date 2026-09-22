@@ -41,7 +41,7 @@ import {
   type SongWalkItem,
   type TimelineEvent,
 } from '../playback/plan/songTimeline';
-import { MIXDOWN_SEED, getRandomSource, setRandomSource, withSeededRandom } from '../rng';
+import { MIXDOWN_SEED, withSeededRandom, yieldPreservingRandomStream } from '../rng';
 import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
 import { getMeter } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
@@ -60,51 +60,6 @@ const MIXDOWN_TAIL_SEC = 2;
  * that the yield overhead (a macrotask hop) stays negligible next to the
  * scheduling work itself. */
 const SCHEDULE_YIELD_INTERVAL_STEPS = 200;
-
-function yieldToMainThread(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-/**
- * Yields exactly like `yieldToMainThread`, but additionally protects the
- * seeded RNG stream `withSeededRandom` installed for this render from being
- * corrupted by a concurrent caller.
- *
- * `rng.ts`'s `randomSource` is a module GLOBAL, and this render's own draws
- * (a drum voice's noise start offset, a reverb impulse sample, an LFO's
- * random waveform sample) all go through the shared `random()` seam with no
- * argument identifying who is asking. Between two of THIS walk's own
- * synchronous bursts nothing else can run — JS has one thread — so the only
- * window where a foreign draw can land on our stream is the macrotask gap
- * `setTimeout(resolve, 0)` opens. If the user is ALSO playing the project
- * live while exporting (nothing pauses live playback for an export — see
- * `store/mixdownSlice.ts`), the live 16th-clock's `setInterval` tick is a
- * macrotask too, and a live note triggered in that gap would otherwise steal
- * a draw from this render's mulberry32 generator, silently shifting every
- * value the render reads after it resumes.
- *
- * The fix is to hand the generator itself, not just the intent to use it,
- * out of scope for the gap: capture whatever `withSeededRandom` installed,
- * swap the global to the ambient default so a foreign draw lands on
- * `Math.random` instead (harmless — live playback has no determinism
- * contract), then reassert this render's own generator before drawing from
- * it again. The generator's internal counter is therefore only ever
- * advanced by calls this render itself makes.
- *
- * Exported for `renderMixdownRngIsolation.test.ts` — proving this needs no
- * `OfflineAudioContext`, only a seeded generator and a foreign `random()`
- * call landing mid-yield, so the test drives this function directly rather
- * than a whole render.
- */
-export async function yieldPreservingRandomStream(): Promise<void> {
-  const ownRandomSource = getRandomSource();
-  setRandomSource(null);
-  try {
-    await yieldToMainThread();
-  } finally {
-    setRandomSource(ownRandomSource);
-  }
-}
 
 /**
  * Why a render produced no file. A union rather than a string so the slice's

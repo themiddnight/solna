@@ -1,5 +1,12 @@
 import { describe, expect, test, afterEach } from 'bun:test';
-import { mulberry32, MIXDOWN_SEED, random, setRandomSource, withSeededRandom } from './rng';
+import {
+  mulberry32,
+  MIXDOWN_SEED,
+  random,
+  setRandomSource,
+  withSeededRandom,
+  yieldPreservingRandomStream,
+} from './rng';
 
 describe('rng', () => {
   afterEach(() => setRandomSource(null));
@@ -115,5 +122,15 @@ describe('withSeededRandom', () => {
     const first = await withSeededRandom(3, () => [random(), random(), random()]);
     const second = await withSeededRandom(3, () => [random(), random(), random()]);
     expect(second).toEqual(first);
+  });
+
+  test('yieldPreservingRandomStream is the rng seam: restores the caller\'s source after the yield', async () => {
+    const values = await withSeededRandom(7, async () => {
+      const first = random();
+      await yieldPreservingRandomStream();
+      return [first, random()];
+    });
+    const expected = await withSeededRandom(7, () => [random(), random()]);
+    expect(values).toEqual(expected);
   });
 });
