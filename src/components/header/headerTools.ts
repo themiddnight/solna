@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { Layer } from '@/types';
+import type { ToolVariantProps } from '@/components/ui/MenuRowButton';
 import { ExportButton } from '@/components/export/ExportButton';
 import { LoopCopyButton } from '@/components/loop/LoopCopyButton';
 import { LoopSelector } from '@/components/loop/LoopSelector';
@@ -16,8 +17,8 @@ type HeaderToolGroup = 'subject' | 'actions';
 
 interface HeaderTool {
   readonly id: HeaderToolId;
-  /** Takes no props: each tool reads the store itself. */
-  readonly Component: ComponentType;
+  /** Reads the store itself; its only prop is the rendering variant (`bar` inline, `row` in a menu). */
+  readonly Component: ComponentType<ToolVariantProps>;
   /** The layers the tool is available on — its only availability gate (R317). */
   readonly layers: readonly Layer[];
   readonly group: HeaderToolGroup;

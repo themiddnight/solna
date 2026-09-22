@@ -1,7 +1,14 @@
 import { Copy } from 'lucide-react';
 import { copyLoopSection } from '@/store/loopClipboard';
+import { MenuRowButton, type ToolVariantProps } from '@/components/ui/MenuRowButton';
 
-export function LoopCopyButton() {
+export function LoopCopyButton({ variant = 'bar' }: ToolVariantProps) {
+  if (variant === 'row') {
+    return (
+      <MenuRowButton id="btn-copy-loop" icon={<Copy className="w-4 h-4" aria-hidden="true" />}
+        label="Copy loop" onClick={() => copyLoopSection()} />
+    );
+  }
   return (
     <button
       id="btn-copy-loop"
