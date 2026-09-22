@@ -9,6 +9,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useAppStore } from '@/store/store';
 import { usePlayheadBeat } from '@/components/playheadBeat';
+import { useTimedToast } from '@/components/ui/useTimedToast';
 import { useChordAudition } from './useChordAudition';
 import { playingChord } from '@/components/playingChord';
 import {
@@ -152,7 +153,7 @@ export function useProgressionSaves(state: ChordViewState) {
   const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>('');
-  const [saveToast, setSaveToast] = useState<string | null>(null);
+  const { toast: saveToast, show: showSaveToast } = useTimedToast<string>();
 
   const handleQuickSaveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,8 +170,7 @@ export function useProgressionSaves(state: ChordViewState) {
     setCustomProgressions(useAppStore.getState().customChordProgressions);
     setIsQuickSaving(false);
     setQuickSaveName('');
-    setSaveToast(`Saved progression "${saved.name}"!`);
-    setTimeout(() => setSaveToast(null), 3000);
+    showSaveToast(`Saved progression "${saved.name}"!`, 3000);
   };
 
   const openQuickSave = () => {
@@ -180,7 +180,7 @@ export function useProgressionSaves(state: ChordViewState) {
 
   return {
     customProgressions, isQuickSaving, quickSaveName, saveToast,
-    setSaveToast, setQuickSaveName, openQuickSave,
+    showSaveToast, setQuickSaveName, openQuickSave,
     closeQuickSave: () => setIsQuickSaving(false),
     handleQuickSaveSubmit,
   };
@@ -329,10 +329,10 @@ export function useProgressionHarmonize(state: ChordViewState, saves: Progressio
     const updated = snapProgressionToScale(chords, scaleRoot, scaleType);
     setChords(updated);
     setReharmonizedIndicator(true);
-    saves.setSaveToast(
+    saves.showSaveToast(
       `Re-harmonized progression to ${formatKeyLabel(scaleRoot, scaleType)} (Option B)!`,
+      3000,
     );
-    setTimeout(() => saves.setSaveToast(null), 3000);
   };
 
   return {

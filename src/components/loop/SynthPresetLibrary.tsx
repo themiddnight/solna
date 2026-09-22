@@ -22,6 +22,7 @@ import { validateActiveSynth } from '@/store/sanitizeSynth';
 import { PresetLibrary } from '../ui/PresetLibrary';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { IconButton } from '../ui/IconButton';
+import { useTimedToast } from '../ui/useTimedToast';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
 import { previewSynthPatch } from '@/audio/playback/presetPreview';
 import type { PreviewHandle } from '@/audio/playback/presetPreview';
@@ -142,16 +143,14 @@ function useSynthLibraryIndex(currentPresetId: string | null) {
 
 /** The drawer's one toast line: a message, a tone, and its three-second self-clear. */
 function useSynthPresetToast() {
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
+  const { toast, show } = useTimedToast<{ msg: string; tone: 'success' | 'error' }>();
 
-  const showToast = useCallback((msg: string, tone: 'success' | 'error' = 'success') => {
-    setToastTone(tone);
-    setToastMsg(msg);
-    window.setTimeout(() => setToastMsg(null), 3000);
-  }, []);
+  const showToast = useCallback(
+    (msg: string, tone: 'success' | 'error' = 'success') => show({ msg, tone }, 3000),
+    [show],
+  );
 
-  return { toastMsg, toastTone, showToast };
+  return { toastMsg: toast?.msg ?? null, toastTone: toast?.tone ?? 'success', showToast };
 }
 
 /**

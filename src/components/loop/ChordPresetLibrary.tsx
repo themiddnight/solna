@@ -8,6 +8,7 @@ import { resolveProgression } from '@/audio/chordProgressions';
 import { PresetLibrary } from '../ui/PresetLibrary';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { IconButton } from '../ui/IconButton';
+import { useTimedToast } from '../ui/useTimedToast';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
 import { previewChordProgression } from '@/audio/playback/presetPreview';
 import type { PreviewHandle } from '@/audio/playback/presetPreview';
@@ -78,16 +79,14 @@ const BASE_CHORD_CATEGORIES: PresetCategory[] = [
 
 /** A library toast line: a message, a tone, and its three-second self-clear. */
 function useLibraryToast() {
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<'success' | 'error'>('success');
+  const { toast, show } = useTimedToast<{ msg: string; tone: 'success' | 'error' }>();
 
-  const showToast = (msg: string, tone: 'success' | 'error' = 'success') => {
-    setToastTone(tone);
-    setToastMsg(msg);
-    window.setTimeout(() => setToastMsg(null), 3000);
-  };
+  const showToast = useCallback(
+    (msg: string, tone: 'success' | 'error' = 'success') => show({ msg, tone }, 3000),
+    [show],
+  );
 
-  return { toastMsg, toastTone, showToast };
+  return { toastMsg: toast?.msg ?? null, toastTone: toast?.tone ?? 'success', showToast };
 }
 
 /** The key every card spells its chords against, plus the resolved tonic. */

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAppStore } from '@/store/store';
+import { useTimedToast } from '@/components/ui/useTimedToast';
 import type { SynthPreset, SynthPresetCategory } from '@/data/synthPresets';
 import {
   findPresetByName,
@@ -51,7 +52,7 @@ export const categoryPresetCount = (allPresets: SynthPreset[], categoryId: strin
 export function useSynthPresetBrowser(target: SynthControlTarget) {
   const [customPresets, setCustomPresets] = useState<SynthPreset[]>([]);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
-  const [saveToast, setSaveToast] = useState<string | null>(null);
+  const { toast: saveToast, show: showSaveToast } = useTimedToast<string>();
 
   // The browser follows the FOCUSED track, so it reads and writes its patch
   // through the shared target tables rather than being handed a value and a
@@ -94,16 +95,14 @@ export function useSynthPresetBrowser(target: SynthControlTarget) {
 
   const handleSelectPreset = (preset: SynthPreset) => {
     loadSynthPreset(target, preset);
-    setSaveToast(`Loaded [${preset.category}] "${preset.name}"`);
-    setTimeout(() => setSaveToast(null), 2500);
+    showSaveToast(`Loaded [${preset.category}] "${preset.name}"`, 2500);
   };
 
   // Adopting a just-saved preset never stops the bus — see
   // `store/synthPresetInstall.ts` for why that is the caller's call to make.
   const adoptSavedPreset = (preset: SynthPreset) => {
     adoptSavedSynthPreset(target, preset);
-    setSaveToast(`Preset "${preset.name}" saved to ${preset.category}!`);
-    setTimeout(() => setSaveToast(null), 3000);
+    showSaveToast(`Preset "${preset.name}" saved to ${preset.category}!`, 3000);
   };
 
   const handleStepPreset = (direction: -1 | 1) => {
