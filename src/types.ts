@@ -390,6 +390,13 @@ export interface BeatMix {
   voices: Record<BeatVoiceId, BeatVoiceMix>;
 }
 
+/** The three shared master effects a track can send into, in knob order. */
+export const SEND_EFFECTS = ['reverb', 'delay', 'distortion'] as const;
+export type SendEffect = (typeof SEND_EFFECTS)[number];
+
+/** One track's send levels: LINEAR gain, 0..1, applied after the track's fader and mute. */
+export type TrackSendLevels = Record<SendEffect, number>;
+
 /** A named template a patch is copied FROM. User presets carry the same shape. */
 export interface BeatPreset {
   id: string;
