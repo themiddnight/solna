@@ -146,7 +146,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `synth-voices.md` | `VoiceId`/owner, the frequency boundary, polyphony gain, voice lifetime, shared live/offline render |
 | `synth-patch.md` | Engine-tagged complete patches, presets, arp beside the patch, units in field names |
 | `persistence.md` | Persist write path, validation not migration, storage zones, project slot, autosave, Drive token |
-| `playback.md` | Clock, store→engine bridge, planned-then-performed playback, snapshots, pub/subs |
+| `playback.md` | Clock, store→engine bridge, planned-then-performed playback, song timeline, snapshots, pub/subs |
 | `metering.md` | Sample-based meters, tap point, meter scheduler |
 | `theming.md` | Theme tokens and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |

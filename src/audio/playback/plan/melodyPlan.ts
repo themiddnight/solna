@@ -24,8 +24,8 @@ import {
  * Melody is the one lane with no arm-time half at all — the controller rebuilds
  * this every dispatch out of live state, which is what lets a note drawn mid-bar
  * sound on the next step. The patch and the bus stay out of it: they are the
- * controller's, and `MixdownMelodyTrack` extends this type with exactly those
- * two fields.
+ * controller's — `songTrackVoice` (`plan/songSnapshot.ts`) is the offline table
+ * that pairs a track with its patch field and bus.
  *
  * `MELODY_TRACKS` is what makes one planner serve both Lead and FX: no field
  * here names a track, so nothing in this file can hardcode `'lead'`.

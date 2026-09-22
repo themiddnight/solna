@@ -306,7 +306,7 @@ no `mergeDrumKit`, and no trim table beside the engine (`src/audio/trims.ts` doe
   case would make that case dead code silently, which is why a test asserts the table exhaustively.
 - **The Beat is per LOOP**, and the store holds it as three sibling fields — `beatParams` (sound),
   `beatPattern` (events), `beatMix` (levels). A per-voice mute is applied twice on purpose:
-  `audio/beatSteps.ts` skips a muted voice's scheduled hits, and `engineSync.pushBeatVoiceGains`
+  `planBeatStep` (`audio/playback/plan/beatPlan.ts`) skips a muted voice's scheduled hits, and `engineSync.pushBeatVoiceGains`
   drives its gain to 0 so a drum-PAD hit or a live trigger the step walk never sees is silent too.
 - **Legacy drum state (`soundKit`, `drumFilter*`, `masterSequencerVolume`, `drumMuted`,
   `sequencerTracks`, `DrumKit`, `DRUM_KITS`) is gone from the app.** The only place those names may

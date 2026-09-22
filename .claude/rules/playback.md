@@ -52,19 +52,26 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ## Planned, then performed
 
-- Planners in `src/audio/playback/plan/` (`padPlan.ts`, `chordPlan.ts`, `melodyPlan.ts`) are pure: no store, no engine setter, no `AudioContext`, no wall clock, no timer (ESLint block on the folder, which bans the engine MODULE — `@/audio/engine` and `playbackEngine`, in both aliased and relative form; the engine-touching exports of `../chordPlayback` are banned only by convention). <!-- R227 -->
+- Planners in `src/audio/playback/plan/` (`padPlan.ts`, `chordPlan.ts`, `melodyPlan.ts`, `chordEvents.ts`, `beatPlan.ts`, `songSnapshot.ts`, `songTimeline.ts`) are pure: no store, no engine setter, no `AudioContext`, no wall clock, no timer (ESLint block on the folder, which bans the engine MODULE — `@/audio/engine` and `playbackEngine`, in both aliased and relative form; the transitive edge to the engine singleton is gated by R289, not by this block). <!-- R227 -->
 - `src/architecture/playbackPlannerPurity.test.ts` asserts the block's severity. <!-- R228 -->
-- A planner never calls `chordPlayback`'s engine-touching exports (`playFullHoldChord`, `emitStepEvents`, `scheduleWholeChord`) — convention, not gated. <!-- R229 -->
-- The clock subscription, arming state, full-hold strikes and note-ons belong to the controllers (`useChordPlayback.ts`, `useLeadPlayback.ts`, `renderMixdown.ts` offline). <!-- R230 -->
-- Four per-lane snapshot types (arm-time, immutable) plus a per-step context (emit-time, live); never unify them into one `PlaybackSnapshot`. <!-- R231 -->
+- A planner never imports `chordPlayback.ts` at all — the chord/bass event math it used to share with that file's engine-touching emitters now lives in `chordEvents.ts`; the import itself is gated by R289. <!-- R229 -->
+- Clock subscription and arming state belong to the live controllers (`useChordPlayback.ts`, `useLeadPlayback.ts`); offline, full-hold strikes and note-ons are performed by `renderMixdown.ts` from walk items, never planned by it. <!-- R230 -->
+- Per-lane snapshot types (arm-time, immutable) for Chord/bass, Pad, Melody and Beat (`BeatPlanSnapshot`) plus a per-step context (emit-time, live); never unify them into one `PlaybackSnapshot`. <!-- R231 -->
 - Chord/bass fix cycle, notes and the arp ACTIVE flag at arm and read synth patches and Arp settings live per step; `chordFeel`/`bassFeel` are read at both (arm → `cycleHoldScale`, emit → `feelToHoldScale`); pad is arm-only, melody emit-only. <!-- R232 -->
 - `src/store/playbackPlanSnapshots.ts` takes `AppStore` as an argument and never calls `useAppStore.getState()`. <!-- R233 -->
-- A new lane field goes in both snapshot builders (`playbackPlanSnapshots.ts`, `renderMixdown.ts`) or in neither. <!-- R234 -->
+- A new lane field goes in both snapshot builders — the store builder `src/store/playbackPlanSnapshots.ts` and the offline builder `plan/songSnapshot.ts` — or in neither. <!-- R234 -->
 - Every `plan<Lane>*` function's second parameter is a single context object, never positional scalars. <!-- R235 -->
 - Planner output is an inline anonymous type if read only where returned, named and exported if it crosses a call boundary; export a type only when a second file needs its name. <!-- R236 -->
 - `planChordStep`'s arp branch uses `feelToHoldScale`, not `cycleHoldScale`. <!-- R237 -->
 
 ([ADR-0027](../../docs/decisions/0027-planned-then-performed-playback.md))
+
+- `buildSongTimeline`/`walkSongTimeline` in `plan/songTimeline.ts` is the one place an arrangement becomes timed events; `renderMixdown.ts` only applies pass automation and performs walk items, and calls no planner. <!-- R287 -->
+- The renderer consumes `walkSongTimeline` incrementally, performing each item before resuming the walk; never collect the timeline before performing it. The walk's per-step emit order (drums, chord hold, bass hold, chord, bass, pad, lead, FX) is part of the contract. <!-- R288 -->
+- No runtime import path from `src/audio/playback/plan/` reaches `audio/engine` or `playbackEngine`; `src/architecture/playbackPlannerImportGraph.test.ts` walks the graph. <!-- R289 -->
+- Drums are planned by `planBeatStep` (`plan/beatPlan.ts`) for both the live stepper and the timeline; no caller decides drum voices or velocity itself. <!-- R290 -->
+
+([ADR-0034](../../docs/decisions/0034-pure-song-event-timeline.md))
 
 ## Prohibited
 
@@ -80,9 +87,13 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - A direct `audioEngine` call from `src/store/` without a cut/preview/lifecycle docblock reason <!-- R225 -->
 - A persistent value reaching the engine other than through `engineSync` <!-- R226 -->
 - A store read, engine call, `AudioContext`, wall clock or timer in a planner <!-- R227 -->
-- A planner calling `chordPlayback`'s engine-touching exports <!-- R229 -->
+- A planner importing `chordPlayback.ts` <!-- R229 -->
 - One unified `PlaybackSnapshot` <!-- R231 -->
 - `useAppStore.getState()` inside `playbackPlanSnapshots.ts` <!-- R233 -->
 - A lane field in only one snapshot builder <!-- R234 -->
 - Positional scalars after a planner's snapshot <!-- R235 -->
 - Exporting a planner type no second file names <!-- R236 -->
+- A planner call or engine-independent event decision inside `renderMixdown.ts` <!-- R287 -->
+- Collecting the song walk into an array before performing it, or reordering its per-step emit order <!-- R288 -->
+- A runtime import from `plan/` that reaches `audio/engine` or `playbackEngine` <!-- R289 -->
+- Deciding drum voices or velocity outside `planBeatStep` <!-- R290 -->

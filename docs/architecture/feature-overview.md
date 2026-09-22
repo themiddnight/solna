@@ -37,8 +37,8 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | `data/` | Pure factory content; no runtime imports (type-only imports allowed) | `synthPresets`, `beatPresets`, `drumGrids`, `chordProgressions`, `chordRhythms`, `bassPatterns`, `effectChains`, `scales`, `vibes` |
 | `musicCore/` | Music theory domain (the only `tonal` user) | `tonalAdapter`, `chordQuality`, `pitch`, `scale` |
 | `utils/` | Helpers (theory, timing, gain units, meters, WAV encode, storage); not all pure — no layering block | `musicTheory`, `noteSpelling`, `gainUnits`, `meterScheduler`, `encodeWav` |
-| `audio/` | Raw Web Audio engine, plus root-level pattern/melody logic that builds no nodes | `engine` (singleton), `masterRack`, `synth/*` (subtractive voices), `drumSynth`, `clock`, `leadMelody`, `chordRhythms`, `beatSteps` |
-| `audio/playback/` | Engine bridges + planners (controllers themselves are hooks in `components/`) | `playbackEngine`, `plan/{padPlan,chordPlan,melodyPlan}`, `chordPlayback`, `synthPlayback`, `arpPlayback`, `noteInputBus` |
+| `audio/` | Raw Web Audio engine, plus root-level pattern/melody logic that builds no nodes | `engine` (singleton), `masterRack`, `synth/*` (subtractive voices), `drumSynth`, `clock`, `leadMelody`, `chordRhythms` |
+| `audio/playback/` | Engine bridges + planners (controllers themselves are hooks in `components/`) | `playbackEngine`, `plan/{padPlan,chordPlan,melodyPlan,chordEvents,beatPlan,songSnapshot,songTimeline}`, `chordPlayback`, `synthPlayback`, `arpPlayback`, `noteInputBus` |
 | `audio/export/` | Offline mixdown | `renderMixdown` |
 | `audio/runtime/` | AudioContext session & health | `audioSession`, `healthMonitor`, `policy` |
 | `store/` | Zustand store (slices) + bridges | `store`, `*Slice`, `engineSync`, `sanitize`, `projectStore`, `projectAutosave`, `drive*`, `midiInput`, `vibes` |
@@ -184,4 +184,5 @@ sequenceDiagram
   Ctrl->>Eng: triggerSynthNoteOff(VoiceId, time)
 ```
 
-The same planners and snapshots drive `renderMixdown` offline, so the export matches live playback.
+The same planners and snapshots drive `renderMixdown` offline through the song timeline
+(`walkSongTimeline`), so the export matches live playback.

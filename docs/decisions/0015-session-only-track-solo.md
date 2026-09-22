@@ -49,10 +49,11 @@ compute it ([ADR-0002](0002-four-layer-import-architecture.md),
 
 Solo moves the Beat **bus** only; the per-voice mute in `beatMix.voices`
 ([ADR-0010](0010-beat-instrument-three-fields.md)) is a second, independent layer, and both must
-pass for a voice to sound. That layer has TWO appliers by design: `audio/beatSteps.ts` skips a
-muted voice's scheduled hits so no silent voice is ever built, and `engineSync`'s
-`pushBeatVoiceGains` drives the voice's gain to 0 — which is the one that silences what the step
-walk never sees, a drum PAD hit or a live trigger. Neither cancels the other; both mean silence.
+pass for a voice to sound. That layer has TWO appliers by design: `planBeatStep`
+(`audio/playback/plan/beatPlan.ts`, path updated by ADR-0034) skips a muted voice's scheduled hits
+so no silent voice is ever built, and `engineSync`'s `pushBeatVoiceGains` drives the voice's gain
+to 0 — which is the one that silences what the step walk never sees, a drum PAD hit or a live
+trigger. Neither cancels the other; both mean silence.
 
 ## Consequences
 
@@ -78,8 +79,9 @@ walk never sees, a drum PAD hit or a live trigger. Neither cancels the other; bo
   `isTrackAudible` from `store/trackAudibility.ts`); a view never computes it.
 - **R161** — Solo moves the Beat bus only; per-voice mute (`beatMix.voices`) is independent; both
   must pass.
-- **R162** — Per-voice mute has two appliers, keep both: `audio/beatSteps.ts` skips hits;
-  `engineSync`'s `pushBeatVoiceGains` sets gain 0 (pads, live triggers).
+- **R162** — Per-voice mute has two appliers, keep both: `planBeatStep`
+  (`audio/playback/plan/beatPlan.ts`, path updated by ADR-0034) skips hits; `engineSync`'s
+  `pushBeatVoiceGains` sets gain 0 (pads, live triggers).
 
 ## Sources
 

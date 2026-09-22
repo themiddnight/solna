@@ -7,7 +7,7 @@ paths:
   - "src/data/beatPresets.ts"
   - "src/data/trimTable.ts"
   - "src/audio/beatAdapter.ts"
-  - "src/audio/beatSteps.ts"
+  - "src/audio/playback/plan/beatPlan.ts"
   - "src/audio/drumSynth.ts"
   - "src/components/loop/beat/**"
   - "src/components/ui/DrumPadGrid.tsx"
@@ -44,7 +44,7 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 
 - `replaceBeatPattern` clears every voice no grid row names; never merge. <!-- R088 --> ([ADR-0009](../../docs/decisions/0009-vibes-as-data-and-single-drum-grid-library.md))
 - Solo moves the Beat bus only; the per-voice mute in `beatMix.voices` is independent, and both must pass for a voice to sound. <!-- R161 -->
-- Per-voice mute has two appliers; keep both: `audio/beatSteps.ts` skips a muted voice's scheduled hits, and `engineSync`'s `pushBeatVoiceGains` sets its gain to 0 (covers pads and live triggers). <!-- R162 -->
+- Per-voice mute has two appliers; keep both: `planBeatStep` (`audio/playback/plan/beatPlan.ts`, path updated by ADR-0034) skips a muted voice's scheduled hits, and `engineSync`'s `pushBeatVoiceGains` sets its gain to 0 (covers pads and live triggers). <!-- R162 -->
 
 ([ADR-0015](../../docs/decisions/0015-session-only-track-solo.md))
 

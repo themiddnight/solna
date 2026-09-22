@@ -54,7 +54,6 @@ physical lines pass it.
 | `leadMelody.ts` | The lead/FX grid data model: tick/column mapping, resize, transpose, copy/paste a bar, schedule hits | 20 exports | `types/synth`, `utils/{musicTheory,stepResolution}` |
 | `leadLiveRecord.ts` | Pure live-record clock: anchors, quantise, map a tick to a column | `createLeadLiveClock`, `quantiseInputStep`, … | `utils/stepResolution` |
 | `leadStepRecord.ts` | Octave window for step recording | `leadRecordOctave`, `noteOctave` | `@/musicCore` |
-| `beatSteps.ts` | Pure "which drum voices fire on this step" decision, shared by live and offline | `beatStepEvents` | `data/beatPresets`, `types` |
 | `chordProgressions.ts`, `drumGrids.ts`, `effectChains.ts` | Id lookups over `data/` tables | `progressionById`/`resolveProgression`, `drumGridById`, `requireEffectChain` | `data/*` |
 | `groupByStyle.ts` | Generic group-by-`style` helper | `groupByStyle` | none |
 
@@ -85,7 +84,7 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
 | `heldNotes.ts` | no | Held-note bookkeeping keyed by target |
 | `noteInputBus.ts` | no | Pub/sub for performed notes (`emitNoteInput`, `subscribeNoteInput`) |
 | `leadLiveClock.ts` | via `playbackEngine` | Singleton anchor collector for live recording, started by `store/leadRecord.ts:88` |
-| `plan/padPlan.ts`, `plan/chordPlan.ts`, `plan/melodyPlan.ts` | not directly (see F8) | Pure planners: `planPadArm`, `planChordArm`, `planChordStep`, `planChordLane`/`planBassLane`, `planMelodyStep` |
+| `plan/padPlan.ts`, `plan/chordPlan.ts`, `plan/melodyPlan.ts`, `plan/chordEvents.ts`, `plan/beatPlan.ts`, `plan/songSnapshot.ts`, `plan/songTimeline.ts` | no (`src/architecture/playbackPlannerImportGraph.test.ts` guards the transitive edge) | Pure planners: `planPadArm`, `planChordArm`, `planChordStep`, `planChordLane`/`planBassLane`, `planMelodyStep`, `planBeatStep`, `buildChordEvents`, `walkSongTimeline`/`buildSongTimeline` |
 
 ### 1.5 `runtime/`, `export/`, `automation/`, and test support
 
@@ -109,7 +108,7 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
 - `leadMelody`: 11 importers, 7 of them in `store/` (including `store/types.ts`,
   `initialState.ts`, `sanitize.ts`).
 - `chordRhythms`: `useInputDeck`, `useChordPlayback`, `useChordView`, `ChordModulePanel`.
-- `bassPatterns`, `beatSteps`, `constants`, `leadLiveRecord`, `leadStepRecord`,
+- `bassPatterns`, `constants`, `leadLiveRecord`, `leadStepRecord`,
   `chordProgressions`, `drumGrids`, `effectChains`, `effectLimits`, `beatAdapter`, `rng`,
   `diagnostics`, `masterRack` (type only, from `engineSync`) each have 1–4 importers.
 
@@ -252,7 +251,7 @@ live scheduler (`presetPreview.ts:106-116`).
 | Chord and bass | `useChordPlayback.ts` (components) | `planChordArm` / `planChordStep` (`plan/chordPlan.ts`), snapshot from `store/playbackPlanSnapshots` | `playFullHoldChord` / `emitStepEvents` (`chordPlayback.ts:138`, `:283`, owner `sequencer`); bass full-hold goes through `playbackNoteOn` (`useChordPlayback.ts:169`) | `chord`, `bass` |
 | Pad | `useChordPlayback.ts:128-137` | `planPadArm` → `resolvePadArm` (`playback/padPlayback.ts`) | `playFullHoldChord(…, 'pad')`, owner `sequencer` | `pad` |
 | Lead and FX | `useLeadPlayback.ts:95-133` | `planMelodyStep` (`plan/melodyPlan.ts` → `leadMelody.ts`) | `playbackNoteOn/Off` (owner pinned `sequencer`, `playbackEngine.ts:37`) | `synth`, `fx` |
-| Drums (sequencer) | `useSequencerPlayback.ts:110-139` | `beatStepEvents` (`audio/beatSteps.ts`, **not** in `plan/`) | `triggerPad` → `triggerDrum` (no voice id, no owner) | `sequencer` |
+| Drums (sequencer) | `useSequencerPlayback.ts:110-139` | `planBeatStep` (`plan/beatPlan.ts`) | `triggerPad` → `triggerDrum` (no voice id, no owner) | `sequencer` |
 | Keyboard arp | `useArpPlayback` (**in `audio/playback/`**) | `computeArpTick` (same file) | `triggerSynthNoteOn(…, 'arp')` (`arpPlayback.ts:190`) | focused target |
 | Live keys, on-screen keys, MIDI notes | `useInputDeck.ts:366-393`; `store/midiInput.ts:275` | none | `synthPlaybackNoteOn` → owner `live` (`synthPlayback.ts:58-66`) plus `emitNoteInput` | focused target (MIDI always `synth`) |
 | Drum pads | `useInputDeck.ts:619` | none | `triggerPad` | `sequencer` |
@@ -322,14 +321,20 @@ Flow:
 2. Inside `withSeededRandom(MIXDOWN_SEED)`, call `createRenderEngine(ctx)`. This is a fresh
    `AudioEngine` whose `bindContext` creates an `AudioSession` (`engine.ts:457-466`, `:732-736`).
 3. `applyMasterState` (`:469-480`).
-4. `scheduleArrangement` walks every step of every pass directly, with no `Clock` (`:542-670`).
+4. `planArrangement` (`plan/songTimeline.ts`) sizes the context from the arrangement's passes.
+   `scheduleArrangement` then performs `walkSongTimeline`'s items — pass markers, note/drum
+   events, step ends — one at a time, applying that pass's audio automation on its marker and
+   resuming the generator between items; there is no `Clock` and no collected array (R288,
+   ADR-0034). `buildSongTimeline` is the same walk drained and stable-sorted by time into one
+   `SongTimeline`, the form a consumer outside a render (DEV-428/DEV-429) reads instead of
+   performing the walk itself.
 5. `startRendering()`, then `encodeWav` (`:797-813`).
 
 Shared with live:
 - The same engine class and graph code (`AudioSession`, `MasterRack`, `DrumSynth`,
   `SynthVoiceManager`).
 - The pure planners `planChordArm`/`planChordStep` (`:456`, `:626`), `planPadArm` (`:645`),
-  `planMelodyStep` (`:526`) and `beatStepEvents` (`:585`).
+  `planMelodyStep` (`:526`) and `planBeatStep` (`plan/beatPlan.ts`).
 - The emitters `playFullHoldChord` and `emitStepEvents` (`:601-638`), with `engine` injected.
 - `applyBeatParams` (`:503`).
 
@@ -419,18 +424,20 @@ Offline guards:
 
 - **F6 — Music and grid logic lives in `audio/`.** `leadMelody.ts` (548 lines, 20 exports, 11
   importers including `store/types.ts`), `leadLiveRecord.ts`, `leadStepRecord.ts`,
-  `chordRhythms.ts`, `bassPatterns.ts`, `arpeggiator.ts`, `arpSchedule.ts` and `beatSteps.ts`
+  `chordRhythms.ts`, `bassPatterns.ts`, `arpeggiator.ts` and `arpSchedule.ts`
   build no audio nodes. Nor do the lookup wrappers `chordProgressions.ts`, `drumGrids.ts`,
   `effectChains.ts` and `groupByStyle.ts`, which read like `utils/` or a domain folder.
   `idleSuspend.ts` and `diagnostics.ts` belong in `runtime/`; `voiceOwner.ts` belongs beside
   `synth/voiceId.ts`.
-- **F7 — Planner placement is inconsistent.** Drums have no planner in `plan/`; their decision
-  is root-level `beatSteps.ts`, outside the planner-purity lint. `playback/padPlayback.ts` is
-  pure but named like an engine bridge. The arp's decision (`computeArpTick`) sits inside a
-  React hook module.
-- **F8 — A "pure" planner transitively loads the engine singleton.** `plan/chordPlan.ts:16-22`
-  imports `../chordPlayback`, and `chordPlayback.ts:1` imports `audioEngine`, so evaluating the
-  planner constructs `new AudioEngine()` (`engine.ts:719`). CLAUDE.md acknowledges this path.
+- **F7 — Planner placement is inconsistent.** **Partly fixed (ADR-0034).** Drums are now planned
+  by `planBeatStep` (`plan/beatPlan.ts`), shared by the live stepper and the offline song
+  timeline. `playback/padPlayback.ts` is pure but named like an engine bridge. The arp's decision
+  (`computeArpTick`) still sits inside a React hook module — deferred.
+- **F8 — A "pure" planner transitively loads the engine singleton.** **Fixed (ADR-0034).** The
+  chord/bass event math moved to pure `plan/chordEvents.ts`, which imports nothing
+  engine-touching; `plan/chordPlan.ts` no longer imports `../chordPlayback`.
+  `src/architecture/playbackPlannerImportGraph.test.ts` walks the graph so a transitive edge to
+  the engine singleton cannot reopen silently.
 - **F9 — A React hook lives in `audio/`.** `arpPlayback.ts:1` and `:160`, against the "audio is
   plain data" intent of the layering.
 - **F10 — God objects and shared mutable fields.** `MasterRack` (1286 lines) owns the graph,

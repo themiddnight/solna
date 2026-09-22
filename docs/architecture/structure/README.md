@@ -52,7 +52,7 @@ flowchart TB
     Eng["engine singleton"]
     Rack["MasterRack (god object)<br/>source buses → reverb/delay/distortion sends (not the Beat bus) → master → comp → limiter"]
     Voices["synth/ voiceManager · drumSynth"]
-    Logic["root-level music/pattern logic<br/>leadMelody · chordRhythms · bassPatterns · beatSteps …"]
+    Logic["root-level music/pattern logic<br/>leadMelody · chordRhythms · bassPatterns …"]
     Exp["export/renderMixdown"]
   end
 
@@ -110,8 +110,8 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 | U4/A3 | The playback controllers live in `components/`. Each lane only sounds because its grid is mounted, so `components/` are not dumb views. | `SequencerGrid.tsx`, `LeadMelodyGrid.tsx`, `useChordView.ts` | **Documented** in CLAUDE.md (layer 4); moving them is deferred. |
 | S3 | `engineSync` is not the only store → engine path: a set of store modules call `audioEngine` directly. | 02-store §5a | **Documented** in CLAUDE.md as a rule (cuts, previews, lifecycle); MIDI CC left the list. |
 | S1 | IndexedDB uses one object store with one key. CLAUDE.md said bodies and metadata live in separate stores. | `projectStoreIdb.ts` | **Fixed** in CLAUDE.md. |
-| A4 | A "pure" planner imports `chordPlayback`, which instantiates the engine singleton. | `plan/chordPlan.ts`, `chordPlayback.ts` | Deferred. |
-| A5 | There is a React hook inside `audio/`, and drums have no planner in `plan/`. | `arpPlayback.ts`; `beatSteps.ts` | Deferred. |
+| A4 | A "pure" planner imports `chordPlayback`, which instantiates the engine singleton. | `plan/chordPlan.ts`, `chordPlayback.ts` | **Fixed.** The chord/bass event math moved to pure `plan/chordEvents.ts`, which imports nothing engine-touching; `src/architecture/playbackPlannerImportGraph.test.ts` guards the transitive edge so it cannot silently reopen. |
+| A5 | There is a React hook inside `audio/`, and drums have no planner in `plan/`. | `arpPlayback.ts`; `plan/beatPlan.ts` | **Partly fixed.** Drums are now planned by `planBeatStep` (`plan/beatPlan.ts`), shared by the live stepper and the offline timeline. The React hook (`arpPlayback.ts`) remains inside `audio/`, deferred. |
 | D2 | The meter-file exemption turns off every import ban for those files, including the tonal and taper bans. | `eslint.config.js` | **Documented** in CLAUDE.md; config unchanged. |
 | D3 | `utils/`, `diagnostics/` and `routing/` have no layering block. `diagnostics/` imports the store, the engine and a UI Modal. | `diagnostics/browserRecorder.ts` | Deferred. |
 | D-cyc | Runtime file cycles: `sanitize` ↔ `leadSlice`, and `store` → `loopCopySlice` → `loadLoop` → `store`. | 04 §1.5 | Deferred. |
@@ -121,8 +121,8 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 - **Per-track FX** (user decision 2026-09-21): drums become an ordinary track with sends like the
   others; decide then whether the per-voice `reverbSend` becomes a voice-level send into the
   track's reverb or is removed. Until then `SOURCES_WITHOUT_MASTER_SENDS` states today's rule.
-- Everything in the smells list below, plus A4, A5, D3, D-cyc and moving the controllers out of
-  `components/` — see the plan's "Deferred" section for the full list.
+- Everything in the smells list below, plus A5 (hook half), D3, D-cyc and moving the controllers
+  out of `components/` — see the plan's "Deferred" section for the full list.
 
 ### Organic-growth smells (refactor candidates)
 

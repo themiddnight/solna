@@ -48,6 +48,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0031](0031-component-hook-store-selector-and-placement-conventions.md) | Component hooks, narrow store selectors, topic-grouped utils, placement | Component logic in a colocated `useXxx` hook; one value per `useAppStore` selector or `useShallow`; one theme per `utils/` file; one-area code stays with the area; every rules file ends in a `## Prohibited` checklist. |
 | [0032](0032-key-change-as-loop-content-operation.md) | Key change as a loop-content operation | Pure `changeKey` in `store/keyChange.ts` runs melody and chord harmonize in one setter write, for any loop; the badge clears only on a wholesale chord replacement. |
 | [0033](0033-batch-key-change-across-loops.md) | Batch key change across loops | `changeKeyAcrossLoops` plus `applyLoopKeyChange`/`undoLoopKeyChange`, each one `set()`; Set vs Transpose; a session-only, single-level, key-fields-only undo snapshot shared with the loop-delete Undo toast. |
+| [0034](0034-pure-song-event-timeline.md) | Pure song event timeline | `walkSongTimeline`/`buildSongTimeline` turn a snapshot into timed events; the mixdown performs the walk incrementally (RNG order); pure chord helpers and `planBeatStep` in `plan/`; an import-graph test keeps planners off the engine. |
 
 ## Adding or changing a decision
 

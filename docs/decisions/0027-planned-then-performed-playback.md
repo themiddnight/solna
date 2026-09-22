@@ -2,7 +2,12 @@
 
 **Status:** Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425). Covers the
 DEV-397 planner split; its context-object contract is what DEV-399 builds on (see
-[ADR-0018](0018-engine-frequency-boundary.md)).
+[ADR-0018](0018-engine-frequency-boundary.md)). **Amended by [ADR-0034](0034-pure-song-event-timeline.md):**
+R227, R229, R230, R231 and R234 below are updated in place for the song event timeline (a Beat
+snapshot, `chordEvents.ts`/`beatPlan.ts`/`songSnapshot.ts`/`songTimeline.ts` joining the planner
+list, `chordPlayback.ts` becoming unimportable by any planner, and the offline snapshot builder
+moving to `plan/songSnapshot.ts`); the split this ADR records — pure planners, a performing
+controller — still holds.
 
 ## Context
 
@@ -98,23 +103,24 @@ be a difference that never existed.
 
 ## Rules this implies
 
-- **R227** — Planners in `src/audio/playback/plan/` (`padPlan.ts`, `chordPlan.ts`, `melodyPlan.ts`)
-  are pure: no store, no engine setter, no `AudioContext`, no wall clock, no timer (ESLint block on
-  the folder).
+- **R227** — Planners in `src/audio/playback/plan/` (`padPlan.ts`, `chordPlan.ts`, `melodyPlan.ts`,
+  `chordEvents.ts`, `beatPlan.ts`, `songSnapshot.ts`, `songTimeline.ts`) are pure: no store, no
+  engine setter, no `AudioContext`, no wall clock, no timer (ESLint block on the folder; the
+  transitive edge to the engine singleton is gated by R289, not by this block).
 - **R228** — `src/architecture/playbackPlannerPurity.test.ts` asserts the block's severity.
-- **R229** — A planner must not call `chordPlayback`'s engine-touching exports (`playFullHoldChord`,
-  `emitStepEvents`, `scheduleWholeChord`) — convention, not gated.
-- **R230** — Clock subscription, arming state, full-hold strikes, note-ons belong to controllers
-  (`useChordPlayback.ts`, `useLeadPlayback.ts`, `renderMixdown.ts`).
-- **R231** — Four per-lane snapshot types (arm-time immutable) + per-step context (emit-time live);
-  never unify into one `PlaybackSnapshot`.
+- **R229** — A planner never imports `chordPlayback.ts` at all; the import itself is gated by R289.
+- **R230** — Clock subscription and arming state belong to the live controllers
+  (`useChordPlayback.ts`, `useLeadPlayback.ts`); offline, full-hold strikes and note-ons are
+  performed by `renderMixdown.ts` from walk items.
+- **R231** — Per-lane snapshot types (arm-time immutable) for Chord/bass, Pad, Melody and Beat
+  (`BeatPlanSnapshot`) + per-step context (emit-time live); never unify into one `PlaybackSnapshot`.
 - **R232** — Chord/bass fix cycle, notes and arp ACTIVE flag at arm; read synth patches and Arp
   settings live per step; `chordFeel`/`bassFeel` read at both (arm → `cycleHoldScale`, emit →
   `feelToHoldScale`); pad arm-only; melody emit-only.
 - **R233** — `src/store/playbackPlanSnapshots.ts` takes `AppStore` as an argument; never calls
   `useAppStore.getState()`.
-- **R234** — A new lane field goes in both snapshot builders (`playbackPlanSnapshots.ts`,
-  `renderMixdown.ts`) or neither.
+- **R234** — A new lane field goes in both snapshot builders — the store builder
+  (`playbackPlanSnapshots.ts`) and the offline builder (`plan/songSnapshot.ts`) — or neither.
 - **R235** — Every `plan<Lane>*` function's 2nd parameter is a single context object, never
   positional scalars.
 - **R236** — Planner output: inline anonymous type if read only where returned; named + exported if
