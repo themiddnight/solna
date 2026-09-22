@@ -27,7 +27,7 @@ The export feature: one session-only job, kinds as data, one runner, one dialog.
 
 ## MIDI
 
-- MIDI export is built only from `walkSongTimeline`; `renderMidi.ts` calls no lane planner and re-derives no arp, rhythm, strum or hold. <!-- R296 -->
+- MIDI export is built only from `walkSongTimeline`; `renderMidi.ts` calls no lane planner (`planArrangement` only sizes the walk) and re-derives no arp, rhythm, strum or hold. <!-- R296 -->
 - A timeline event is exported iff the WAV makes it audible by routing: its loop's bus row is unmuted with gain > 0 (drums: and the voice's `beatVoiceGains` > 0). Solo never reaches it. <!-- R297 -->
 - A MIDI note number comes from `noteMidi` (`@/musicCore`) applied to the timeline's ROOTS name in `renderMidi.ts`; `TimelineEvent` never carries Hz or a note number, and nothing converts Hz to MIDI. <!-- R298 -->
 - `GM_DRUM_NOTE` and `MIDI_TIME_SIGNATURE` are `Record`s over `BeatVoiceId` and `MeterId`; they and `MIDI_LANES` live beside the MIDI builder, not in `src/data/`. <!-- R299 -->

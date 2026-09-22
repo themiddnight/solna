@@ -103,7 +103,8 @@ const MIDI_EXPORT: ExportKindSpec = {
   failureMessages: MIDI_FAILURE_MESSAGE,
   incidentOperation: 'midi-export',
   run: async (snapshot, onProgress, signal) => {
-    const rendered = await renderMidi(snapshot.song, snapshot.projectName ?? 'Solna', onProgress, signal);
+    const title = snapshot.projectName?.trim() ? snapshot.projectName : 'Solna';
+    const rendered = await renderMidi(snapshot.song, title, onProgress, signal);
     if (!rendered.ok) return rendered;
     return { ok: true, blob: rendered.blob, fileName: midiFileName(snapshot.projectName) };
   },

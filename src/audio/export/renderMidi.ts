@@ -203,8 +203,13 @@ function laneTrack(lane: (typeof MIDI_LANES)[number], notes: MidiNote[], songEnd
  * signature, tempo) plus all six lane tracks, always in `MIDI_LANES` order.
  * `notes` are taken as given — the caller has already resolved overlaps.
  */
-export function songMidiFile(snapshot: MixdownSnapshot, notes: MidiNote[], title: string): SmfFile {
-  const songEndTick = (planArrangement(snapshot).totalSteps * MIDI_PPQ) / 4;
+export function songMidiFile(
+  snapshot: MixdownSnapshot,
+  notes: MidiNote[],
+  title: string,
+  plan: ArrangementPlan,
+): SmfFile {
+  const songEndTick = (plan.totalSteps * MIDI_PPQ) / 4;
   const tracks: SmfTrack[] = [
     conductorTrack(snapshot, title, songEndTick),
     ...MIDI_LANES.map((lane) => laneTrack(lane, notes, songEndTick)),
@@ -250,12 +255,10 @@ async function collectMidiNotes(
   signal?: AbortSignal,
 ): Promise<MidiNote[] | null> {
   const notes: MidiNote[] = [];
-  let steps = 0;
   for (const item of walkSongTimeline(snapshot, plan)) {
     if (item.kind === 'pass') continue;
     if (item.kind === 'stepEnd') {
-      steps += 1;
-      if (steps % MIDI_YIELD_INTERVAL_STEPS !== 0) continue;
+      if ((item.step + 1) % MIDI_YIELD_INTERVAL_STEPS !== 0) continue;
       report({ phase: 'rendering', percent: Math.floor((100 * (item.step + 1)) / plan.totalSteps) });
       await yieldPreservingRandomStream();
       if (signal?.aborted) return null;
@@ -302,10 +305,8 @@ export async function renderMidi(
     report({ phase: 'encoding' });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     if (signal?.aborted) return CANCELLED;
-    const bytes = encodeSmf(songMidiFile(snapshot, resolveNoteOverlaps(notes), title));
-    // Re-wrapped because `encodeSmf` types its bytes as `Uint8Array<ArrayBufferLike>`,
-    // which `BlobPart` rejects (it could be a SharedArrayBuffer view).
-    return { ok: true, blob: new Blob([new Uint8Array(bytes)], { type: 'audio/midi' }) };
+    const bytes = encodeSmf(songMidiFile(snapshot, resolveNoteOverlaps(notes), title, plan));
+    return { ok: true, blob: new Blob([bytes], { type: 'audio/midi' }) };
   } catch (err) {
     return { ok: false, reason: { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) } };
   }

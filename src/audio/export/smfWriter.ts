@@ -106,7 +106,7 @@ function validatePpq(ppq: number): void {
   if (!Number.isInteger(ppq) || ppq < 1 || ppq > 0x7fff) throw new RangeError(`ppq out of range: ${ppq}`);
 }
 
-export function encodeSmf(file: SmfFile): Uint8Array {
+export function encodeSmf(file: SmfFile): Uint8Array<ArrayBuffer> {
   validatePpq(file.ppq);
   const header = [...MTHD, ...u32(6), ...u16(1), ...u16(file.tracks.length), ...u16(file.ppq)];
   const trackBytes = file.tracks.flatMap((track) => encodeTrack(track));

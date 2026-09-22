@@ -106,14 +106,14 @@ A GM percussion map now exists in the codebase. ADR-0016's external MIDI input h
 focus-agnostic and is not changed by this decision; lifting the GM map to a shared location is a
 R276 move for whichever day a second reader (MIDI input, stems metadata) needs it, not something
 to anticipate now. An arp `'random'` lane's exported MIDI notes may differ from the same project's
-WAV (spec risk R2) — documented in the kind's docblock, not hidden. Key changes are not represented
+WAV (spec risk R2) — documented in `renderMidi`'s docblock, not hidden. Key changes are not represented
 in the file; every note is a plain pitch number, so nothing is lost musically, only the visual key
 signature a DAW might otherwise show.
 
 ## Rules this implies
 
 - **R296** — MIDI export is built only from `walkSongTimeline`; `renderMidi.ts` calls no lane
-  planner and re-derives no arp, rhythm, strum or hold.
+  planner (`planArrangement` only sizes the walk) and re-derives no arp, rhythm, strum or hold.
 - **R297** — A timeline event is exported iff the WAV makes it audible by routing: its loop's bus
   row is unmuted with gain > 0 (drums: and the voice's `beatVoiceGains` > 0). Solo never reaches
   it.

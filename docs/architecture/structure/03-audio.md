@@ -330,7 +330,8 @@ Flow:
    automation on its marker and resuming the generator between items; there is no `Clock` and no
    collected array (R288, ADR-0034). `buildSongTimeline` is the same walk drained and
    stable-sorted by time into one `SongTimeline`, the form a consumer outside a render
-   (DEV-428/DEV-429) reads instead of performing the walk itself.
+   (DEV-429) reads instead of performing the walk itself; DEV-428's MIDI export instead walks
+   `walkSongTimeline` directly, incrementally, so it can yield and be cancelled (see MIDI below).
 5. `startRendering()`, then `encodeWav`.
 
 Shared with live:
@@ -363,14 +364,18 @@ Offline guards:
 ### MIDI (`export/renderMidi.ts`)
 
 A second, engine-free consumer of the same `walkSongTimeline` (ADR-0036): a seeded walk with no
-`AudioContext` and no lane planner, so the MIDI and the WAV cannot disagree about what plays when.
-For each `note`/`drum` item, `eventAudible` re-checks the loop's `'sequencer'`/source bus row
-(mute and gain, plus the Beat voice's gain for drums) the same way the renderer's audibility check
-does, `noteMidi` resolves the ROOTS name to a MIDI number at this boundary only, and
+`AudioContext` and no lane planner, so the MIDI and the WAV cannot disagree about what plays when —
+except an arp `'random'` lane, whose MIDI notes may differ from that project's WAV, because the WAV
+interleaves engine draws (noise offsets, sample-and-hold buffers) with the arp's on one seeded
+stream and the MIDI walk does not run the engine at all (spec R2, ADR-0036). For each `note`/`drum`
+item, `eventAudible` re-checks the loop's `'sequencer'`/source bus row (mute and gain, plus the
+Beat voice's gain for drums), mirroring what the renderer's per-pass bus state makes audible;
+`noteMidi` resolves the ROOTS name to a MIDI number at this boundary only, and
 `resolveNoteOverlaps` enforces one sounding instance per `(channel, note)`. `songMidiFile` then
 assembles the conductor and lane tracks into an `SmfFile`, and `encodeSmf` (`smfWriter.ts`) writes
 the bytes. The walk yields the same way the WAV renderer does, through `rng.ts`'s
-`yieldPreservingRandomStream` (§1.1) — the one function this export shares with the renderer.
+`yieldPreservingRandomStream` (§1.1); this export also shares `walkSongTimeline`, `planArrangement`
+and `MIXDOWN_SEED` with the renderer.
 
 ---
 

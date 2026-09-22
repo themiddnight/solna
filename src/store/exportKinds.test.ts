@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { useAppStore } from './store';
 import { buildMixdownSnapshot } from './mixdownSnapshot';
+import { readSmf } from '@/audio/export/smfTestReader';
 import {
   EXPORT_KINDS,
   MIDI_FAILURE_MESSAGE,
@@ -146,6 +147,20 @@ describe('the MIDI kind run', () => {
       controller.signal,
     );
     expect(result).toEqual({ ok: false, reason: { kind: 'cancelled' } });
+  });
+
+  test('an empty or whitespace-only project name falls back to the title Solna', async () => {
+    for (const projectName of ['', '   ']) {
+      const result = await exportKind('midi').run(
+        { song: buildMixdownSnapshot(useAppStore.getState()), projectName },
+        () => {},
+        new AbortController().signal,
+      );
+      if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.reason)}`);
+      const bytes = await bytesOf(result.blob);
+      const file = readSmf(bytes);
+      expect(file.tracks[0].name).toBe('Solna');
+    }
   });
 
   test('solo changes nothing', async () => {

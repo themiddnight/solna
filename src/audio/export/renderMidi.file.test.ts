@@ -3,11 +3,12 @@ import { MIDI_LANES, MIDI_PPQ, songMidiFile, type MidiLane, type MidiNote } from
 import { encodeSmf } from './smfWriter';
 import { readSmf, type ReadSmf } from './smfTestReader';
 import { mixdownSnapshot } from './mixdownFixture';
+import { planArrangement } from '../playback/plan/songTimeline';
 import { METER_IDS, getMeter } from '@/utils/meter';
 import type { MixdownSnapshot } from '../playback/plan/songSnapshot';
 
 function midi(snapshot: MixdownSnapshot, notes: MidiNote[], title: string): ReadSmf {
-  return readSmf(encodeSmf(songMidiFile(snapshot, notes, title)));
+  return readSmf(encodeSmf(songMidiFile(snapshot, notes, title, planArrangement(snapshot))));
 }
 
 function laneChannel(lane: MidiLane): number {

@@ -287,19 +287,19 @@ for `*.tsx`.
 | 1 | 309-329 | `src/audio/**` | tonal, `@tonaljs/*`, `**/store/**`, `**/components/**`, taper fns | — |
 | 2 | 330-370 | `src/audio/**` (ignores `rng.ts`, `rng.test.ts`, `export/renderMixdown.test.ts`) | — | `Math.random` in 3 syntactic forms |
 | 3 | 371-436 | `src/audio/playback/plan/**` (not tests) | block 1 + engine/`playbackEngine` (incl. `../playbackEngine`) | globals `Date`, `performance`, `crypto`, `fetch`, `window`, timers, rAF, storage… + `Math.random` |
-| 4 | 437-481 | `engine.ts`, `synth/**`, `drumSynth.ts`, `masterRack.ts` (not tests) | block 1 + `ENGINE_MUSIC_DOMAIN_BAN` (musicCore, noteSpelling, data/scales, arpeggiator, bass/chord modules, leadMelody, leadStepRecord, `playback/**`; `utils/musicTheory` except 4 timing names) | — |
-| 5 | 482-501 | `src/store/**` | tonal, `**/components/**`, taper fns | — |
-| 6 | 502-526 | `src/incidents/**` | tonal, store (3 forms), components, `**/audio/engine` | — |
-| 7 | 527-559 | `src/musicCore/**` (ignores `tonalAdapter.ts`) | tonal, store, components, audio, utils | — |
-| 8 | 560-580 | `src/musicCore/tonalAdapter.ts` | store, components, audio, utils (tonal allowed) | — |
-| 9 | 581-609 | `src/components/**` (ignores `ui/VolumeFader.tsx`) | tonal, `**/audio/engine`, taper fns | — |
-| 10 | 610-628 | `ui/VolumeFader.tsx` | tonal, `**/audio/engine` | — |
-| 11 | 629-653 | `src/**` catch-all (ignores audio, store, components, data, musicCore, incidents) | tonal, taper fns **only** | — |
-| 12 | 654-744 | `src/data/**` (not tests) | `@typescript-eslint/no-restricted-imports`: every value import (`allowTypeImports`) | impure globals incl. `Math`; no `new`, function decl/expr, class, module `let/var`; `max-lines` off |
-| 13 | 745-764 | 4 analyser components + `**/*.test.ts(x)` | **`no-restricted-imports: off` entirely** | — |
-| 14 | 765-782 | `audio/leadStepRecord.ts`, `audio/bassPatterns.ts` | — | regex literal ban + `Math.random` |
-| 15 | 783-793 | `loop/lead/melodyGrid.ts`, `ui/Keyboard.tsx`, `utils/musicTheory.ts` | — | regex literal ban |
-| 16 | — | `export/renderMidi.ts`, `export/smfWriter.ts` | block 1 + engine/DSP modules; `./renderMixdown` type-only | — |
+| 4 | — | `export/renderMidi.ts`, `export/smfWriter.ts` | block 1 + engine/DSP modules; `./renderMixdown` type-only | — |
+| 5 | 437-481 | `engine.ts`, `synth/**`, `drumSynth.ts`, `masterRack.ts` (not tests) | block 1 + `ENGINE_MUSIC_DOMAIN_BAN` (musicCore, noteSpelling, data/scales, arpeggiator, bass/chord modules, leadMelody, leadStepRecord, `playback/**`; `utils/musicTheory` except 4 timing names) | — |
+| 6 | 482-501 | `src/store/**` | tonal, `**/components/**`, taper fns | — |
+| 7 | 502-526 | `src/incidents/**` | tonal, store (3 forms), components, `**/audio/engine` | — |
+| 8 | 527-559 | `src/musicCore/**` (ignores `tonalAdapter.ts`) | tonal, store, components, audio, utils | — |
+| 9 | 560-580 | `src/musicCore/tonalAdapter.ts` | store, components, audio, utils (tonal allowed) | — |
+| 10 | 581-609 | `src/components/**` (ignores `ui/VolumeFader.tsx`) | tonal, `**/audio/engine`, taper fns | — |
+| 11 | 610-628 | `ui/VolumeFader.tsx` | tonal, `**/audio/engine` | — |
+| 12 | 629-653 | `src/**` catch-all (ignores audio, store, components, data, musicCore, incidents) | tonal, taper fns **only** | — |
+| 13 | 654-744 | `src/data/**` (not tests) | `@typescript-eslint/no-restricted-imports`: every value import (`allowTypeImports`) | impure globals incl. `Math`; no `new`, function decl/expr, class, module `let/var`; `max-lines` off |
+| 14 | 745-764 | 4 analyser components + `**/*.test.ts(x)` | **`no-restricted-imports: off` entirely** | — |
+| 15 | 765-782 | `audio/leadStepRecord.ts`, `audio/bassPatterns.ts` | — | regex literal ban + `Math.random` |
+| 16 | 783-793 | `loop/lead/melodyGrid.ts`, `ui/Keyboard.tsx`, `utils/musicTheory.ts` | — | regex literal ban |
 
 **Claimed vs enforced:**
 
@@ -307,12 +307,12 @@ for `*.tsx`.
   planner gate, the tonal confinement, the incidents boundary, the five NOTE_REGEX files, the four
   analyser exemptions, the data-purity rules.
 - **Unregulated folders.** `utils/`, `diagnostics/`, `routing/`, `pwa/`, `types/` and the root files
-  fall only under block 11 (tonal + taper). Probed with `bunx eslint --stdin`: an
+  fall only under block 12 (tonal + taper). Probed with `bunx eslint --stdin`: an
   `import { useAppStore } from '@/store/store'` plus `import { audioEngine } from '@/audio/engine'`
   produces **0 errors** in `src/utils/x.ts`, `src/diagnostics/x.ts` and `src/routing/x.ts`.
   `CLAUDE.md` describes the utils→store inversion as "types and constants … never a call into the
   store"; nothing mechanical keeps it that way.
-- **Block 13 over-exempts.** It turns the whole rule off for the four analyser files, so they are
+- **Block 14 over-exempts.** It turns the whole rule off for the four analyser files, so they are
   also exempt from the tonal ban and the taper ban. Probe: `import { Note } from 'tonal'` +
   `dbToSliderPos` gives 0 errors in `src/components/ui/VuMeter.tsx` versus 2 errors in
   `src/components/ui/Knob.tsx`. `CLAUDE.md` says the tonal gate covers "non-test files under
