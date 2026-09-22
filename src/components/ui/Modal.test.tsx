@@ -52,6 +52,18 @@ describe('Modal', () => {
     expect(html).toContain('<form class="modal-backdrop" method="dialog">');
   });
 
+  test('a bottom sheet: modal-bottom, full width, inset-padded, 44px close, content after the box', () => {
+    const html = renderToString(
+      <Modal open onClose={noop} title="Menu" placement="bottom" afterBox={<i id="after" />}>body</Modal>,
+    );
+    expect(html).toContain('<dialog class="modal modal-bottom"');
+    expect(html).not.toContain('max-w-md');
+    expect(html).toContain('pb-[calc(1.5rem+env(safe-area-inset-bottom))]');
+    expect(html).toContain('min-h-11 min-w-11');
+    expect(html.indexOf('id="after"')).toBeGreaterThan(html.indexOf('body'));
+    expect(html.indexOf('id="after"')).toBeLessThan(html.indexOf('modal-backdrop'));
+  });
+
   /**
    * Openness lives in the DOM, so the two prop values must produce identical
    * markup — the effect, not the render, is what opens the dialog. If this ever

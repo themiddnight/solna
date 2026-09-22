@@ -16,6 +16,12 @@ interface WordmarkProps {
   ariaLabel?: string;
   /** Show a dropdown chevron after the text — the ProjectMenu trigger's hint. */
   chevron?: boolean;
+  /**
+   * `interactive` (default true): false renders a static brand image — no
+   * button role, no focus, no hover — for a frame where the mark is not the
+   * project menu.
+   */
+  interactive?: boolean;
 }
 
 /**
@@ -30,14 +36,10 @@ export function Wordmark({
   textClassName = "",
   ariaLabel,
   chevron = false,
+  interactive = true,
 }: WordmarkProps) {
-  return (
-    <span
-      tabIndex={0}
-      role="button"
-      aria-label={ariaLabel}
-      className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
-    >
+  const content = (
+    <>
       <img
         src="/assets/favicon.svg"
         alt=""
@@ -55,6 +57,32 @@ export function Wordmark({
       {chevron && (
         <ChevronDown className="w-4 h-4 text-base-content/60" aria-hidden="true" />
       )}
+    </>
+  );
+
+  // Two returns rather than one element with conditional `tabIndex`/`role`:
+  // jsx-a11y reads the conditional as a tabIndex on a non-interactive element,
+  // and the static brand image genuinely has neither focus nor a button role.
+  if (!interactive) {
+    return (
+      <span
+        role="img"
+        aria-label="Solna"
+        className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 ${className}`}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      tabIndex={0}
+      role="button"
+      aria-label={ariaLabel}
+      className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
+    >
+      {content}
     </span>
   );
 }

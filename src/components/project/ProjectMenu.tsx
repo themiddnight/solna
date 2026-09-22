@@ -476,7 +476,7 @@ function useProjectFileCommands({
   };
 }
 
-interface UseProjectMenu {
+export interface UseProjectMenu {
   sections: readonly ProjectMenuSection[];
   choose: (action: ProjectMenuAction) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -503,7 +503,7 @@ interface UseProjectMenu {
  * desktop dropdown and the mobile menu sheet render the same rows and the
  * same dialogs from it. Which dialog is open is local UI state.
  */
-function useProjectMenu(): UseProjectMenu {
+export function useProjectMenu(): UseProjectMenu {
   const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
   const [browser, setBrowser] = useState<ProjectBrowseMode | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -569,7 +569,7 @@ function useProjectMenu(): UseProjectMenu {
 
 /** The dropdown's rows: three sections, with Save's label and the Drive account placed. */
 /** The menu's rows, as the dropdown and the mobile sheet both render them. */
-function ProjectMenuSections({
+export function ProjectMenuSections({
   sections,
   onChoose,
   rowClassName,
@@ -605,7 +605,7 @@ function ProjectMenuSections({
 }
 
 /** Everything a row can open: the file input, the confirm, the Drive browser, the pending overlay, Diagnostics. */
-function ProjectMenuEffects({ menu }: { menu: UseProjectMenu }) {
+export function ProjectMenuEffects({ menu }: { menu: UseProjectMenu }) {
   return (
     <>
       <input

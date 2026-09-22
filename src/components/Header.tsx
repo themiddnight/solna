@@ -120,14 +120,12 @@ export const Header = React.memo(function Header() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
 
   return (
-    <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
+    <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-4 py-2 select-none sticky top-0 z-40 flex flex-nowrap items-center justify-between gap-x-3 text-sm">
       {/* Brand & Layer Switcher */}
-      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        {/* Below `sm` the wordmark text costs ~74px, which is exactly what
-            pushes the loop/scale/theme group off the brand's row and gives the
-            navbar a third row on a phone. The mark alone still identifies the
-            app. */}
-        <ProjectMenu textClassName="hidden sm:inline" />
+      <div className="flex items-center gap-2.5 shrink-0">
+        {/* The desktop frame only: the phone has its own top bar
+            (`shell/MobileTopBar.tsx`). */}
+        <ProjectMenu />
         <LayerSwitcher layer={layer} onSelectTab={setActiveTab} />
       </div>
 
@@ -136,7 +134,7 @@ export const Header = React.memo(function Header() {
           name), the key it is in, then WHICH view of it (Sound/Pattern or
           Arrange/Master FX) as one `join`, per the loop/song layer switcher's
           own idiom, so the whole right-hand cluster reads as one row. */}
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         {/* What the tabs are editing leads the cluster, ahead of the tabs
             themselves — the loop picker on the loop layer, the project name on
             the song layer, exactly one of the two per layer. Reading the row

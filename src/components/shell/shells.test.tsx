@@ -63,8 +63,17 @@ describe('the shells', () => {
     }
   });
 
+  test('the desktop frame carries none of the mobile chrome', () => {
+    for (const marker of ['class="dock', 'id="btn-mobile-menu"', 'modal-bottom']) {
+      expect(desktop).not.toContain(marker);
+    }
+  });
+
   test('no shell mounts the host, a coordinator or an app-level dialog (R316)', () => {
-    for (const file of ['./DesktopShell.tsx', './MobileShell.tsx', './LayerPages.tsx', './MobileTabBar.tsx']) {
+    for (const file of [
+      './DesktopShell.tsx', './MobileShell.tsx', './LayerPages.tsx', './MobileTabBar.tsx',
+      './MobileTopBar.tsx', './useMobileTopBar.ts',
+    ]) {
       const src = read(file);
       for (const name of ['PlaybackHost', 'useInputDeck', 'useEngineSync', 'IncidentDialog', 'MidiSettingsModal', 'ProjectNotice']) {
         expect(src).not.toContain(name);

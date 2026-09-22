@@ -9,13 +9,13 @@ import { ProjectNameLabel } from './ProjectNameLabel';
 import { ScaleMenu } from './ScaleMenu';
 import { ThemeToggle } from './ThemeToggle';
 
-type HeaderToolId =
+export type HeaderToolId =
   | 'loop-copy' | 'loop-selector' | 'project-name' | 'follow-playhead' | 'export' | 'scale' | 'theme';
 
 /** Which side of the tab nav a tool sits on in the desktop row. */
 type HeaderToolGroup = 'subject' | 'actions';
 
-interface HeaderTool {
+export interface HeaderTool {
   readonly id: HeaderToolId;
   /** Reads the store itself; its only prop is the rendering variant (`bar` inline, `row` in a menu). */
   readonly Component: ComponentType<ToolVariantProps>;
@@ -48,4 +48,9 @@ export const HEADER_TOOLS: readonly HeaderTool[] = [
 /** The tools of `group` available on `layer`, in list order. */
 export function headerToolsFor(layer: Layer, group: HeaderToolGroup): readonly HeaderTool[] {
   return HEADER_TOOLS.filter((tool) => tool.group === group && tool.layers.includes(layer));
+}
+
+/** Every tool available on `layer`, both groups, in list order — for frames without the tab nav between them. */
+export function headerToolsOn(layer: Layer): readonly HeaderTool[] {
+  return HEADER_TOOLS.filter((tool) => tool.layers.includes(layer));
 }

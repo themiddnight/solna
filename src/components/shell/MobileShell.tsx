@@ -1,13 +1,13 @@
 import React from 'react';
 import { isSongLayer } from '@/types';
 import { useAppStore } from '@/store/store';
-import { Header } from '@/components/Header';
 import { InstantVibesBar } from '@/components/InstantVibesBar';
 import { TransportBar } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
 import { LayerPages } from './LayerPages';
 import { MobileTabBar } from './MobileTabBar';
+import { MobileTopBar } from './MobileTopBar';
 import type { ShellProps } from './shellProps';
 
 /**
@@ -27,8 +27,8 @@ export const MobileShell = React.memo(function MobileShell({
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   return (
     <>
-      {/* Navigation Header */}
-      <Header />
+      {/* Top bar: mark, the layer's field tools, the menu */}
+      <MobileTopBar />
 
       {/* 1-Click Instant Vibes Quick Starter Bar. Loop-layer only: a vibe
           rewrites the loop's chords, drums, presets and BPM, which is not an

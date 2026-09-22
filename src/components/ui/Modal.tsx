@@ -26,6 +26,13 @@ export interface ModalProps {
   headerDivider?: boolean;
   /** Extra classes on `modal-box`; the dialogs differ only in their `space-y`. */
   boxClassName?: string;
+  /** `bottom`: a full-width sheet anchored to the bottom edge (daisyUI `modal-bottom`). */
+  placement?: 'middle' | 'bottom';
+  /**
+   * Rendered inside the dialog, after the box. For fixed overlays: the box's
+   * `translate` would make itself their containing block and clip them.
+   */
+  afterBox?: ReactNode;
   children: ReactNode;
 }
 
@@ -36,6 +43,8 @@ export function Modal({
   size = 'md',
   headerDivider = false,
   boxClassName,
+  placement = 'middle',
+  afterBox,
   children,
 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -64,15 +73,33 @@ export function Modal({
     return () => el.removeEventListener('close', handleClose);
   }, [onClose]);
 
+  // A sheet is full width by construction (daisyUI's `modal-bottom` stretches
+  // the box), so a max-width would fight it; the extra bottom padding keeps the
+  // last row clear of the home indicator.
+  const sheet = placement === 'bottom';
+
   return (
-    <dialog ref={ref} className="modal">
-      <div className={cx(MODAL_BOX, SIZE_CLASS[size], boxClassName)}>
+    <dialog ref={ref} className={cx('modal', sheet && 'modal-bottom')}>
+      <div
+        className={cx(
+          MODAL_BOX,
+          !sheet && SIZE_CLASS[size],
+          sheet && 'pb-[calc(1.5rem+env(safe-area-inset-bottom))]',
+          boxClassName,
+        )}
+      >
         <div className={cx('flex items-center justify-between', headerDivider && 'border-b border-base-300 pb-4')}>
           <h3 className="font-bold text-lg flex items-center gap-2">{title}</h3>
-          <IconButton label="Close" icon={<X className="w-4 h-4" />} onClick={onClose} />
+          <IconButton
+            label="Close"
+            icon={<X className="w-4 h-4" />}
+            className={sheet ? 'min-h-11 min-w-11' : undefined}
+            onClick={onClose}
+          />
         </div>
         {children}
       </div>
+      {afterBox}
       <form method="dialog" className="modal-backdrop">
         <button type="button" onClick={onClose}>close</button>
       </form>

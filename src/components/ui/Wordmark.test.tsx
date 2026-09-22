@@ -28,6 +28,15 @@ describe('Wordmark', () => {
     expect(renderToString(<Wordmark ariaLabel="Project menu" />)).toContain('aria-label="Project menu"');
   });
 
+  test('non-interactive: an image, not a button, and not focusable', () => {
+    const html = renderToString(<Wordmark markOnly interactive={false} />);
+    expect(html).toContain('role="img"');
+    expect(html).toContain('aria-label="Solna"');
+    expect(html).not.toContain('role="button"');
+    expect(html).not.toContain('tabindex');
+    expect(html).not.toContain('cursor-pointer');
+  });
+
   test('keeps the text props working', () => {
     expect(renderToString(<Wordmark textClassName="hidden sm:inline" />)).toContain('leading-none hidden sm:inline');
     expect(renderToString(<Wordmark markOnly />)).not.toContain('solna</span>');
