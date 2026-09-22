@@ -46,7 +46,7 @@ import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
 import { getMeter } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
 import { applyBeatParams } from '../beatAdapter';
-import type { BeatParams } from '@/types';
+import { SEND_EFFECTS, type BeatParams, type TrackSendLevels } from '@/types';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 
 export const MIXDOWN_SAMPLE_RATE = 44100;
@@ -119,6 +119,7 @@ function applyMasterState(engine: AudioEngine, snapshot: MixdownSnapshot): void 
   engine.setMasterVolume(snapshot.masterVolume);
   for (const bus of snapshot.buses) {
     engine.setSourceState(bus.source, { gain: bus.gain, muted: bus.muted }, 0, 'settle');
+    engine.setSourceSends(bus.source, bus.sends, 0, 'settle');
   }
   // No Beat here: every loop installs its own at its pass boundary below, so
   // there is nothing arrangement-wide left to settle.
@@ -126,8 +127,19 @@ function applyMasterState(engine: AudioEngine, snapshot: MixdownSnapshot): void 
   engine.setReverbDecay(snapshot.effects.reverbDecay);
 }
 
-/** Install per-loop audio state at the same boundary where live song mode loads the loop. */
-function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): void {
+function sameSendLevels(a: TrackSendLevels, b: TrackSendLevels | undefined): boolean {
+  return b !== undefined && SEND_EFFECTS.every((effect) => a[effect] === b[effect]);
+}
+
+/**
+ * Install per-loop audio state at the same boundary where live song mode loads the loop.
+ * `previous` is the pass before this one (undefined for the first pass).
+ */
+function applyLoopAudioState(
+  engine: AudioEngine,
+  state: LoopAudioAutomation,
+  previous: LoopAudioAutomation | undefined,
+): void {
   for (const bus of state.buses) {
     engine.setSourceState(
       bus.source,
@@ -135,6 +147,20 @@ function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): v
       state.time,
       state.time === 0 ? 'settle' : 'transition',
     );
+    // A per-loop send change lands on this pass's first sample, through its
+    // own method, never setSourceState (C2). Unlike bus state it is pushed
+    // after time zero only when it differs from the previous pass: an
+    // equal-value transition is silent but not byte-neutral — a ramp held at 0
+    // on the Beat bus's delay send node changes the rendered WAV (the golden).
+    const before = previous?.buses.find((row) => row.source === bus.source)?.sends;
+    if (state.time === 0 || !sameSendLevels(bus.sends, before)) {
+      engine.setSourceSends(
+        bus.source,
+        bus.sends,
+        state.time,
+        state.time === 0 ? 'settle' : 'transition',
+      );
+    }
   }
   // The Beat patch, BEFORE this pass schedules a single hit: a drum voice is
   // built from the kit installed at the moment it is scheduled, so a patch
@@ -189,7 +215,7 @@ async function scheduleArrangement(
   for (let next = walk.next(); !next.done; next = walk.next()) {
     const item = next.value;
     if (item.kind === 'pass') {
-      applyLoopAudioState(engine, loopAutomation[item.passIndex]);
+      applyLoopAudioState(engine, loopAutomation[item.passIndex], loopAutomation[item.passIndex - 1]);
     } else if (item.kind === 'stepEnd') {
       stepsSinceYield += 1;
       if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
@@ -12,6 +12,7 @@ import {
   mixdownMelodyBar,
   mixdownSnapshot,
 } from './mixdownFixture';
+import { AudioEngine } from '../engine';
 
 (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = OfflineAudioContext;
 
@@ -157,6 +158,55 @@ describe('renderMixdown: muted source buses', () => {
       for (const peak of windowPeaks(audibleTarget)) expect(peak).toBeGreaterThan(0);
     } finally {
       audioGlobal.OfflineAudioContext = previousContext;
+    }
+  });
+});
+
+describe('renderMixdown: per-track sends', () => {
+  test("each pass installs its own loop's sends at its start: settle at 0, transition after", async () => {
+    const calls: Parameters<AudioEngine['setSourceSends']>[] = [];
+    const spy = spyOn(AudioEngine.prototype, 'setSourceSends').mockImplementation(
+      (...args: Parameters<AudioEngine['setSourceSends']>) => {
+        calls.push(args);
+      },
+    );
+    try {
+      const base = mixdownSnapshot();
+      const chordReverb = (id: string, reverb: number) => mixdownLoop({
+        id,
+        buses: base.buses.map((bus) => (bus.source === 'chord' ? { ...bus, sends: { ...bus.sends, reverb } } : bus)),
+      });
+      const result = await renderMixdown(mixdownSnapshot({
+        loops: [chordReverb('loop-a', 0.25), chordReverb('loop-b', 0.75)],
+      }));
+      expect(result.ok).toBe(true);
+      const songLevel = base.buses.find((bus) => bus.source === 'chord')!.sends;
+      // One-bar loops at 120 BPM: loop-b's pass starts at 2 s.
+      expect(calls.filter(([source]) => source === 'chord')).toEqual([
+        ['chord', songLevel, 0, 'settle'],
+        ['chord', { ...songLevel, reverb: 0.25 }, 0, 'settle'],
+        ['chord', { ...songLevel, reverb: 0.75 }, 2, 'transition'],
+      ]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('a later pass whose sends equal the previous pass pushes nothing (golden bytes)', async () => {
+    const calls: Parameters<AudioEngine['setSourceSends']>[] = [];
+    const spy = spyOn(AudioEngine.prototype, 'setSourceSends').mockImplementation(
+      (...args: Parameters<AudioEngine['setSourceSends']>) => {
+        calls.push(args);
+      },
+    );
+    try {
+      const result = await renderMixdown(mixdownSnapshot({
+        loops: [mixdownLoop({ id: 'loop-a' }), mixdownLoop({ id: 'loop-b' })],
+      }));
+      expect(result.ok).toBe(true);
+      expect(calls.every(([, , time, mode]) => time === 0 && mode === 'settle')).toBe(true);
+    } finally {
+      spy.mockRestore();
     }
   });
 });

@@ -34,6 +34,7 @@ export function buildMixdownSnapshot(s: AppStore): MixdownSnapshot {
       source: bus.source,
       gain: faderDbToGain(bus.selectLevelDb(loop)),
       muted: bus.selectMuted(loop),
+      sends: loop.trackSends[bus.source],
     })),
     // One row per voice, in canonical order, with the voice's MUTE folded into
     // its gain — `muted ? 0 : faderDbToGain(levelDb)` is the same one-line rule
@@ -59,6 +60,7 @@ export function buildMixdownSnapshot(s: AppStore): MixdownSnapshot {
       source: bus.source,
       gain: faderDbToGain(bus.selectLevelDb(s)),
       muted: bus.selectMuted(s),
+      sends: s.trackSends[bus.source],
     })),
     // No arrangement-wide Beat: it belongs to a loop, and every loop row above
     // carries its own.

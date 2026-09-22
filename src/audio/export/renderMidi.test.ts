@@ -16,6 +16,7 @@ import { METER_IDS } from '@/utils/meter';
 import { stepDurationSec } from '@/utils/musicTheory';
 import type { BeatVoiceId } from '@/types';
 import type { TimelineEvent } from '../playback/plan/songTimeline';
+import type { MixdownBusState } from '../playback/plan/songSnapshot';
 
 /**
  * The fixture's own six source buses (`mixdownFixture.ts` cannot export its
@@ -27,8 +28,12 @@ const BUS_SOURCES = ['synth', 'chord', 'bass', 'pad', 'fx', 'sequencer'] as cons
 function busRows(
   muted: Partial<Record<(typeof BUS_SOURCES)[number], boolean>> = {},
   gains: Partial<Record<(typeof BUS_SOURCES)[number], number>> = {},
-): { source: string; gain: number; muted: boolean }[] {
-  return BUS_SOURCES.map((source) => ({ source, gain: gains[source] ?? 1, muted: muted[source] ?? false }));
+): MixdownBusState[] {
+  const rows = mixdownSnapshot().buses;
+  return BUS_SOURCES.map((source) => {
+    const row = rows.find((bus) => bus.source === source) as MixdownBusState;
+    return { ...row, gain: gains[source] ?? 1, muted: muted[source] ?? false };
+  });
 }
 
 function leadNote(loopIndex: number): TimelineEvent {

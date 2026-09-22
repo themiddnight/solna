@@ -10,7 +10,15 @@
 import { BEAT_PRESETS, BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
-import type { BeatMix, BeatParams, BeatPattern, BeatVoiceId, BeatVoiceMix, MasterEffects } from '@/types';
+import type {
+  BeatMix,
+  BeatParams,
+  BeatPattern,
+  BeatVoiceId,
+  BeatVoiceMix,
+  MasterEffects,
+  TrackSendLevels,
+} from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import type { MixdownLoop, MixdownSnapshot } from '../playback/plan/songSnapshot';
@@ -26,6 +34,18 @@ import type { MixdownLoop, MixdownSnapshot } from '../playback/plan/songSnapshot
  * step by hand; the test is what fails when they drift.
  */
 const BUSES = ['synth', 'chord', 'bass', 'pad', 'fx', 'sequencer'] as const;
+
+/**
+ * The store's default sends for one bus, spelled out for the reason `BUSES`
+ * is (this module may not import store/) — the one sanctioned copy of the
+ * defaults outside `createDefaultLoopContent` (R301). `mixdownSnapshot.test.ts`
+ * asserts the two are equal: Beat is dry into delay and distortion.
+ */
+function defaultSends(source: (typeof BUSES)[number]): TrackSendLevels {
+  return source === 'sequencer'
+    ? { reverb: 1, delay: 0, distortion: 0 }
+    : { reverb: 1, delay: 1, distortion: 1 };
+}
 
 /**
  * One bar of a melody track holding a single note at tick 0, four 16ths long.
@@ -129,7 +149,7 @@ export function mixdownLoop(over: Partial<MixdownLoop> = {}): MixdownLoop {
     fxLoopLength: 1,
     fxStepResolution: '1/16',
     fxGate: 0.85,
-    buses: BUSES.map((source) => ({ source, gain: 1, muted: false })),
+    buses: BUSES.map((source) => ({ source, gain: 1, muted: false, sends: defaultSends(source) })),
     ...over,
   };
 }
@@ -141,7 +161,7 @@ export function mixdownSnapshot(over: Partial<MixdownSnapshot> = {}): MixdownSna
     stepsPerBar: 16,
     masterVolume: 1,
     effects: FACTORY_EFFECTS,
-    buses: BUSES.map((source) => ({ source, gain: 1, muted: false })),
+    buses: BUSES.map((source) => ({ source, gain: 1, muted: false, sends: defaultSends(source) })),
     loops: [mixdownLoop()],
     ...over,
   };

@@ -23,6 +23,7 @@ import type {
   PadInterval,
   PadMode,
   PadVoicing,
+  TrackSendLevels,
 } from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import type { MeterId } from '@/utils/meter';
@@ -38,6 +39,8 @@ export interface MixdownBusState {
   source: string;
   gain: number;
   muted: boolean;
+  /** The bus's master sends, already linear 0..1 — applied beside gain/mute, never through it (C2). */
+  sends: TrackSendLevels;
 }
 
 /**

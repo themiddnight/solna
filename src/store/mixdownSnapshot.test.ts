@@ -3,6 +3,9 @@ import { useAppStore } from './store';
 import { SOURCE_BUSES } from './sourceBuses';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import { buildMixdownSnapshot } from './mixdownSnapshot';
+import { createDefaultLoopContent } from './loopDefaults';
+import { mixdownLoop, mixdownSnapshot } from '@/audio/export/mixdownFixture';
+import type { SourceBusId } from './sourceBuses';
 
 describe('buildMixdownSnapshot', () => {
   test('carries one bus row per SOURCE_BUSES entry, and one Beat voice row per loop', () => {
@@ -104,6 +107,33 @@ describe('buildMixdownSnapshot', () => {
         chordVolume: before.chordVolume,
         chordMuted: before.chordMuted,
       });
+    }
+  });
+});
+
+describe('buildMixdownSnapshot: per-track sends', () => {
+  test('carries each bus sends: song level from the flat slice, per loop from the loop', () => {
+    const before = useAppStore.getState();
+    const loopSends = { ...before.loops[0].trackSends, chord: { reverb: 0.25, delay: 0.5, distortion: 0 } };
+    useAppStore.setState({
+      trackSends: { ...before.trackSends, bass: { reverb: 0, delay: 0.75, distortion: 1 } },
+      loops: [{ ...before.loops[0], trackSends: loopSends }],
+    });
+    try {
+      const snapshot = buildMixdownSnapshot(useAppStore.getState());
+      expect(snapshot.buses.find((bus) => bus.source === 'bass')?.sends)
+        .toEqual({ reverb: 0, delay: 0.75, distortion: 1 });
+      expect(snapshot.loops[0].buses.find((bus) => bus.source === 'chord')?.sends)
+        .toEqual({ reverb: 0.25, delay: 0.5, distortion: 0 });
+    } finally {
+      useAppStore.setState({ trackSends: before.trackSends, loops: before.loops });
+    }
+  });
+
+  test('the mixdown fixture spells exactly the store default sends', () => {
+    const defaults = createDefaultLoopContent().trackSends;
+    for (const bus of [...mixdownSnapshot().buses, ...mixdownLoop().buses]) {
+      expect([bus.source, bus.sends]).toEqual([bus.source, defaults[bus.source as SourceBusId]]);
     }
   });
 });
