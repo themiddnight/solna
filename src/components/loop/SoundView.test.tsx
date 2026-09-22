@@ -212,18 +212,18 @@ describe('the drum-focus sound surface (Beat Sound)', () => {
   const html = renderToString(<SoundView />);
   useAppStore.setState({ focusTrack: 'synth' });
 
-  // Step 17: the drum bus fader's dB markup, asserted at view level so a
+  // Step 17: the drum bus level's dB markup, asserted at view level so a
   // regression back to a %/linear readout on this call site is caught here
-  // and not only inside ChannelStrip's own unit tests.
-  test('the drum bus fader renders its dB tooltip and position step', () => {
-    // DEV-383: the Beat bus fader's factory default is DEFAULT_BUS_TRIM_DB
-    // (-6 dB), not unity — this view renders the store's creation-time
-    // snapshot with no explicit setState, so the tooltip reflects that.
-    // `Drum`, not `Drums`: the fader is SoundMixer's row now (idPrefix 'drum',
-    // which is the store's name for the Beat bus), no longer the card's own
-    // "Drum Level" strip. Same view, same bus, same dB contract.
-    expect(html).toContain('title="Drum Layer Gain: -6.0 dB"');
-    expect(html).toContain('step="0.005"');
+  // and not only inside VolumeFader's own tests.
+  test('the drum bus level knob reads out in dB on the fader taper', () => {
+    // DEV-383: the Beat bus's factory default is DEFAULT_BUS_TRIM_DB (-6 dB),
+    // not unity — this view renders the store's creation-time snapshot with
+    // no explicit setState. The knob turns in taper POSITION (0..1), so the
+    // dB lives in aria-valuetext rather than the value.
+    const knob = html.slice(html.indexOf('id="slider-drum-layer-volume"'));
+    const tag = knob.slice(0, knob.indexOf('>'));
+    expect(tag).toContain('aria-valuetext="-6.0 dB"');
+    expect(tag).toContain('aria-valuemax="1"');
   });
 
   // The regression this row was rebuilt for: fields whose controls were 24, 32
@@ -808,17 +808,13 @@ describe('the Mixer toggle column', () => {
     }
   });
 
-  // The label belongs to the ROW, not to the fader: while ChannelStrip owned it,
-  // the toggle centred against a 48px label-plus-box stack and the fader against
-  // its own 32px box, which left every toggle 8px above the control it operates.
-  test('the fader carries no label of its own, so the controls share one line', () => {
-    // One label per ROW and none from the fader. Counting is what makes this
-    // fail if ChannelStrip's own label comes back: it would double the count
-    // without changing anything a per-row slice could see.
-    const labels = [...html.matchAll(/<label /g)];
-    expect(labels).toHaveLength(MIX_LAYERS.length);
+  // The level control names itself: the row's label is the focus button, so
+  // the knob carries its own accessible name rather than a <label for>.
+  test('each level knob names its own layer, with no stray <label>', () => {
+    expect(html).not.toContain('<label ');
     for (const layer of MIX_LAYERS) {
-      expect(html).toContain(`for="slider-${layer.idPrefix}-layer-volume"`);
+      const knob = html.slice(html.indexOf(`id="slider-${layer.idPrefix}-layer-volume"`));
+      expect(knob.slice(0, knob.indexOf('>'))).toContain(`aria-label="${layer.label} Vol level"`);
     }
   });
 });

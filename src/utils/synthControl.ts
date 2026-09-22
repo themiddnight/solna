@@ -10,8 +10,7 @@ export type SynthControlTarget = 'synth' | 'chord' | 'bass' | 'pad' | 'fx';
 // they are not background-colours. `tint` is kept apart from `ring` because a
 // full-height drawer panel wants the colour wash without an outline around it;
 // `activeBtn`/`badge`/`border` are modifier fragments — the call site owns the
-// base `btn`/`badge`/`border` classes, while `slider` is a COMPLETE daisyUI
-// range class list because ChannelStrip takes the whole thing.
+// base `btn`/`badge`/`border` classes.
 //
 // Every string here is a literal and must stay one: Tailwind v4 scans source
 // statically, so a class assembled from `--color-module-${target}` at runtime
@@ -30,8 +29,6 @@ export const SYNTH_TARGET_STYLES: Record<
     badge: string;
     /** Border tint for a container that frames the target's controls. */
     border: string;
-    /** Full fader class list for `ChannelStrip`'s `sliderClassName`. */
-    slider: string;
     /**
      * Icon/label tint. Kept to the literals `ui/Knob`'s `KnobColor` allows,
      * so `ChannelStrip`'s `accentClass` accepts it without a cast — spelled
@@ -59,7 +56,6 @@ export const SYNTH_TARGET_STYLES: Record<
     softBtn: 'btn-soft btn-primary',
     badge: '',
     border: 'border-primary',
-    slider: 'range range-xs range-primary',
     accent: 'text-primary',
   },
   chord: {
@@ -70,7 +66,6 @@ export const SYNTH_TARGET_STYLES: Record<
     softBtn: 'btn-soft [--btn-color:var(--color-module-chord)] [--btn-fg:var(--color-module-chord-content)]',
     badge: '[--badge-color:var(--color-module-chord)]',
     border: 'border-module-chord',
-    slider: 'range range-xs text-module-chord [--range-thumb:var(--color-module-chord-content)]',
     accent: 'text-module-chord',
   },
   bass: {
@@ -81,7 +76,6 @@ export const SYNTH_TARGET_STYLES: Record<
     softBtn: 'btn-soft [--btn-color:var(--color-module-bass)] [--btn-fg:var(--color-module-bass-content)]',
     badge: '[--badge-color:var(--color-module-bass)]',
     border: 'border-module-bass',
-    slider: 'range range-xs text-module-bass [--range-thumb:var(--color-module-bass-content)]',
     accent: 'text-module-bass',
   },
   pad: {
@@ -92,7 +86,6 @@ export const SYNTH_TARGET_STYLES: Record<
     softBtn: 'btn-soft [--btn-color:var(--color-module-pad)] [--btn-fg:var(--color-module-pad-content)]',
     badge: '[--badge-color:var(--color-module-pad)]',
     border: 'border-module-pad',
-    slider: 'range range-xs text-module-pad [--range-thumb:var(--color-module-pad-content)]',
     accent: 'text-module-pad',
   },
   fx: {
@@ -103,7 +96,6 @@ export const SYNTH_TARGET_STYLES: Record<
     softBtn: 'btn-soft [--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
     badge: '[--badge-color:var(--color-module-fx)]',
     border: 'border-module-fx',
-    slider: 'range range-xs text-module-fx [--range-thumb:var(--color-module-fx-content)]',
     accent: 'text-module-fx',
   },
 };

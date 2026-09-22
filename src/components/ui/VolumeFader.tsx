@@ -1,5 +1,6 @@
 import React from 'react';
 import { Slider } from './Slider';
+import { Knob, type KnobColor, type KnobSize } from './Knob';
 import { FADER_POSITION_STEP } from '@/store/levelUnits';
 import { SILENCE_DB, UNITY_DB, dbToSliderPos, formatDb, sliderPosTodB } from '@/utils/gainUnits';
 
@@ -99,5 +100,46 @@ export function VolumeFader({
       />
       {showReadout && <span className={readoutClassName}>{readout}</span>}
     </>
+  );
+}
+
+/** Unity gain as a position on the taper — where VolumeKnob's detent sits. */
+const UNITY_POSITION = dbToSliderPos(UNITY_DB);
+
+interface VolumeKnobProps {
+  id: string;
+  /** The knob's short visible caption, e.g. "Vol". */
+  label: string;
+  /** The accessible name; must contain `label` (WCAG 2.5.3). */
+  ariaLabel: string;
+  /** DECIBELS, relative: unity is 0, the range is -60..+12. */
+  valueDb: number;
+  onChangeDb: (db: number) => void;
+  color?: KnobColor;
+  size?: KnobSize;
+}
+
+/**
+ * VolumeFader's taper on a knob, for a surface that has no room for a
+ * full-width fader. The knob turns in POSITION units exactly like the fader —
+ * coarse at the bottom, fine near unity, the bottom half-step reads as silence —
+ * with a detent at unity where the fader has its double-click reset.
+ */
+export function VolumeKnob({ id, label, ariaLabel, valueDb, onChangeDb, color, size = 'md' }: VolumeKnobProps) {
+  return (
+    <Knob
+      id={id}
+      value={dbToSliderPos(valueDb)}
+      onChange={(pos) => onChangeDb(faderPositionToDb(pos))}
+      min={0}
+      max={1}
+      step={FADER_POSITION_STEP}
+      detent={UNITY_POSITION}
+      size={size}
+      color={color}
+      label={label}
+      ariaLabel={ariaLabel}
+      format={(pos) => formatDb(faderPositionToDb(pos))}
+    />
   );
 }

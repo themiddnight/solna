@@ -2,9 +2,9 @@ import React from 'react';
 import { SlidersVertical } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import { isAnyPlayerActive } from '@/store/transportSlice';
-import { SYNTH_TARGET_STYLES } from '@/utils/synthControl';
 import { SectionCard } from '../ui/SectionCard';
-import { ChannelStrip, layerVolumeSliderId } from '../ui/ChannelStrip';
+import { layerVolumeSliderId } from '../ui/ChannelStrip';
+import { VolumeKnob } from '../ui/VolumeFader';
 import { Knob } from '../ui/Knob';
 import { PowerToggle } from '../ui/PowerToggle';
 import { SourceMeter } from '../ui/SourceMeter';
@@ -19,7 +19,7 @@ import {
   type MixLayerId,
 } from '../mixLayers';
 import { FIELD_LABEL, GROUP_LABEL } from '../ui/fieldClasses';
-import { formatDb, formatPercent } from '@/utils/gainUnits';
+import { formatPercent } from '@/utils/gainUnits';
 import { SEND_EFFECTS, type SendEffect } from '@/types';
 
 /**
@@ -37,16 +37,13 @@ const MIXER_WRITERS: Record<MixLayerId, {
   toggleKey:
     | 'toggleSynthMuted' | 'toggleFxMuted' | 'toggleChordMuted' | 'toggleBassMuted' | 'togglePadMuted'
     | 'toggleBeatMuted';
-  sliderClassName: string;
 }> = {
-  synth: { setVolumeKey: 'setSynthVolume', toggleKey: 'toggleSynthMuted', sliderClassName: SYNTH_TARGET_STYLES.synth.slider },
-  fx: { setVolumeKey: 'setFxVolume', toggleKey: 'toggleFxMuted', sliderClassName: SYNTH_TARGET_STYLES.fx.slider },
-  chord: { setVolumeKey: 'setChordVolume', toggleKey: 'toggleChordMuted', sliderClassName: SYNTH_TARGET_STYLES.chord.slider },
-  bass: { setVolumeKey: 'setBassVolume', toggleKey: 'toggleBassMuted', sliderClassName: SYNTH_TARGET_STYLES.bass.slider },
-  pad: { setVolumeKey: 'setPadVolume', toggleKey: 'togglePadMuted', sliderClassName: SYNTH_TARGET_STYLES.pad.slider },
-  // The drum bus has no SynthControlTarget entry — it is not a synth voice —
-  // so its slider class is a literal.
-  drum: { setVolumeKey: 'setBeatLevel', toggleKey: 'toggleBeatMuted', sliderClassName: 'range range-xs range-accent' },
+  synth: { setVolumeKey: 'setSynthVolume', toggleKey: 'toggleSynthMuted' },
+  fx: { setVolumeKey: 'setFxVolume', toggleKey: 'toggleFxMuted' },
+  chord: { setVolumeKey: 'setChordVolume', toggleKey: 'toggleChordMuted' },
+  bass: { setVolumeKey: 'setBassVolume', toggleKey: 'toggleBassMuted' },
+  pad: { setVolumeKey: 'setPadVolume', toggleKey: 'togglePadMuted' },
+  drum: { setVolumeKey: 'setBeatLevel', toggleKey: 'toggleBeatMuted' },
 };
 
 export type MixerChannel = MixLayer & (typeof MIXER_WRITERS)[MixLayerId];
@@ -102,14 +99,14 @@ const MIXER_GROUPS: ReadonlyArray<{ id: MixGroupId; label: string; channels: Mix
  * span, row 1 would be as tall as the taller of the two groups in it and Beat
  * would float below a gap the size of the difference.
  *
- * Every class is `lg:`-prefixed and a test holds that: below the breakpoint all
+ * Every class is `md:`-prefixed and a test holds that: below the breakpoint all
  * of these must be inert, leaving one column in MIX_GROUP_IDS order — which is
  * what keeps Beat last on a phone.
  */
 export const MIXER_GROUP_PLACEMENT: Record<MixGroupId, string> = {
-  lead: 'lg:col-start-1 lg:row-start-1',
-  accompaniment: 'lg:col-start-2 lg:row-start-1 lg:row-span-2',
-  beat: 'lg:col-start-1 lg:row-start-2',
+  lead: 'md:col-start-1 md:row-start-1',
+  accompaniment: 'md:col-start-2 md:row-start-1 md:row-span-2',
+  beat: 'md:col-start-1 md:row-start-2',
 };
 
 /** Each send knob's short label and the accessible name's tail. */
@@ -128,7 +125,7 @@ const SEND_KNOB_TEXT: Record<SendEffect, { label: string; aria: string }> = {
 function TrackSendKnobs({ channel }: { channel: MixerChannel }) {
   const { sends, onChangeFor, onCommit, onCancel } = useTrackSendsDraft(channel.engineSource);
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-3">
       {SEND_EFFECTS.map((effect) => (
         <Knob
           key={effect}
@@ -140,7 +137,7 @@ function TrackSendKnobs({ channel }: { channel: MixerChannel }) {
           min={0}
           max={1}
           step={0.01}
-          size="xs"
+          size="md"
           color={channel.accentClass}
           label={SEND_KNOB_TEXT[effect].label}
           ariaLabel={`${channel.label} ${SEND_KNOB_TEXT[effect].aria}`}
@@ -198,73 +195,46 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
           }`}
           title={`Work on ${channel.label}`}
         >
-          {channel.label} <span className="tabular-nums">({formatDb(volume)})</span>
+          {channel.label}
         </button>
-        <label className="sr-only" htmlFor={layerVolumeSliderId(channel.idPrefix)}>
-          {channel.label} level
-        </label>
       </div>
-      {/* `items-start` + an `h-8` box around the toggle, rather than
-          `items-center`: the fader and the meter stack, and centring would drop
-          the toggle to the middle of that stack — beside the gap between them.
-          Anchoring to the top of a 32px box puts it level with the fader,
-          because the fader box is `h-8` too. */}
-      <div className="flex items-start gap-2">
-        {/* `iconOnly`, because the row's label above already says "Lead" and
-            what its level is — and because a square button is one width for
-            every layer, where "Lead On" / "Chord On" / "Pad Off" are three, and
-            three widths start each row's fader at a different x. The state
-            still reaches assistive tech: PowerToggle sets `aria-pressed` and an
-            `aria-label` of "Lead On", and the tooltip says what a click does. */}
-        <div className="flex items-center h-8 shrink-0">
-          <PowerToggle
-            id={`btn-mix-mute-${channel.idPrefix}`}
-            on={!muted}
-            onToggle={toggleMuted}
-            name={channel.label}
-            tone={channel.tone}
-            size="xs"
-            iconOnly
-            verb={{ on: 'Unmute', off: 'Mute' }}
-          />
-        </div>
-        {/* The meter sits UNDER the fader at every width, not beside it above
-            `sm`. Side by side, the two split one row's width between a control
-            and a readout, and the fader — the thing you actually drag — got the
-            worse half of it on a phone. Stacked, the fader is full width at
-            every size, and the width the meter gives back is what pays for the
-            two-column grid this surface lays out at `lg`. */}
-        <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <div className="min-w-0">
-            {/* `showReadout={false}` because the row label above already
-                prints `formatDb(volume)`. It defaults to true, so leaving it
-                off rendered every layer's dB twice — once in the label, once
-                inside the fader box. */}
-            <ChannelStrip
-              idPrefix={channel.idPrefix}
-              volumeDb={volume}
-              accentClass={channel.accentClass}
-              sliderClassName={channel.sliderClassName}
-              showReadout={false}
-              onVolumeDbChange={setVolume}
-            />
-          </div>
-          {/* `h-4`, not the `h-8` this wore while it sat beside the fader: that
-              height existed to give a ~6px bar a 32px box to centre in, so that
-              it lined up with the fader's own `h-8`. Under the fader there is
-              nothing to line up with, and 32px of mostly-empty box would spend
-              on padding the row height the stack just took. The reading is
-              post-fader (see ui/SourceMeter), so this bar shows what the fader
-              above it just did. */}
-          <SourceMeter
-            source={channel.engineSource}
-            label={channel.label}
-            isPlaying={isPlaying}
-            className="h-4 min-w-0"
-          />
-          <TrackSendKnobs channel={channel} />
-        </div>
+      {/* One control line: the mute toggle, then the level knob and the three
+          send knobs as two groups split by a rule — level | sends. All four
+          are `md` knobs, so a phone gets a thumb-sized target for each. */}
+      <div className="flex items-center gap-3">
+        {/* `iconOnly`, because the row's label above already says "Lead" — and
+            a square button is one width for every layer, so every row's knobs
+            start at the same x. The state still reaches assistive tech:
+            PowerToggle sets `aria-pressed` and an `aria-label` of "Lead On". */}
+        <PowerToggle
+          id={`btn-mix-mute-${channel.idPrefix}`}
+          on={!muted}
+          onToggle={toggleMuted}
+          name={channel.label}
+          tone={channel.tone}
+          size="xs"
+          iconOnly
+          verb={{ on: 'Unmute', off: 'Mute' }}
+        />
+        <VolumeKnob
+          id={layerVolumeSliderId(channel.idPrefix)}
+          valueDb={volume}
+          onChangeDb={setVolume}
+          color={channel.accentClass}
+          label="Vol"
+          ariaLabel={`${channel.label} Vol level`}
+        />
+        <div aria-hidden="true" className="self-stretch w-px bg-base-300" />
+        <TrackSendKnobs channel={channel} />
       </div>
+      {/* Post-fader (see ui/SourceMeter): the bar shows what the level knob
+          above it just did, full width so a phone reads it at a glance. */}
+      <SourceMeter
+        source={channel.engineSource}
+        label={channel.label}
+        isPlaying={isPlaying}
+        className="h-4 min-w-0"
+      />
     </div>
   );
 }
@@ -302,10 +272,10 @@ export const SoundMixer = React.memo(function SoundMixer() {
         {/* A grid rather than a flex column: the wide layout has to place groups
             on named cells (MIXER_GROUP_PLACEMENT), and the narrow one is a plain
             single column — which a one-column grid already is, so there is no
-            second layout to keep in step. `lg:items-start` so the shorter column
+            second layout to keep in step. `md:items-start` so the shorter column
             keeps its rows at the top instead of a group stretching to match its
             neighbour's height. */}
-        <div className="grid gap-2 lg:grid-cols-2 lg:gap-x-6 lg:items-start">
+        <div className="grid gap-2 md:grid-cols-2 md:gap-x-6 md:items-start">
           {MIXER_GROUPS.map((group) => (
             /* A real box per group, no longer a Fragment: it is the thing the
                grid places, and its heading has to travel to that cell with its

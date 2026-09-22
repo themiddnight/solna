@@ -63,7 +63,6 @@ describe('the fx control target', () => {
       softBtn: 'btn-soft [--btn-color:var(--color-module-fx)] [--btn-fg:var(--color-module-fx-content)]',
       badge: '[--badge-color:var(--color-module-fx)]',
       border: 'border-module-fx',
-      slider: 'range range-xs text-module-fx [--range-thumb:var(--color-module-fx-content)]',
       accent: 'text-module-fx',
     });
   });

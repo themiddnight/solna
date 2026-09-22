@@ -159,7 +159,7 @@ describe('the wide-screen two-column placement', () => {
   // record have six keys" — the `Record<MixGroupId, …>` type already refuses a
   // missing one — but "does any two of them name the same cell". Two groups
   // sharing a `col-start`/`row-start` pair stack on top of each other in the
-  // grid: no error, no failing type, just one group drawn over another at `lg`
+  // grid: no error, no failing type, just one group drawn over another at `md`
   // and nowhere below it.
   test('no two groups are placed on the same grid cell', () => {
     const cells = MIX_GROUP_IDS.map((id) => {
@@ -175,13 +175,13 @@ describe('the wide-screen two-column placement', () => {
     expect(new Set(cells).size).toBe(MIX_GROUP_IDS.length);
   });
 
-  // The point of the whole layout: below `lg` the groups are one column in
+  // The point of the whole layout: below `md` the groups are one column in
   // MIX_GROUP_IDS order, so Beat stays last. A placement class that forgot its
-  // `lg:` prefix would move Beat up into the middle on a phone.
-  test('every placement class is gated behind the lg breakpoint', () => {
+  // `md:` prefix would move Beat up into the middle on a phone.
+  test('every placement class is gated behind the tablet breakpoint', () => {
     for (const id of MIX_GROUP_IDS) {
       for (const cls of MIXER_GROUP_PLACEMENT[id].split(/\s+/)) {
-        expect(cls, `${id}: ${cls}`).toMatch(/^lg:/);
+        expect(cls, `${id}: ${cls}`).toMatch(/^md:/);
       }
     }
   });
