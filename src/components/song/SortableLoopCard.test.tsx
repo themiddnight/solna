@@ -5,6 +5,7 @@ import { renderToString } from 'react-dom/server';
 import { createDefaultLoop } from '@/store/loopSlice';
 import { formatChordLabel, generateBlockChordNotes } from '@/utils/musicTheory';
 import { spellNoteInKey } from '@/utils/noteSpelling';
+import { LoopDetailSheet } from './LoopDetailSheet';
 import { getActiveChordIndex, renameFromDraft, SortableLoopCard } from './SortableLoopCard';
 
 describe('getActiveChordIndex', () => {
@@ -394,5 +395,43 @@ describe('the Copy into… button', () => {
 
   test('the card itself never mounts a dialog', () => {
     expect(renderCard(3)).not.toContain('btn-loop-copy-apply');
+  });
+});
+
+describe('the mobile row and its detail sheet', () => {
+  const renderSheet = (overrides: Partial<CardProps> = {}) =>
+    renderToString(
+      <LoopDetailSheet card={cardProps({ label: 'Verse', ...overrides })} activeChordIndex={-1} open onClose={() => {}} />,
+    );
+
+  test('the row carries a More button named through the loop label', () => {
+    const html = renderVerseCard();
+    expect(html).toContain('id="btn-loop-more-loop-default-1"');
+    expect(html).toContain('aria-label="More for Verse"');
+  });
+
+  test('a repeat above one shows as a badge in the row', () => {
+    expect(renderCard({ loop: { ...createDefaultLoop(), repeatCount: 4 } })).toContain('×4');
+    expect(renderCard()).not.toContain('×1');
+  });
+
+  test('the card mounts no sheet until it is opened', () => {
+    expect(renderVerseCard()).not.toContain('btn-sheet-loop-');
+  });
+
+  test('the sheet holds the meta row, mixer and commands under sheet-scoped ids', () => {
+    const html = renderSheet();
+    expect(html).toContain('id="sheet-select-repeat-loop-default-1"');
+    expect(html).toMatch(/id="btn-mute-sheet-[^"]+-loop-default-1"/);
+    for (const cmd of ['edit', 'up', 'down', 'duplicate', 'copy-into', 'delete']) {
+      expect(html).toContain(`id="btn-sheet-loop-${cmd}-loop-default-1"`);
+    }
+    expect(html).not.toContain('id="select-repeat-loop-default-1"');
+  });
+
+  test('copy and delete are disabled when the project holds one loop', () => {
+    const html = renderSheet({ totalLoops: 1 });
+    expect(html).toMatch(/id="btn-sheet-loop-copy-into-loop-default-1"[^>]*disabled=""/);
+    expect(html).toMatch(/id="btn-sheet-loop-delete-loop-default-1"[^>]*disabled=""/);
   });
 });

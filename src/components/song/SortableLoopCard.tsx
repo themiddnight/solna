@@ -1,30 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
   Check,
   ClipboardPaste,
   Copy,
+  Ellipsis,
   GripVertical,
   Music,
   Pencil,
   Play,
   Square,
   Trash2,
-  Volume2,
-  VolumeX,
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Loop, LoopMixPatch } from '@/store/types';
-import { ChordItem } from '@/types';
 import { loopBars } from '@/utils/songStructure';
-import { formatDb } from '@/utils/gainUnits';
-import { formatChordLabel, generateBlockChordNotes } from '@/utils/musicTheory';
-import { getTonicSpelling, spellNoteInKey, type SpellingKey } from '@/utils/noteSpelling';
-import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
-import { MIX_LAYERS } from '../mixLayers';
-import { VolumeFader } from '../ui/VolumeFader';
+import { IconButton } from '../ui/IconButton';
+import { LoopCardMetaRow, LoopCardMixer, LoopMixSummary } from './loopCardBody';
+import { LoopDetailSheet, useLoopDetailSheet } from './LoopDetailSheet';
 
 /**
  * What a rename save should write, or null for "write nothing".
@@ -63,86 +58,6 @@ export function getActiveChordIndex(
     accumulatedBars += chordBars;
   }
   return chords.length - 1;
-}
-
-export interface MixChannelProps {
-  idPrefix: string;
-  label: string;
-  /** DECIBELS: unity is 0, the range is -60..+12 — same as ChannelStrip's
-   *  `volumeDb`, renamed to match for the same reason. */
-  volumeDb: number;
-  muted: boolean;
-  tone: PowerToggleTone;
-  sliderAccent: string;
-  onVolumeDbChange: (db: number) => void;
-  onToggleMute: () => void;
-}
-
-/** One compact mixer strip (mute + gain) inside a loop card. */
-export function MixChannel({
-  idPrefix,
-  label,
-  volumeDb,
-  muted,
-  tone,
-  sliderAccent,
-  onVolumeDbChange,
-  onToggleMute,
-}: MixChannelProps) {
-  return (
-    <div
-      className={`flex flex-col gap-1 p-2 rounded-box bg-base-100 border border-base-300/60 transition-opacity ${
-        muted ? 'opacity-50 grayscale' : 'opacity-100'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-1">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {muted ? (
-            <VolumeX className="w-3 h-3 text-base-content/40 shrink-0" />
-          ) : (
-            <Volume2 className="w-3 h-3 text-base-content/70 shrink-0" />
-          )}
-          <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/70 truncate">
-            {label}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span
-            className={`text-[10px] tabular-nums shrink-0 ${
-              muted ? 'text-base-content/40' : 'text-base-content/70'
-            }`}
-          >
-            {formatDb(volumeDb)}
-          </span>
-          <PowerToggle
-            id={`btn-mute-${idPrefix}`}
-            on={!muted}
-            onToggle={onToggleMute}
-            name={`${label} mute`}
-            tone={tone}
-            size="xs"
-            iconOnly
-            verb={{ on: 'Unmute', off: 'Mute' }}
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-1.5 mt-0.5">
-        {/* The same fader the channel strips and the transport bar use, so
-            these five agree with them about where unity sits, what the bottom
-            of the travel means and how a level is spelled. There is no per-bus
-            `max` any more: every bus shares the -60..+12 dB range, and a
-            per-bus ceiling would make the same position mean two levels. */}
-        <VolumeFader
-          id={`slider-${idPrefix}`}
-          label={`${label} gain`}
-          valueDb={volumeDb}
-          onChangeDb={onVolumeDbChange}
-          showReadout={false}
-          className={`range range-xs ${sliderAccent} w-full`}
-        />
-      </div>
-    </div>
-  );
 }
 
 export interface SortableLoopCardProps {
@@ -240,12 +155,12 @@ function LoopAuditionButton({ loopId, loopName, isAuditioning, disabled, onToggl
       {isAuditioning ? (
         <>
           <Square className="w-3 h-3 fill-current" />
-          Stop
+          <span className="hidden md:inline">Stop</span>
         </>
       ) : (
         <>
           <Play className="w-3 h-3 fill-current" />
-          Play
+          <span className="hidden md:inline">Play</span>
         </>
       )}
     </button>
@@ -303,75 +218,6 @@ function LoopStatusBadge({
     );
   }
   return null;
-}
-
-interface LoopChordStripProps {
-  chords: ChordItem[] | undefined;
-  chordOctave: number;
-  isPlaying: boolean;
-  activeChordIndex: number | null;
-  spellingKey: SpellingKey;
-}
-
-/**
- * The progression readout, with the playing chord highlighted. Extracted for
- * the same reason as LoopStatusBadge: every branch here is about one chord
- * badge, so counting them against the whole card measured nothing.
- */
-function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex, spellingKey }: LoopChordStripProps) {
-  // A chord's notes are derived, not stored (DEV-396). This card re-renders
-  // every step while the loop plays (`activeChordIndex` tracks the playhead),
-  // so the whole strip's Tonal resolution is memoized on the loop's own
-  // chords/octave/key rather than re-run on every one of those ticks. Keyed
-  // on the two spelling primitives, not `spellingKey` itself — the caller
-  // passes a fresh object literal every render, which would defeat the memo.
-  const chordNotes = useMemo(
-    () =>
-      (chords ?? []).map((chord) =>
-        generateBlockChordNotes(chord.quality, chord.root, chordOctave).map((n) =>
-          spellNoteInKey(n, spellingKey.scaleRoot, spellingKey.scaleType),
-        ),
-      ),
-    [chords, chordOctave, spellingKey.scaleRoot, spellingKey.scaleType],
-  );
-
-  if (!chords || chords.length === 0) {
-    return <span className="text-base-content/40 italic">No chords</span>;
-  }
-  return (
-    <div className="flex flex-wrap items-center gap-1 min-w-0">
-      {chords.map((chord, cIdx) => {
-        const isChordActive = isPlaying && cIdx === activeChordIndex;
-        const notes = chordNotes[cIdx];
-        return (
-          <span
-            key={chord.id || `${chord.root}-${cIdx}`}
-            className={`badge badge-sm gap-1 transition-all duration-150 ${
-              isChordActive
-                ? 'badge-primary font-bold ring-2 ring-primary/60 shadow-sm scale-105'
-                : 'bg-base-200 border border-base-300'
-            }`}
-            title={notes.length ? `Notes: ${notes.join(', ')}` : undefined}
-          >
-            <span
-              className={
-                isChordActive ? 'text-primary-content font-bold' : 'font-bold text-base-content'
-              }
-            >
-              {formatChordLabel(chord.root, chord.quality, spellingKey)}
-            </span>
-            <span
-              className={`text-[9px] ${
-                isChordActive ? 'text-primary-content/80' : 'text-base-content/50'
-              }`}
-            >
-              {`${chord.bars ?? 1}b`}
-            </span>
-          </span>
-        );
-      })}
-    </div>
-  );
 }
 
 /**
@@ -473,7 +319,7 @@ function LoopNameField({
         id={`btn-loop-select-${loopId}`}
         type="button"
         onClick={() => onSelect(loopId)}
-        className="btn btn-sm btn-ghost p-1 font-bold text-base-content hover:text-primary flex items-center gap-1.5 min-w-0 text-left"
+        className="btn btn-sm btn-ghost p-1 font-bold text-base-content hover:text-primary flex items-center gap-1.5 min-w-0 shrink text-left"
         title="Click to cue/select loop"
       >
         <span className="truncate text-sm sm:text-base">{label}</span>
@@ -586,11 +432,13 @@ function LoopCardHeader({
   bars,
   draft,
   sortHandle,
+  onOpenSheet,
 }: {
   card: SortableLoopCardProps;
   bars: number;
   draft: LoopNameDraft;
   sortHandle: SortHandle;
+  onOpenSheet: () => void;
 }) {
   const {
     loop,
@@ -608,22 +456,25 @@ function LoopCardHeader({
     onSelect,
     onTogglePlayLoop,
   } = card;
+  const loopRepeat = loop.repeatCount ?? 1;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      {/* `flex-wrap` is load-bearing: this group holds seven items whose
-          widths are content-driven (the loop name, a bar count, a live
-          "Playing 7/64 (Rep 1/2)" badge), and as a single non-wrapping
-          row they overlapped each other on a phone rather than
-          overflowing visibly. `basis-full` keeps the action cluster
-          beside it from being squeezed onto the same short line. */}
-      <div className="flex flex-wrap items-center gap-2 min-w-0 basis-full sm:basis-0 sm:flex-1">
-        {/* Drag Handle */}
+    <div className="flex items-center justify-between gap-2 md:flex-wrap">
+      {/* From `md` up, `flex-wrap` is load-bearing: this group holds seven
+          items whose widths are content-driven (the loop name, a bar count, a
+          live "Playing 7/64 (Rep 1/2)" badge), and as a single non-wrapping
+          row they overlapped each other. Below `md` the card is one row: the
+          order badge, the status badge and the action cluster leave it (the
+          progress rail shows the status; the detail sheet holds the actions),
+          so what remains fits one line with the name truncating. */}
+      <div className="flex items-center gap-1.5 min-w-0 flex-1 basis-0 md:flex-wrap md:gap-2">
+        {/* Drag Handle. `touch-none` lets a finger drag it instead of
+            scrolling the page. */}
         <button
           type="button"
           {...sortHandle.attributes}
           {...sortHandle.listeners}
-          className="btn btn-ghost btn-xs btn-square cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content"
+          className="btn btn-ghost btn-xs btn-square touch-none cursor-grab active:cursor-grabbing text-base-content/40 hover:text-base-content"
           aria-label={`Drag to reorder ${label}`}
           title="Drag to reorder"
         >
@@ -631,7 +482,7 @@ function LoopCardHeader({
         </button>
 
         {/* Order index badge */}
-        <span className="badge badge-sm badge-neutral tabular-nums font-bold shrink-0">
+        <span className="badge badge-sm badge-neutral tabular-nums font-bold shrink-0 hidden md:inline-flex">
           {`#${index + 1}`}
         </span>
 
@@ -652,20 +503,39 @@ function LoopCardHeader({
           {`${bars} ${bars === 1 ? 'bar' : 'bars'}`}
         </span>
 
-        <LoopStatusBadge
-          isAuditioning={isAuditioning}
-          isPlaying={isPlaying}
-          isActive={isActive}
-          currentStepInLoop={currentStepInLoop}
-          singleCycleSteps={singleCycleSteps}
-          totalStepsInLoop={totalStepsInLoop}
-          currentRep={currentRep}
-          repeatCount={repeatCount}
-        />
+        {loopRepeat > 1 && (
+          <span className="badge badge-sm badge-ghost tabular-nums font-bold shrink-0 md:hidden">
+            {`×${loopRepeat}`}
+          </span>
+        )}
+
+        <div className="hidden md:contents">
+          <LoopStatusBadge
+            isAuditioning={isAuditioning}
+            isPlaying={isPlaying}
+            isActive={isActive}
+            currentStepInLoop={currentStepInLoop}
+            singleCycleSteps={singleCycleSteps}
+            totalStepsInLoop={totalStepsInLoop}
+            currentRep={currentRep}
+            repeatCount={repeatCount}
+          />
+        </div>
       </div>
 
       {/* Action Buttons */}
-      <LoopCardActions card={card} />
+      <div className="hidden md:contents">
+        <LoopCardActions card={card} />
+      </div>
+
+      <IconButton
+        id={`btn-loop-more-${loop.id}`}
+        label={`More for ${label}`}
+        icon={<Ellipsis className="w-4 h-4" />}
+        size="sm"
+        className="md:hidden shrink-0"
+        onClick={onOpenSheet}
+      />
     </div>
   );
 }
@@ -694,107 +564,6 @@ function LoopCardProgressRail({
   );
 }
 
-/** Key / scale, repeat count and the chord progression, on one strip. */
-function LoopCardMetaRow({
-  card,
-  activeChordIndex,
-}: {
-  card: SortableLoopCardProps;
-  activeChordIndex: number;
-}) {
-  const { loop, label, isPlaying, onSetRepeat } = card;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 p-2 rounded-box bg-base-100/60 border border-base-300/40 text-xs">
-      {/* Key / Scale Display */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-          Key:
-        </span>
-        <span className="badge badge-sm badge-outline gap-1">
-          <span className="font-bold text-primary">{getTonicSpelling(loop.scaleRoot, loop.scaleType)}</span>
-          <span className="text-base-content/70">{loop.scaleType}</span>
-        </span>
-      </div>
-
-      <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
-
-      {/* Loop Repeat Setting */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
-          Repeat:
-        </span>
-        <select
-          id={`select-repeat-${loop.id}`}
-          value={loop.repeatCount ?? 1}
-          onChange={(e) => onSetRepeat(loop.id, Number(e.target.value))}
-          className="select select-xs select-bordered tabular-nums font-bold bg-base-100/80"
-          aria-label={`Repeat count for ${label}`}
-          title="Number of times this loop plays before advancing in song mode"
-        >
-          <option value={1}>1x</option>
-          <option value={2}>2x</option>
-          <option value={3}>3x</option>
-          <option value={4}>4x</option>
-          <option value={6}>6x</option>
-          <option value={8}>8x</option>
-          <option value={12}>12x</option>
-          <option value={16}>16x</option>
-        </select>
-      </div>
-
-      <div className="divider divider-horizontal my-0 mx-0.5 hidden sm:flex" />
-
-      {/* Chord Progression Display with Real-Time Highlighting.
-          `basis-full` below `sm`: sharing a row with Key and Repeat leaves
-          a phone about 40px for the label plus every chord, which pushed
-          "Progression:" past the card's right edge. Its own line fits both. */}
-      <div className="flex flex-wrap items-center gap-1.5 basis-full sm:basis-0 sm:flex-1 min-w-0">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50 shrink-0">
-          Progression:
-        </span>
-        <LoopChordStrip
-          chords={loop.chords}
-          chordOctave={loop.chordOctave}
-          isPlaying={isPlaying}
-          activeChordIndex={activeChordIndex}
-          spellingKey={{ scaleRoot: loop.scaleRoot, scaleType: loop.scaleType }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** The card's five-channel mixer strip, one row per MIX_LAYERS entry. */
-function LoopCardMixer({ card }: { card: SortableLoopCardProps }) {
-  const { loop, onSetMix } = card;
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-0.5">
-      {/* The card's mixer strip: one row per layer, in table order.
-          MIX_LAYERS is shared with loop/SoundMixer.tsx so the five
-          labels, tones, colours and store fields are written once. The
-          two surfaces' WRITERS stay separate and must — this one writes
-          a per-loop LoopMixPatch override through setLoopMix, on
-          whichever loop the card is for, while the mixer writes the live
-          store root through the ordinary slice actions. */}
-      {MIX_LAYERS.map((ch) => (
-        <MixChannel
-          key={ch.idPrefix}
-          idPrefix={`${ch.idPrefix}-${loop.id}`}
-          label={ch.label}
-          volumeDb={ch.readLevelDb(loop)}
-          muted={ch.readMuted(loop)}
-          tone={ch.tone}
-          sliderAccent={ch.accentClass}
-          onVolumeDbChange={(v) => onSetMix(loop.id, ch.levelPatch(v, loop))}
-          onToggleMute={() => onSetMix(loop.id, ch.mutePatch(!ch.readMuted(loop), loop))}
-        />
-      ))}
-    </div>
-  );
-}
-
 export const SortableLoopCard = React.memo(function SortableLoopCard(props: SortableLoopCardProps) {
   const {
     loop,
@@ -808,6 +577,7 @@ export const SortableLoopCard = React.memo(function SortableLoopCard(props: Sort
   } = props;
 
   const draft = useLoopNameDraft(loop, onRename);
+  const sheet = useLoopDetailSheet();
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: loop.id,
@@ -843,7 +613,8 @@ export const SortableLoopCard = React.memo(function SortableLoopCard(props: Sort
 
 
   return (
-    /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the card click is a shortcut for the loop-name button inside it (line 343), which is a real focusable control; the handler already ignores clicks that landed on a control. */
+    <>
+    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the card click is a shortcut for the loop-name button inside it, which is a real focusable control; the handler already ignores clicks that landed on a control. */}
     <div
       id={`card-loop-${loop.id}`}
       ref={setNodeRef}
@@ -867,20 +638,37 @@ export const SortableLoopCard = React.memo(function SortableLoopCard(props: Sort
         progressPercent={progressPercent}
       />
 
-      <div className="p-3 sm:p-4 flex flex-col gap-3">
+      <div className="px-2 pt-1.5 pb-2 md:p-4 flex flex-col gap-1 md:gap-3">
         <LoopCardHeader
           card={props}
           bars={bars}
           draft={draft}
           sortHandle={{ attributes, listeners }}
+          onOpenSheet={sheet.show}
         />
 
-        {/* Key / Scale & Chord Progression Information & Repeat Setting */}
-        <LoopCardMetaRow card={props} activeChordIndex={activeChordIndex} />
+        <div className="md:hidden">
+          <LoopMixSummary mix={loop} />
+        </div>
 
-        {/* 5-Channel Mixer Strip */}
-        <LoopCardMixer card={props} />
+        {/* Below `md` these live in the detail sheet instead. */}
+        <div className="hidden md:flex flex-col gap-3">
+          {/* Key / Scale & Chord Progression Information & Repeat Setting */}
+          <LoopCardMetaRow card={props} activeChordIndex={activeChordIndex} />
+
+          {/* 5-Channel Mixer Strip */}
+          <LoopCardMixer card={props} />
+        </div>
       </div>
     </div>
+    {sheet.mounted && (
+      <LoopDetailSheet
+        card={props}
+        activeChordIndex={activeChordIndex}
+        open={sheet.open}
+        onClose={sheet.close}
+      />
+    )}
+    </>
   );
 });

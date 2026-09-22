@@ -46,6 +46,12 @@ export function faderPositionToDb(pos: number): number {
   return pos <= FADER_POSITION_STEP / 2 ? SILENCE_DB : sliderPosTodB(pos);
 }
 
+/** Decibels -> the position this fader shows for them (0..1), for a read-only
+ *  drawing of a level that must sit where the fader's thumb would. */
+export function dbToFaderPosition(db: number): number {
+  return dbToSliderPos(db);
+}
+
 interface VolumeFaderProps {
   id: string;
   /**
