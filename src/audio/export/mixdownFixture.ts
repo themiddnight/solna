@@ -13,7 +13,7 @@ import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '@/utils/stepResolution'
 import type { BeatMix, BeatParams, BeatPattern, BeatVoiceId, BeatVoiceMix, MasterEffects } from '@/types';
 import type { ActiveSynth, ArpSettings } from '@/types/synth';
 import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
-import type { MixdownLoop, MixdownSnapshot } from './renderMixdown';
+import type { MixdownLoop, MixdownSnapshot } from '../playback/plan/songSnapshot';
 
 /**
  * The six source buses, spelled out.

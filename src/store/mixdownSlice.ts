@@ -15,10 +15,9 @@ import type { StoreApi } from 'zustand';
 import {
   renderMixdown,
   type MixdownFailureReason,
-  type MixdownLoop,
   type MixdownRenderProgress,
-  type MixdownSnapshot,
 } from '../audio/export/renderMixdown';
+import type { MixdownLoop, MixdownSnapshot } from '../audio/playback/plan/songSnapshot';
 import { BEAT_VOICE_IDS } from '../data/beatPresets';
 import { getMeter } from '../utils/meter';
 import { slugifyProjectName } from '../utils/projectFileIO';

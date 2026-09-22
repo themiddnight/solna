@@ -11,10 +11,11 @@
  * Imports only src/data/, src/utils/ and src/audio/ — no store, no component,
  * not even a type: the eslint block covering src/audio/** has no
  * allowTypeImports exemption. Everything the render reads arrives in the
- * snapshot, which is why `MixdownLoop` below names the fields this module
- * reads rather than importing the store's `ProjectLoop`. The store enriches
- * each project loop with its source-bus mixer at that boundary; every other
- * field remains the flat project-content shape.
+ * snapshot, which is why `MixdownLoop` (now `plan/songSnapshot.ts`) names the
+ * fields the offline snapshot carries rather than importing the store's
+ * `ProjectLoop`. The store enriches each project loop with its source-bus
+ * mixer at that boundary; every other field remains the flat project-content
+ * shape.
  *
  * Two consequences of the offline clock, both deliberate:
  *
@@ -27,38 +28,30 @@
  *    gets its params at trigger time, which is where they come from anyway.
  */
 import { createRenderEngine, type AudioEngine } from '../engine';
-import { type LeadNote } from '../leadMelody';
 import { emitStepEvents, playFullHoldChord } from '../playback/chordPlayback';
-import { planPadArm, type PadPlanSnapshot } from '../playback/plan/padPlan';
-import {
-  planChordArm,
-  planChordStep,
-  type ArmedChordPlan,
-  type ChordPlanSnapshot,
-} from '../playback/plan/chordPlan';
+import { planPadArm } from '../playback/plan/padPlan';
+import { planChordStep } from '../playback/plan/chordPlan';
 import { planMelodyStep, type MelodyPlanSnapshot } from '../playback/plan/melodyPlan';
+import {
+  mixdownFxTrack,
+  mixdownLeadTrack,
+  padSnapshotForLoop,
+  songTrackVoice,
+  type MixdownBeatVoiceGain,
+  type MixdownBusState,
+  type MixdownLoop,
+  type MixdownSnapshot,
+} from '../playback/plan/songSnapshot';
+import { buildLoopVoices, planArrangement, type ArrangementPlan } from '../playback/plan/songTimeline';
 import { MIXDOWN_SEED, getRandomSource, setRandomSource, withSeededRandom } from '../rng';
 import { DEFAULT_VELOCITY } from '../constants';
-import { loopDwellSteps, loopEffectiveLengthSteps } from '@/utils/songStructure';
 import { noteFrequency, stepDurationSec } from '@/utils/musicTheory';
-import { TICKS_PER_SIXTEENTH, type LeadStepResolutionId } from '@/utils/stepResolution';
-import { getMeter, type MeterId } from '@/utils/meter';
+import { TICKS_PER_SIXTEENTH } from '@/utils/stepResolution';
+import { getMeter } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
-import type { BassStepChoice } from '@/data/bassPatterns';
 import { applyBeatParams } from '../beatAdapter';
 import { planBeatStep } from '../playback/plan/beatPlan';
-import type {
-  BeatMix,
-  BeatParams,
-  BeatPattern,
-  BeatVoiceId,
-  ChordItem,
-  MasterEffects,
-  PadInterval,
-  PadMode,
-  PadVoicing,
-} from '@/types';
-import type { ActiveSynth, ArpSettings } from '@/types/synth';
+import type { BeatParams } from '@/types';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
 
 export const MIXDOWN_SAMPLE_RATE = 44100;
@@ -118,157 +111,6 @@ export async function yieldPreservingRandomStream(): Promise<void> {
   }
 }
 
-/** One source bus, its gain already converted from the store's dB to linear. */
-interface MixdownBusState {
-  source: string;
-  gain: number;
-  muted: boolean;
-}
-
-/**
- * One Beat voice's fader, already converted from the store's dB to linear at
- * the slice boundary, with the voice's MUTE folded in as a gain of 0 — the
- * same one-line rule `engineSync.ts` applies live, so the exported mix and the
- * monitored one cannot drift apart.
- */
-interface MixdownBeatVoiceGain {
-  voice: BeatVoiceId;
-  gain: number;
-}
-
-/**
- * One melody track as the renderer holds it: the planner's snapshot plus the
- * two things the planner must not know about — the patch to play it with and
- * the bus to play it on. Built by `mixdownLeadTrack` / `mixdownFxTrack`
- * below, because the store spells the Lead row irregularly (`synthParams`,
- * not `leadSynthParams`) and that irregularity is exactly what
- * `MELODY_TRACKS` exists to encode — a table this module may not import.
- */
-interface MixdownMelodyTrack extends MelodyPlanSnapshot {
-  params: ActiveSynth;
-  source: string;
-}
-
-export function mixdownLeadTrack(loop: MixdownLoop): MixdownMelodyTrack {
-  return {
-    steps: loop.leadMelodySteps,
-    loopLength: loop.leadLoopLength,
-    stepResolution: loop.leadStepResolution,
-    gate: loop.leadGate,
-    params: loop.synthParams,
-    arp: loop.synthArpSettings,
-    source: 'synth',
-  };
-}
-
-export function mixdownFxTrack(loop: MixdownLoop): MixdownMelodyTrack {
-  return {
-    steps: loop.fxMelodySteps,
-    loopLength: loop.fxLoopLength,
-    stepResolution: loop.fxStepResolution,
-    gate: loop.fxGate,
-    params: loop.fxSynthParams,
-    arp: loop.fxArpSettings,
-    source: 'fx',
-  };
-}
-
-/**
- * One loop of the arrangement, structurally: the per-loop columns this module
- * reads, named exactly as `ProjectLoop` names them (`src/store/projectFormat.ts`).
- *
- * Deliberately the flat store names rather than a nested, renderer-shaped
- * restatement, except for `buses`: that is the store→audio conversion seam
- * where persisted dB becomes linear gain. The slice spreads each project
- * loop and adds only that derived row set, so the musical content is not
- * hand-mapped field by field.
- */
-export interface MixdownLoop {
-  id: string;
-  repeatCount?: number;
-  scaleRoot: string;
-  scaleType: string;
-  chords: ChordItem[];
-  synthParams: ActiveSynth;
-  chordSynthParams: ActiveSynth;
-  bassSynthParams: ActiveSynth;
-  padSynthParams: ActiveSynth;
-  fxSynthParams: ActiveSynth;
-  synthArpSettings: ArpSettings;
-  chordArpSettings: ArpSettings;
-  bassArpSettings: ArpSettings;
-  padArpSettings: ArpSettings;
-  fxArpSettings: ArpSettings;
-  chordRhythmId: string;
-  chordRhythmMode: 'preset' | 'custom';
-  customChordRhythm: boolean[];
-  /**
-   * The custom chord lane's OWN cycle, in bars, and its holds. The renderer
-   * resolves the lane's cycle from these — `src/audio/` may not reach back
-   * into the store for them, so the snapshot carries them like any other loop
-   * field.
-   */
-  customChordLoopLength: number;
-  customChordHoldSteps: number[];
-  chordFeel: number;
-  chordOctave: number;
-  bassPatternId: string;
-  bassPatternMode: 'preset' | 'custom';
-  customBassPattern: BassStepChoice[];
-  /** The bass lane's own cycle. See `customChordLoopLength`. */
-  customBassLoopLength: number;
-  customBassHoldSteps: number[];
-  bassFeel: number;
-  bassOctave: number;
-  padMode: PadMode;
-  padOctave: number;
-  padVoicing: PadVoicing;
-  padDroneDegree: number;
-  padDroneIntervals: PadInterval[];
-  /**
-   * The Beat instrument, per loop: the sound, the events and the mix.
-   *
-   * `beatParams` and `beatPattern` are the store's own shapes. `beatMix` is
-   * too, and the renderer reads only its per-voice MUTE flags — the dB in it
-   * is never read here, because the levels arrive already converted as
-   * `beatVoiceGains` and the bus level arrives in `buses`. Two fields rather
-   * than one because the mute is a SCHEDULING decision (`planBeatStep`
-   * builds no voice for a muted row) while the level is an AudioParam.
-   */
-  beatParams: BeatParams;
-  beatPattern: BeatPattern;
-  beatMix: BeatMix;
-  beatVoiceGains: MixdownBeatVoiceGain[];
-  leadMelodySteps: LeadNote[][];
-  leadLoopLength: number;
-  leadStepResolution: LeadStepResolutionId;
-  leadGate: number;
-  fxMelodySteps: LeadNote[][];
-  fxLoopLength: number;
-  fxStepResolution: LeadStepResolutionId;
-  fxGate: number;
-  /** Per-loop source mixer, converted to linear gain by the store boundary. */
-  buses: MixdownBusState[];
-}
-
-export interface MixdownSnapshot {
-  bpm: number;
-  meterId: MeterId;
-  /** Resolved from `meterId` before it crosses the seam, so the renderer never parses a meter string. */
-  stepsPerBar: number;
-  /** Linear gain. */
-  masterVolume: number;
-  effects: MasterEffects;
-  buses: MixdownBusState[];
-  /**
-   * There is no arrangement-wide Beat here, deliberately: a Beat belongs to a
-   * LOOP, and a single snapshot-level kit is precisely the defect this
-   * replaced — a song whose second loop used a different Beat exported the
-   * first loop's sound over the whole arrangement.
-   */
-  loops: MixdownLoop[];
-}
-
 /**
  * Why a render produced no file. A union rather than a string so the slice's
  * `projectNotice` sentence is a switch the compiler checks, and so a test can
@@ -290,52 +132,12 @@ export type MixdownRenderResult =
   | { ok: true; buffer: AudioBuffer; blob: Blob }
   | { ok: false; reason: MixdownFailureReason };
 
-/** One loop's dwell in the arrangement, as a range of absolute steps. */
-interface ArrangementPass {
-  loopIndex: number;
-  startStep: number;
-  /** One pass: the loop's own length, floored at a bar for a chordless loop. */
-  passSteps: number;
-  /** The whole loop: `passSteps × repeats`. */
-  dwellSteps: number;
-}
-
-export interface ArrangementPlan {
-  totalSteps: number;
-  passes: ArrangementPass[];
-}
-
 export interface LoopAudioAutomation {
   loopIndex: number;
   time: number;
   buses: MixdownBusState[];
   beatParams: BeatParams;
   beatVoiceGains: MixdownBeatVoiceGain[];
-}
-
-/**
- * Every pass of every loop, in order, as absolute step ranges.
- *
- * `loopDwellSteps` is the loop's TOTAL dwell (`passSteps × repeats`) — it is
- * `songAdvanceDecision`'s own `totalSteps`, deliberately, so the walk the
- * renderer performs and the decision the live transport makes are the same
- * arithmetic. The walk therefore iterates `dwellSteps` ONCE and derives a
- * pass-relative index as `i % passSteps`; iterating `repeats × dwell` would
- * schedule `repeats²` passes, and the repeats past the first would render
- * silent because `chordPlanPosition`'s equivalent — the `chordsByBar` lookup
- * below — would run out of bars.
- */
-export function planArrangement(snapshot: MixdownSnapshot): ArrangementPlan {
-  const passes: ArrangementPass[] = [];
-  let step = 0;
-  for (let loopIndex = 0; loopIndex < snapshot.loops.length; loopIndex += 1) {
-    const loop = snapshot.loops[loopIndex];
-    const passSteps = loopEffectiveLengthSteps(loop.chords, snapshot.stepsPerBar);
-    const dwellSteps = loopDwellSteps(loop, snapshot.stepsPerBar);
-    passes.push({ loopIndex, startStep: step, passSteps, dwellSteps });
-    step += dwellSteps;
-  }
-  return { totalSteps: step, passes };
 }
 
 /** Per-loop mixer/filter changes positioned on the offline audio timeline. */
@@ -351,111 +153,6 @@ export function planLoopAudioAutomation(
     beatParams: snapshot.loops[pass.loopIndex].beatParams,
     beatVoiceGains: snapshot.loops[pass.loopIndex].beatVoiceGains,
   }));
-}
-
-/**
- * One loop's chord/bass material, pre-resolved per chord: the SAME
- * `ArmedChordPlan` the live scheduler arms, one per chord, built once per pass
- * instead of on a clock tick.
- */
-export interface LoopVoices {
-  /** Pass bar -> the index of the chord covering it. */
-  chordsByBar: number[];
-  /** Per chord: the pass-relative step it starts on. */
-  chordStartStep: number[];
-  /** Per chord: its armed plan. */
-  plans: ArmedChordPlan[];
-}
-
-/**
- * The pad lane's snapshot for one loop — the offline twin of
- * `padPlanSnapshot` (src/store/playbackPlanSnapshots.ts). Both feed the same
- * `planPadArm`, so an export and a live session can only disagree about the pad
- * if these two builders disagree, which renderMixdown.test.ts pins directly.
- */
-export function padSnapshotForLoop(
-  loop: MixdownLoop,
-  bpm: number,
-  stepsPerBar: number,
-): PadPlanSnapshot {
-  return {
-    mode: loop.padMode,
-    chords: loop.chords,
-    degree: loop.padDroneDegree,
-    intervals: loop.padDroneIntervals,
-    padOctave: loop.padOctave,
-    voicing: loop.padVoicing,
-    scaleRoot: loop.scaleRoot,
-    scaleType: loop.scaleType,
-    bpm,
-    stepsPerBar,
-  };
-}
-
-/**
- * The chord+bass ARM-time snapshot for one loop — the offline twin of
- * `chordPlanSnapshot` (src/store/playbackPlanSnapshots.ts).
- *
- * `src/audio/` may not reach into the store, so every field arrives on the
- * MixdownLoop; the names match the store's on purpose, so the two builders read
- * as the same list and an equivalence test is a deep-equality assertion.
- */
-export function chordSnapshotForLoop(
-  loop: MixdownLoop,
-  meterId: MeterId,
-  bpm: number,
-  stepsPerBar: number,
-): ChordPlanSnapshot {
-  return {
-    chords: loop.chords,
-    bpm,
-    meterId,
-    stepsPerBar,
-    chordOctave: loop.chordOctave,
-    bassOctave: loop.bassOctave,
-    scaleRoot: loop.scaleRoot,
-    scaleType: loop.scaleType,
-    chordRhythmMode: loop.chordRhythmMode,
-    chordRhythmId: loop.chordRhythmId,
-    customChordRhythm: loop.customChordRhythm,
-    customChordHoldSteps: loop.customChordHoldSteps,
-    customChordLoopLength: loop.customChordLoopLength,
-    chordFeel: loop.chordFeel,
-    bassPatternMode: loop.bassPatternMode,
-    bassPatternId: loop.bassPatternId,
-    customBassPattern: loop.customBassPattern,
-    customBassHoldSteps: loop.customBassHoldSteps,
-    customBassLoopLength: loop.customBassLoopLength,
-    bassFeel: loop.bassFeel,
-    chordArpActive: loop.chordArpSettings.active,
-    bassArpActive: loop.bassArpSettings.active,
-  };
-}
-
-export function buildLoopVoices(
-  loop: MixdownLoop,
-  meterId: MeterId,
-  bpm: number,
-  stepsPerBar: number,
-): LoopVoices {
-  const snapshot = chordSnapshotForLoop(loop, meterId, bpm, stepsPerBar);
-  const chordsByBar: number[] = [];
-  const chordStartStep: number[] = [];
-  const plans: ArmedChordPlan[] = [];
-
-  let barCursor = 0;
-  for (let i = 0; i < loop.chords.length; i += 1) {
-    const bars = Math.max(1, loop.chords[i].bars || 1);
-    const startStep = barCursor * stepsPerBar;
-    chordStartStep.push(startStep);
-    for (let b = 0; b < bars; b += 1) chordsByBar.push(i);
-    barCursor += bars;
-    // A pass restarts the progression, so a pass-relative step IS the
-    // progression-relative step live playback measures from its run origin —
-    // which is why the same `startProgressionStep` works for both.
-    plans.push(planChordArm(snapshot, { chordIndex: i, startProgressionStep: startStep }));
-  }
-  return { chordsByBar, chordStartStep, plans };
 }
 
 /**
@@ -517,24 +214,23 @@ function applyLoopAudioState(engine: AudioEngine, state: LoopAudioAutomation): v
  */
 function scheduleMelodyStep(
   engine: AudioEngine,
-  track: MixdownMelodyTrack,
+  loop: MixdownLoop,
+  trackId: 'lead' | 'fx',
+  track: MelodyPlanSnapshot,
   stepInPass: number,
   stepsPerBar: number,
   tickDur: number,
   time: number,
 ): void {
-  const planned = planMelodyStep(track, {
-    stepInLoop: stepInPass,
-    stepsPerBar,
-    tickDurSec: tickDur,
-  });
+  const { params, source } = songTrackVoice(loop, trackId);
+  const planned = planMelodyStep(track, { stepInLoop: stepInPass, stepsPerBar, tickDurSec: tickDur });
   for (const note of planned) {
     const start = time + note.startOffsetSec;
     const voiceId = engine.triggerSynthNoteOn(
-      noteFrequency(note.note), track.params, DEFAULT_VELOCITY, start, track.source, 1, 'sequencer',
+      noteFrequency(note.note), params, DEFAULT_VELOCITY, start, source, 1, 'sequencer',
     );
     if (voiceId) {
-      engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(track.params), start + note.holdSec);
+      engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(params), start + note.holdSec);
     }
   }
 }
@@ -655,8 +351,8 @@ async function scheduleArrangement(
       // `stepInBar` IS a modulo by `stepsPerBar`, so such a guard is a
       // tautology, and the melody's own windowing already happens inside
       // leadActivePosAt/leadSoundingNotes.
-      scheduleMelodyStep(engine, leadTrack, stepInPass, stepsPerBar, tickDur, time);
-      scheduleMelodyStep(engine, fxTrack, stepInPass, stepsPerBar, tickDur, time);
+      scheduleMelodyStep(engine, loop, 'lead', leadTrack, stepInPass, stepsPerBar, tickDur, time);
+      scheduleMelodyStep(engine, loop, 'fx', fxTrack, stepInPass, stepsPerBar, tickDur, time);
 
       stepsSinceYield += 1;
       if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {

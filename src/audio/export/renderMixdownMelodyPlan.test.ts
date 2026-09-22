@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { mixdownLoop, mixdownMelodyBar } from './mixdownFixture';
-import { mixdownLeadTrack, mixdownFxTrack } from './renderMixdown';
+import { mixdownLeadTrack, mixdownFxTrack } from '../playback/plan/songSnapshot';
 import { melodyPlanSnapshot } from '@/store/playbackPlanSnapshots';
 import { planMelodyStep } from '../playback/plan/melodyPlan';
 import { stepDurationSec } from '@/utils/musicTheory';
@@ -18,9 +18,9 @@ import type { AppStore } from '@/store/types';
 
 /** Both melody tracks, deliberately diverging on every field the renderer
  * could swap between them (Task 13: Lead is irregular in four columns).
- * `offline` calls the renderer's own `mixdownLeadTrack`/`mixdownFxTrack`
- * directly, so a swap inside either builder fails this test, not just a
- * hand-copy of it. */
+ * `offline` calls the offline snapshot builders `mixdownLeadTrack`/
+ * `mixdownFxTrack` directly, so a swap inside either builder fails this
+ * test, not just a hand-copy of it. */
 function pairMelodySnapshots() {
   const loop = mixdownLoop({
     leadMelodySteps: mixdownMelodyBar('C4'), leadLoopLength: 2, leadStepResolution: '1/8', leadGate: 0.85,
@@ -43,8 +43,7 @@ function pairMelodySnapshots() {
 describe('live and offline melody planning are the same computation', () => {
   for (const { name, live, offline } of pairMelodySnapshots()) {
     test(`${name}: offline track matches the store's own snapshot`, () => {
-      const { steps, loopLength, stepResolution, gate, arp } = offline;
-      expect({ steps, loopLength, stepResolution, gate, arp }).toEqual(live);
+      expect(offline).toEqual(live);
     });
 
     for (const [meterId, spb] of [['4/4', 16], ['3/4', 12], ['12/8', 24]] as const) {

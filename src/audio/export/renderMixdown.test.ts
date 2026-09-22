@@ -1,14 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import {
-  buildLoopVoices,
-  chordSnapshotForLoop,
   MIXDOWN_SAMPLE_RATE,
-  padSnapshotForLoop,
-  planArrangement,
   planLoopAudioAutomation,
   renderMixdown,
-  type MixdownLoop,
   type MixdownRenderProgress,
 } from './renderMixdown';
 import {
@@ -31,8 +26,16 @@ import { generateBlockChordNotes, stepDurationSec } from '@/utils/musicTheory';
 import { MAX_STEPS_PER_BAR, type MeterId } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern, BeatVoices } from '@/types';
-import { chordPlanSnapshot, padPlanSnapshot } from '@/store/playbackPlanSnapshots';
+import { beatPlanSnapshot, chordPlanSnapshot, padPlanSnapshot } from '@/store/playbackPlanSnapshots';
 import { planPadArm } from '../playback/plan/padPlan';
+import { planBeatStep } from '../playback/plan/beatPlan';
+import {
+  beatSnapshotForLoop,
+  chordSnapshotForLoop,
+  padSnapshotForLoop,
+  type MixdownLoop,
+} from '../playback/plan/songSnapshot';
+import { buildLoopVoices, planArrangement } from '../playback/plan/songTimeline';
 import type { AppStore } from '@/store/types';
 
 // The capability probe reads `globalThis.OfflineAudioContext`, so the TEST
@@ -42,68 +45,7 @@ import type { AppStore } from '@/store/types';
 // would be a second path through the one branch that matters.
 (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = OfflineAudioContext;
 
-describe('planArrangement', () => {
-  test('one loop, one bar, one repeat is stepsPerBar steps', () => {
-    const plan = planArrangement(mixdownSnapshot());
-    expect(plan.totalSteps).toBe(16);
-    expect(plan.passes).toEqual([
-      { loopIndex: 0, startStep: 0, passSteps: 16, dwellSteps: 16 },
-    ]);
-  });
-
-  test('repeats multiply the dwell, not the pass', () => {
-    const plan = planArrangement(
-      mixdownSnapshot({ loops: [mixdownLoop({ repeatCount: 3 })] }),
-    );
-    expect(plan.passes[0]).toEqual({
-      loopIndex: 0,
-      startStep: 0,
-      passSteps: 16,
-      dwellSteps: 48,
-    });
-    expect(plan.totalSteps).toBe(48);
-  });
-
-  test('a chordless loop still dwells a whole bar', () => {
-    // The spec's edge case: loopDwellSteps floors a loop with no chords at
-    // stepsPerBar, matching live playback. A silent BAR in the file, never a
-    // skipped loop.
-    const plan = planArrangement(
-      mixdownSnapshot({ loops: [mixdownLoop({ chords: [] })] }),
-    );
-    expect(plan.passes[0]).toEqual({
-      loopIndex: 0,
-      startStep: 0,
-      passSteps: 16,
-      dwellSteps: 16,
-    });
-  });
-
-  test('a second loop starts where the first stopped', () => {
-    const plan = planArrangement(
-      mixdownSnapshot({
-        loops: [
-          mixdownLoop({ id: 'a', repeatCount: 2 }),
-          mixdownLoop({ id: 'b', chords: [{ id: 'c2', root: 'F', quality: 'maj', bars: 2 }] }),
-        ],
-      }),
-    );
-    expect(plan.passes[1]).toEqual({
-      loopIndex: 1,
-      startStep: 32,
-      passSteps: 32,
-      dwellSteps: 32,
-    });
-    expect(plan.totalSteps).toBe(64);
-  });
-
-  test('repeatCount 0 and absent both floor at one pass', () => {
-    const zero = planArrangement(mixdownSnapshot({ loops: [mixdownLoop({ repeatCount: 0 })] }));
-    const absent = planArrangement(mixdownSnapshot({ loops: [mixdownLoop({ repeatCount: undefined })] }));
-    expect(zero.totalSteps).toBe(16);
-    expect(absent.totalSteps).toBe(16);
-  });
-
+describe('planLoopAudioAutomation', () => {
   test('positions every loop\'s Beat patch on its arrangement boundary', () => {
     const filtered = (cutoff: number, resonance: number) => {
       const base = beatParamsFixture();
@@ -126,55 +68,6 @@ describe('planArrangement', () => {
       { loopIndex: 0, time: 0, filter: { cutoff: 500, resonance: 2, type: 'lowpass' } },
       { loopIndex: 1, time: 2, filter: { cutoff: 12000, resonance: 1, type: 'lowpass' } },
     ]);
-  });
-});
-
-describe('buildLoopVoices', () => {
-  test('maps every bar of a pass to the chord that covers it', () => {
-    const loop = mixdownLoop({
-      chords: [
-        { id: 'c1', root: 'C', quality: 'maj', bars: 2 },
-        { id: 'c2', root: 'F', quality: 'maj', bars: 1 },
-      ],
-    });
-    const voices = buildLoopVoices(loop, '4/4', 120, 16);
-    expect(voices.chordsByBar).toEqual([0, 0, 1]);
-    expect(voices.chordStartStep).toEqual([0, 32]);
-    expect(voices.plans).toHaveLength(2);
-    expect(voices.plans[1].startProgressionStep).toBe(32);
-  });
-
-  test('a full-hold rhythm produces no per-step events, only a hold', () => {
-    // 'sustained' is the full-hold chord rhythm, 'whole-note-root' the
-    // full-hold bass — both short-written in the fixture above.
-    const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'sustained' }), '4/4', 120, 16);
-    expect(voices.plans[0].chordEvents).toEqual([]);
-    expect(voices.plans[0].chordFullHold?.holdSec).toBeGreaterThan(0);
-    expect(voices.plans[0].bassFullHold).not.toBeNull();
-  });
-
-  test('a one-hit rhythm produces per-step events and no hold', () => {
-    // 'fourOnFloor' is a real, one-hit, non-full-hold chord rhythm id.
-    const voices = buildLoopVoices(mixdownLoop({ chordRhythmId: 'fourOnFloor' }), '4/4', 120, 16);
-    expect(voices.plans[0].chordEvents.length).toBeGreaterThan(0);
-    expect(voices.plans[0].chordFullHold).toBeNull();
-    expect(voices.plans[0].bassFullHold).not.toBeNull();
-  });
-
-  test('buildLoopVoices is chordSnapshotForLoop + planChordArm, chord by chord', () => {
-    const loop = mixdownLoop({
-      chords: [
-        { id: 'a', root: 'C', quality: 'maj', bars: 1 },
-        { id: 'b', root: 'F', quality: 'maj', bars: 2 },
-      ],
-    });
-    const snapshot = chordSnapshotForLoop(loop, '4/4', 120, 16);
-    const voices = buildLoopVoices(loop, '4/4', 120, 16);
-    voices.plans.forEach((plan, i) => {
-      expect(plan).toEqual(
-        planChordArm(snapshot, { chordIndex: i, startProgressionStep: voices.chordStartStep[i] }),
-      );
-    });
   });
 });
 
@@ -845,6 +738,28 @@ describe('live and offline build the same pad snapshot', () => {
     for (const chordIndex of [0, 1, 2]) {
       expect(planPadArm(padSnapshotForLoop(loop, 120, 16), { chordIndex })).toEqual(
         planPadArm(padPlanSnapshot(state), { chordIndex }),
+      );
+    }
+  });
+});
+
+describe('live and offline build the same beat snapshot', () => {
+  const pattern = structuredClone(beatPatternFixture());
+  pattern.rows.snare[4] = true;
+  pattern.rows.hihat[6] = true;
+  const mix = structuredClone(beatMixFixture());
+  mix.voices.hihat = { ...mix.voices.hihat, muted: true };
+  const loop = mixdownLoop({ beatPattern: pattern, beatMix: mix });
+  const state = { beatPattern: loop.beatPattern, beatMix: loop.beatMix } as unknown as AppStore;
+
+  test('the offline snapshot deep-equals the store snapshot', () => {
+    expect(beatSnapshotForLoop(loop)).toEqual(beatPlanSnapshot(state));
+  });
+
+  test('and therefore both plan the same events at every stepInBar', () => {
+    for (let stepInBar = 0; stepInBar < MAX_STEPS_PER_BAR; stepInBar += 1) {
+      expect(planBeatStep(beatSnapshotForLoop(loop), { stepInBar }), `step ${stepInBar}`).toEqual(
+        planBeatStep(beatPlanSnapshot(state), { stepInBar }),
       );
     }
   });

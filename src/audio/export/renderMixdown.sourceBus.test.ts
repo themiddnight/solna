@@ -3,7 +3,8 @@ import { OfflineAudioContext } from 'node-web-audio-api';
 import { MAX_STEPS_PER_BAR } from '@/utils/meter';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern } from '@/types';
-import { MIXDOWN_SAMPLE_RATE, renderMixdown, type MixdownLoop } from './renderMixdown';
+import { MIXDOWN_SAMPLE_RATE, renderMixdown } from './renderMixdown';
+import type { MixdownLoop } from '../playback/plan/songSnapshot';
 import {
   beatPatternFixture,
   FACTORY_EFFECTS,
