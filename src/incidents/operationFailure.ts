@@ -5,7 +5,7 @@ import type { DetectedIncidentInput } from './types';
  * The only operations allowed to raise an incident. The category is the whole
  * summary: a project or file name never reaches a public report.
  */
-type ReportableOperation = 'boot' | 'mixdown' | 'project-load' | 'project-save';
+type ReportableOperation = 'boot' | 'mixdown' | 'midi-export' | 'project-load' | 'project-save';
 type OperationSeverity = DetectedIncidentInput['severity'];
 
 /**

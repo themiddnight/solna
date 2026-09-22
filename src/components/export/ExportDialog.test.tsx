@@ -16,12 +16,14 @@ describe('ExportDialog', () => {
     const html = render(false, null);
     expect(html).toContain('Export</h3>');
     expect(html).toContain('<button id="btn-export-mixdown-wav" type="button" class="btn btn-sm btn-outline justify-start">Export mixdown (WAV)</button>');
+    expect(html).toContain('<button id="btn-export-midi" type="button" class="btn btn-sm btn-outline justify-start">Export MIDI (.mid)</button>');
     expect(html).not.toContain('id="export-status"');
   });
 
   test('busy: rows are disabled and the status is live', () => {
     const html = render(true, { label: 'Rendering mixdown… 35%', percent: 35, canCancel: true });
     expect(html).toContain('<button id="btn-export-mixdown-wav" type="button" class="btn btn-sm btn-outline justify-start" disabled="">');
+    expect(html).toContain('<button id="btn-export-midi" type="button" class="btn btn-sm btn-outline justify-start" disabled="">');
     expect(html).toContain('id="export-status" role="status" aria-live="polite"');
     expect(html).toContain('Rendering mixdown… 35%');
     expect(html).toContain('class="progress progress-primary w-full" value="35" max="100"');
@@ -45,7 +47,6 @@ describe('ExportDialog', () => {
     const html = render(false, null);
     expect(html).not.toContain('stem');
     expect(html).not.toContain('Stem');
-    expect(html).not.toContain('MIDI');
     expect(html).not.toContain('coming soon');
   });
 });

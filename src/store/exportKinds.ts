@@ -13,12 +13,13 @@ import {
   type MixdownFailureReason,
   type MixdownRenderProgress,
 } from '@/audio/export/renderMixdown';
+import { renderMidi } from '@/audio/export/renderMidi';
 import type { MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
 import type { reportOperationFailure } from '@/incidents/operationFailure';
 import { slugifyProjectName } from '@/utils/projectFileIO';
 
-/** Kinds shipped on this build. DEV-428 adds MIDI, DEV-429 stems. */
-export type ExportKindId = 'mixdown-wav';
+/** Kinds shipped on this build. DEV-429 adds stems. */
+export type ExportKindId = 'mixdown-wav' | 'midi';
 
 /** A kind reports the renderer's phases: preparing, rendering(percent), encoding. */
 export type ExportProgress = MixdownRenderProgress;
@@ -83,9 +84,35 @@ const MIXDOWN_WAV_EXPORT: ExportKindSpec = {
   },
 };
 
+/** One sentence per failure, in the same voice as `MIXDOWN_FAILURE_MESSAGE`. */
+export const MIDI_FAILURE_MESSAGE: Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string> = {
+  'empty-arrangement': 'There is nothing to export — the arrangement has no loops.',
+  'unsupported-context': 'This browser cannot write the MIDI file.', // unreachable; the Record demands it
+  'render-failed': 'The MIDI file could not be written. Your project is unchanged; try again.',
+};
+
+/** The file name a MIDI export downloads: the project's slug, with a `.mid` extension. */
+export function midiFileName(projectName: string | null): string {
+  return `${slugifyProjectName(projectName ?? '')}.mid`;
+}
+
+const MIDI_EXPORT: ExportKindSpec = {
+  id: 'midi',
+  label: 'Export MIDI (.mid)',
+  progressLabels: { rendering: 'Building MIDI', encoding: 'Writing MIDI file' },
+  failureMessages: MIDI_FAILURE_MESSAGE,
+  incidentOperation: 'midi-export',
+  run: async (snapshot, onProgress, signal) => {
+    const rendered = await renderMidi(snapshot.song, snapshot.projectName ?? 'Solna', onProgress, signal);
+    if (!rendered.ok) return rendered;
+    return { ok: true, blob: rendered.blob, fileName: midiFileName(snapshot.projectName) };
+  },
+};
+
 /** The one table. A `Record` over the id union: a declared, unregistered kind is a compile error. */
 const EXPORT_KIND_BY_ID: Record<ExportKindId, ExportKindSpec> = {
   'mixdown-wav': MIXDOWN_WAV_EXPORT,
+  midi: MIDI_EXPORT,
 };
 
 /** Every kind, in dialog order (insertion order of the table above). */
