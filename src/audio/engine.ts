@@ -725,7 +725,7 @@ export class AudioEngine {
 
 }
 
-// Re-exported from utils/musicTheory so the grid constant has one definition
+// Re-exported from utils/tempo so the grid constant has one definition
 // while every `import { STEPS_PER_BAR } from '../engine'` keeps resolving.
 export { STEPS_PER_BAR };
 
