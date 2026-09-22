@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
-import { useArpPlayback, releaseTriggeredTargets, type ArpStateRef } from '../audio/playback/arpPlayback';
+import { releaseTriggeredTargets, type ArpStateRef } from '../audio/playback/arpPlayback';
+import { useArpPlayback } from '@/components/playback/useArpPlayback';
 import {
   heldCountFor,
   heldVoiceFor,

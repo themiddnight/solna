@@ -73,3 +73,11 @@ describe('PlaybackHost', () => {
     });
   }
 });
+
+describe('the arp controller', () => {
+  // Not a transport controller: it follows held keys, so it stays mounted by
+  // the input deck (spec §5.4) — and only there.
+  test('useArpPlayback is called only by useInputDeck', () => {
+    expect(callSites('useArpPlayback')).toEqual([{ file: 'src/components/useInputDeck.ts', count: 1 }]);
+  });
+});

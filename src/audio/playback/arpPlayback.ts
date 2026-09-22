@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { audioEngine } from '../engine';
 import { buildArpSequence } from '../arpeggiator';
 import { arpFiresOnStep, computeArpTriggers } from '../arpSchedule';
@@ -11,7 +10,7 @@ import type { SynthControlTarget } from '@/utils/synthControl';
 import type { VoiceOwner } from '../voiceOwner';
 
 // The rate table and trigger math live in audio/arpSchedule.ts so the chord
-// scheduler can share them without pulling this React hook into its module.
+// scheduler can share them without pulling the arp clock into its module.
 export { computeArpTriggers };
 export type { ArpRate } from '../arpSchedule';
 
@@ -136,14 +135,14 @@ export function computeArpTick(
 }
 
 /**
- * Arpeggiator clock subscriber, moved from SoundView 281-405 with the 4 rate
- * branches collapsed into computeArpTriggers. `stateRef` mirrors the deck's
- * live arp state: which notes are held and on which bus, the patch and the Arp
- * settings, the bus the next tick plays on, the buses already triggered on,
- * and the bpm.
+ * Arpeggiator clock subscriber: subscribes the shared clock and returns the
+ * cleanup; the React wrapper is `components/playback/useArpPlayback.ts` (R314).
+ * `stateRef` mirrors the deck's live arp state: which notes are held and on
+ * which bus, the patch and the Arp settings, the bus the next tick plays on,
+ * the buses already triggered on, and the bpm.
  *
  * `release` and the targets are read from `stateRef.current`, NOT taken as
- * parameters: having them in the effect's dependency array made every
+ * parameters: having them in the wrapper's dependency array made every
  * Release-knob pointer move tear the subscription down and run the cleanup,
  * cutting every held arp note mid-drag.
  *
@@ -157,63 +156,58 @@ export function computeArpTick(
  * tick after the last trigger, must not be released, and a bus that was
  * triggered on must be released even if focus left it a tick later.
  */
-export function useArpPlayback(stateRef: ArpStateRef, active: boolean): void {
-  useEffect(() => {
-    if (!active) return;
+export function startArpClock(stateRef: ArpStateRef): () => void {
+  const unsubscribe = audioEngine.subscribeClock((step, _beat, time) => {
+    const { heldTargets, synth, arp, target, bpm } = stateRef.current;
 
-    const unsubscribe = audioEngine.subscribeClock((step, _beat, time) => {
-      const { heldTargets, synth, arp, target, bpm } = stateRef.current;
+    if (!arp.active) return;
+    // Focus is on the drum track: the melodic keyboard has nothing to play,
+    // so the arp has nothing to arpeggiate.
+    if (target === null) return;
 
-      if (!arp.active) return;
-      // Focus is on the drum track: the melodic keyboard has nothing to play,
-      // so the arp has nothing to arpeggiate.
-      if (target === null) return;
+    const { sequence, triggers } = computeArpTick(
+      stateRef.current.triggeredTargets,
+      target,
+      heldTargets,
+      arp,
+      bpm,
+      step,
+      audioEngine.getMeter().stepsPerBar,
+    );
 
-      const { sequence, triggers } = computeArpTick(
-        stateRef.current.triggeredTargets,
-        target,
-        heldTargets,
-        arp,
-        bpm,
-        step,
-        audioEngine.getMeter().stepsPerBar,
-      );
+    const releaseSeconds = synthReleaseSeconds(synth);
+    for (const t of triggers) {
+      const note = sequence[t.noteIndex];
+      const at = time + t.timeOffsetSec;
+      // The ID is held only long enough to book this hit's own note-off.
+      // Nothing outlives the tick: a key-up releases through
+      // `releaseTriggeredTargets` below, which is owner-scoped and reaches
+      // whatever the arp still has sounding on the bus.
+      const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency(note), synth, 0.9, at, target, 1, 'arp');
+      if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, at + t.holdSec);
+    }
+  });
 
-      const releaseSeconds = synthReleaseSeconds(synth);
-      for (const t of triggers) {
-        const note = sequence[t.noteIndex];
-        const at = time + t.timeOffsetSec;
-        // The ID is held only long enough to book this hit's own note-off.
-        // Nothing outlives the tick: a key-up releases through
-        // `releaseTriggeredTargets` below, which is owner-scoped and reaches
-        // whatever the arp still has sounding on the bus.
-        const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency(note), synth, 0.9, at, target, 1, 'arp');
-        if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, at + t.holdSec);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      // Read release/targets off the ref, NOT from props: having them in the
-      // dependency array made every Release-knob pointer move tear the
-      // subscription down and run this cleanup, cutting every held arp note
-      // mid-drag.
-      //
-      // Release EVERY bus this hook has triggered on, not whichever one is
-      // current at cleanup time. A focus change mid-hold leaves sounding
-      // voices on more than one bus, and one captured target releases only
-      // one of them — the same stranded-voice failure reached by a different
-      // route. `triggeredTargets` is written at trigger time, so a bus that
-      // was never actually played is never released.
-      if (audioEngine.getAudioContext()) {
-        // Reading the LATEST ref at cleanup time is the whole point;
-        // copying it into the effect body would restore the stale-target bug.
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-        const { triggeredTargets, synth } = stateRef.current;
-        releaseTriggeredTargets(triggeredTargets, synthReleaseSeconds(synth), (target, releaseTime, owner) => {
-          audioEngine.releaseSoundingVoices(target, releaseTime, owner);
-        });
-      }
-    };
-  }, [active, stateRef]);
+  return () => {
+    unsubscribe();
+    // Read release/targets off the ref, NOT from arguments: having them in the
+    // wrapper's dependency array made every Release-knob pointer move tear the
+    // subscription down and run this cleanup, cutting every held arp note
+    // mid-drag.
+    //
+    // Release EVERY bus this clock has triggered on, not whichever one is
+    // current at cleanup time. A focus change mid-hold leaves sounding
+    // voices on more than one bus, and one captured target releases only
+    // one of them — the same stranded-voice failure reached by a different
+    // route. `triggeredTargets` is written at trigger time, so a bus that
+    // was never actually played is never released.
+    if (audioEngine.getAudioContext()) {
+      // Reading the LATEST ref at cleanup time is the whole point; copying it
+      // at start would restore the stale-target bug.
+      const { triggeredTargets, synth } = stateRef.current;
+      releaseTriggeredTargets(triggeredTargets, synthReleaseSeconds(synth), (target, releaseTime, owner) => {
+        audioEngine.releaseSoundingVoices(target, releaseTime, owner);
+      });
+    }
+  };
 }

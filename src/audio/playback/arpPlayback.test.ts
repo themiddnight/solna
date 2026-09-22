@@ -118,7 +118,7 @@ describe('releaseTriggeredTargets', () => {
 
 describe('computeArpTick', () => {
   // `useEffect` does not run under `renderToString` and this repo bans
-  // DOM/testing-library, so the clock callback in useArpPlayback is not
+  // DOM/testing-library, so the clock callback in startArpClock is not
   // reachable from a test — `computeArpTick` is the record-then-trigger step
   // pulled out of it so both halves are.
   function heldWith(target: SynthControlTarget, ...notes: string[]): HeldNoteTargets {

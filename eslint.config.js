@@ -60,6 +60,21 @@ const TONAL_SCOPED_PACKAGE_BAN = {
     "DEV-394: '@tonaljs/*' scoped subpackages are confined to the same one file as the bare 'tonal' import, src/musicCore/tonalAdapter.ts — import from '@/musicCore' instead.",
 };
 
+// DEV-422 (R314): src/audio/ is plain TypeScript over Web Audio — no React.
+// A hook that drives an audio clock keeps its body in audio/ as a plain
+// function (startArpClock) and its React wrapper in components/playback/.
+// Spread into all four src/audio/ blocks that set the import rule, because
+// each REPLACES the broader one (see TAPER_CONVERSION_BAN).
+const REACT_IMPORT_BAN = {
+  paths: [
+    { name: 'react', message: 'src/audio/ imports no react (R314): put the hook in src/components/playback/.' },
+    { name: 'react-dom', message: 'src/audio/ imports no react-dom (R314).' },
+  ],
+  patterns: [
+    { group: ['react-dom/*'], message: 'src/audio/ imports no react-dom (R314).' },
+  ],
+};
+
 // DEV-399: the ENGINE — src/audio/engine.ts, src/audio/synth/**, and the two
 // other DSP runtimes beside them — receives already-resolved playable events
 // and takes no key, scale, chord, spelling or notation decision. It therefore
@@ -316,12 +331,13 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [TONAL_IMPORT_BAN],
+          paths: [TONAL_IMPORT_BAN, ...REACT_IMPORT_BAN.paths],
           patterns: [
             TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
             { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
             TAPER_CONVERSION_BAN,
+            ...REACT_IMPORT_BAN.patterns,
           ],
         },
       ],
@@ -394,7 +410,7 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [TONAL_IMPORT_BAN],
+          paths: [TONAL_IMPORT_BAN, ...REACT_IMPORT_BAN.paths],
           patterns: [
             TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
@@ -418,6 +434,7 @@ export default tseslint.config(
               ],
               message: 'a planner returns events; the controller calls the engine (DEV-397).',
             },
+            ...REACT_IMPORT_BAN.patterns,
           ],
         },
       ],
@@ -447,7 +464,7 @@ export default tseslint.config(
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
-          paths: [TONAL_IMPORT_BAN],
+          paths: [TONAL_IMPORT_BAN, ...REACT_IMPORT_BAN.paths],
           patterns: [
             TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
@@ -462,6 +479,7 @@ export default tseslint.config(
               allowTypeImports: true,
               message: 'renderMixdown.ts pulls in the engine: import its types only (DEV-428).',
             },
+            ...REACT_IMPORT_BAN.patterns,
           ],
         },
       ],
@@ -500,13 +518,14 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [TONAL_IMPORT_BAN],
+          paths: [TONAL_IMPORT_BAN, ...REACT_IMPORT_BAN.paths],
           patterns: [
             TONAL_SCOPED_PACKAGE_BAN,
             { group: ['**/store/**'], message: 'audio/ must not import store/ (layering rule 1)' },
             { group: ['**/components/**'], message: 'audio/ must not import components/ (layering rule 1)' },
             TAPER_CONVERSION_BAN,
             ...ENGINE_MUSIC_DOMAIN_BAN,
+            ...REACT_IMPORT_BAN.patterns,
           ],
         },
       ],
