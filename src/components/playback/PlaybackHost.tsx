@@ -1,4 +1,6 @@
 import React from 'react';
+import { useLeadPlayback } from './useLeadPlayback';
+import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { useChordClockPlayback } from './useChordClockPlayback';
 import { useSequencerPlayback } from './useSequencerPlayback';
 
@@ -21,6 +23,13 @@ import { useSequencerPlayback } from './useSequencerPlayback';
  * selectors; each controller re-renders the host on its own store reads.
  */
 export const PlaybackHost = React.memo(function PlaybackHost(): null {
+  // Two hooks per melody track, two gates, on purpose: useLeadPlayback
+  // schedules NOTES while the track's player plays; useLeadStepPublisher moves
+  // the MARKER, which for a Rec-armed track also follows somebody else's clock.
+  useLeadPlayback('lead');
+  useLeadStepPublisher('lead');
+  useLeadPlayback('fx');
+  useLeadStepPublisher('fx');
   useChordClockPlayback();
   useSequencerPlayback();
   return null;

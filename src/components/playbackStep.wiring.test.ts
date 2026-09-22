@@ -96,7 +96,7 @@ const WIRINGS: Array<{
       // runs on leadClockActive (any section, or the metronome alone) while
       // useLeadPlayback runs on the lead player, so they are separate hooks
       // with separate gates.
-      file: 'src/components/loop/lead/useLeadStepPublisher.ts',
+      file: 'src/components/playback/useLeadStepPublisher.ts',
       regex: /publishStepAt\(\s*([^,]+),/,
       expected: 'track.stepPlayer',
     },

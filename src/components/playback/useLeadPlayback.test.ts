@@ -27,7 +27,7 @@ describe('leadStepAction', () => {
 describe('useLeadPlayback shares the one HARD_STOP_RELEASE', () => {
   test('declares no local copy and still uses the shared constant', () => {
     const source = readFileSync(
-      join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
+      join(process.cwd(), 'src/components/playback/useLeadPlayback.ts'),
       'utf8',
     );
     expect(source).not.toMatch(/^const HARD_STOP_RELEASE/m);
@@ -37,7 +37,7 @@ describe('useLeadPlayback shares the one HARD_STOP_RELEASE', () => {
 
 describe('useLeadPlayback feeds the loop gate and the sounding notes into the scheduler', () => {
   const source = readFileSync(
-    join(process.cwd(), 'src/components/loop/lead/useLeadPlayback.ts'),
+    join(process.cwd(), 'src/components/playback/useLeadPlayback.ts'),
     'utf8',
   );
 

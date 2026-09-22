@@ -103,7 +103,7 @@ describe('leadMarkerPublishes', () => {
  */
 describe('the lead step producer', () => {
   test('is the only thing in the app that publishes a step, for whichever track is mounted', () => {
-    const producers = ['src/components/loop/lead/useLeadStepPublisher.ts', 'src/components/loop/lead/useLeadPlayback.ts']
+    const producers = ['src/components/playback/useLeadStepPublisher.ts', 'src/components/playback/useLeadPlayback.ts']
       .map((file) => readFileSync(join(process.cwd(), file), 'utf8'))
       .map((text) => (text.match(/publishStepAt\(\s*track\.stepPlayer/g) ?? []).length);
     expect(producers).toEqual([1, 0]);

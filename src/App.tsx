@@ -187,13 +187,13 @@ function Workspace() {
           this padding it covers the last row of chord chips or FX knobs and
           swallows their clicks. */}
       <main className="flex-1 min-h-0 relative overflow-y-auto pb-9">
+        {/* Every transport controller, mounted once (DEV-422, R312): a lane
+            sounds because this is mounted, never because its grid is. Before
+            the pages, so its hook order is the clock-listener order. */}
+        <PlaybackHost />
         <div className={isSongLayer(activeTab) ? 'hidden' : 'block'}>
           <LoopPage />
         </div>
-        {/* Every transport controller, mounted once (DEV-422). Here, after the
-            Loop page, while the Lead/FX/Chord controllers are still mounted by
-            their views, so the clock-listener order is unchanged. */}
-        <PlaybackHost />
         <div className={isSongLayer(activeTab) ? 'block' : 'hidden'}>
           <SongPage />
         </div>

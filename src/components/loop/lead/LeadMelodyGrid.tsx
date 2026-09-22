@@ -7,8 +7,6 @@ import { type StepCell } from '@/components/sequencerGrid';
 import { LEAD_CELL_WIDTH, leadCursorKeyTarget, leadRowLabelTone } from './melodyGrid';
 import { useLeadMarkerColumn } from './useLeadMarker';
 import { ModulePasteButton } from '../ModulePasteButton';
-import { useLeadPlayback } from './useLeadPlayback';
-import { useLeadStepPublisher } from './useLeadStepPublisher';
 import { LeadMelodyCells } from './LeadMelodyCells';
 import { LeadGridActions, LeadGridSettings } from './LeadGridControls';
 import {
@@ -184,23 +182,18 @@ export interface LeadMelodyGridProps {
   trackId: MelodyTrackId;
 }
 
-// Mounted here, not in the view that renders it: the step used to arrive as
-// a prop, so all 174 JSX nodes of the then-1208-line synth view reconciled
-// 8x/sec to move one translateX. LeadMelodyGrid is mounted once PER TRACK
-// (PatternView.tsx, the Lead and FX segments), which
-// is what lets each instance's hooks subscribe the shared clock at all: two
-// mounted grids are two players, each holding its own subscription, which is
-// exactly what "the clock runs iff a player holds a subscription" permits.
+// The marker's step subscription is mounted here, not in the view that renders
+// it: the step used to arrive as a prop, so all 174 JSX nodes of the
+// then-1208-line synth view reconciled 8x/sec to move one translateX.
+// LeadMelodyGrid is mounted once PER TRACK (PatternView.tsx, the Lead and FX
+// segments).
 //
-// Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and
-// owns the hard stop, so it runs while the track's player plays.
-// useLeadStepPublisher moves the MARKER, which for the armed track also has to
-// track somebody else's clock while Rec is armed, because that column is the
-// recorder's write head — an unarmed track's marker follows its own player
-// and nothing else. Its `isPlaying` return is not what the marker uses;
-// useLeadMarkerColumn reads the same wider gate the publisher does — from
-// inside LeadMarker, so the published step re-renders one div rather than
-// this whole body.
+// The track's controllers are NOT mounted here. useLeadPlayback (notes, hard
+// stop) and useLeadStepPublisher (the marker's step, including the Rec-armed
+// write head) live in PlaybackHost (components/playback/), once per track, so
+// the lane sounds whether or not this grid is mounted. useLeadMarkerColumn
+// reads the publisher's gate from inside LeadMarker, so the published step
+// re-renders one div rather than this whole body.
 //
 // `trackId` is REQUIRED and has no default, and must stay that way. A default
 // of `'lead'` would let a call site that forgot the prop render a second copy
@@ -239,17 +232,6 @@ function LeadRowLabels({ rows, rowLabels, outOfScale, onPreview }: LeadRowLabels
 }
 
 export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
-  // Two hooks, two gates, on purpose. useLeadPlayback schedules NOTES and owns
-  // the hard stop, so it runs while the track's player plays.
-  // useLeadStepPublisher moves the MARKER, which for the armed track also has
-  // to track somebody else's clock while Rec is armed, because that column is
-  // the recorder's write head — an unarmed track's marker follows its own
-  // player and nothing else. Its `isPlaying` return is not what the marker
-  // uses; useLeadMarkerColumn reads the same wider gate the publisher does —
-  // from inside LeadMarker, so the published step re-renders one div rather
-  // than this whole body.
-  useLeadPlayback(trackId);
-  useLeadStepPublisher(trackId);
   const model = useLeadGridModel(trackId);
   const transport = useLeadGridTransport(trackId, model);
   const commands = useLeadGridCommands(trackId, model);

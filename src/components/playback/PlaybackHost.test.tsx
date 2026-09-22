@@ -14,12 +14,21 @@ const HOST_FILE = 'src/components/playback/PlaybackHost.tsx';
  * the order its listeners register on Play.
  */
 const HOST_CALLS = [
+  "useLeadPlayback('lead')",
+  "useLeadStepPublisher('lead')",
+  "useLeadPlayback('fx')",
+  "useLeadStepPublisher('fx')",
   'useChordClockPlayback()',
   'useSequencerPlayback()',
 ] as const;
 
 /** Every transport controller: each is called in the host and nowhere else. */
-const CONTROLLERS = ['useChordClockPlayback', 'useSequencerPlayback'] as const;
+const CONTROLLERS = [
+  'useLeadPlayback',
+  'useLeadStepPublisher',
+  'useChordClockPlayback',
+  'useSequencerPlayback',
+] as const;
 
 /** Docblocks name the controllers; only code may count. */
 function stripComments(source: string): string {

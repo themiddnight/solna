@@ -35,8 +35,8 @@ import { join } from 'node:path';
 /** The four hooks that own a clock subscription and actually schedule audio. */
 const SCHEDULING_HOOKS = [
   'src/components/playback/useSequencerPlayback.ts',
-  'src/components/loop/lead/useLeadStepPublisher.ts',
-  'src/components/loop/lead/useLeadPlayback.ts',
+  'src/components/playback/useLeadStepPublisher.ts',
+  'src/components/playback/useLeadPlayback.ts',
   'src/components/playback/useChordClockPlayback.ts',
 ] as const;
 

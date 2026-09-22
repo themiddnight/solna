@@ -60,9 +60,8 @@ export function leadMarkerPublishes(
  * starts one — which is also acceptance criterion 3, that no step is
  * published while nothing at all plays.
  *
- * Mounted beside useLeadPlayback in LeadMelodyGrid, which renders once per
- * melody track. The cost of a second grid is one more clock listener, not one
- * more timer.
+ * Mounted beside useLeadPlayback in PlaybackHost, once per melody track. The
+ * cost of the second track is one more clock listener, not one more timer.
  */
 export function useLeadStepPublisher(trackId: MelodyTrackId): void {
   const track = melodyTrack(trackId);
