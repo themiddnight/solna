@@ -62,7 +62,7 @@ segments (Lead, FX, Accompaniment, Beat). `Workspace` (`App.tsx`) keeps the coor
 - **Every layer, tab view and Pattern segment stays mounted**, gated `block`/`hidden` at three
   levels: `shell/LayerPages.tsx` (`isSongLayer(activeTab)`), `LoopPage.tsx` (`activeTab`),
   `PatternView.tsx` (`segmentForFocus(focusTrack)`). Views stay mounted to keep their UI state
-  (scroll, drag, meter history, local state). <!-- R014 -->
+  (scroll, drag, meter history, local state), except across a layout switch (R316). <!-- R014 -->
 - Audio never stops when switching tabs: it does not depend on mounting at all (R040). <!-- R015 -->
 - High-frequency state (playback step, playhead beat, a knob value mid-drag) stays local to the
   subtree that shows it, **never in a store slice** — a slice write re-renders every mounted

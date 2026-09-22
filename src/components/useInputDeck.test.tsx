@@ -4,6 +4,7 @@ import {
   useInputDeck,
   notesToReleaseOnKeyboardModeChange,
   releaseAllHeldNotes,
+  heldNoteReleaseKey,
   subscribeArpState,
   selectArpActive,
   selectSynthRelease,
@@ -48,7 +49,7 @@ function heldWith(...entries: [string, SynthControlTarget, string][]): HeldNoteT
 let captured: { keyboardProps: InputDeckKeyboardProps; drumProps: InputDeckDrumProps } | null = null;
 
 function Probe() {
-  captured = useInputDeck();
+  captured = useInputDeck('desktop');
   return null;
 }
 
@@ -129,6 +130,30 @@ describe('releaseAllHeldNotes', () => {
     const released: string[] = [];
     releaseAllHeldNotes(['C4', 'C4'], (n) => released.push(n));
     expect(released).toEqual(['C4']);
+  });
+});
+
+// The held-note release effect re-runs (and so releases everything held) when
+// this key changes. A layout switch remounts the on-screen keyboard mid-press,
+// so its key-up never arrives: the layout mode must be a release trigger, the
+// same as the keyboard mode (DEV-430).
+describe('heldNoteReleaseKey', () => {
+  test('changes when only the layout mode changes', () => {
+    expect(heldNoteReleaseKey('chromatic', 'desktop')).not.toBe(
+      heldNoteReleaseKey('chromatic', 'mobile'),
+    );
+  });
+
+  test('changes when only the keyboard mode changes', () => {
+    expect(heldNoteReleaseKey('chromatic', 'mobile')).not.toBe(
+      heldNoteReleaseKey('chord', 'mobile'),
+    );
+  });
+
+  test('is stable when neither mode changes', () => {
+    expect(heldNoteReleaseKey('scale-locked', 'desktop')).toBe(
+      heldNoteReleaseKey('scale-locked', 'desktop'),
+    );
   });
 });
 

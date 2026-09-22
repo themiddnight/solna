@@ -33,6 +33,7 @@ import type { ActiveSynth, ArpSettings } from '../types/synth';
 import type { VoiceId } from '../audio/synth/voiceId';
 import { synthReleaseSeconds } from '../utils/synthPatch';
 import type { SynthControlTarget } from '../utils/synthControl';
+import type { LayoutMode } from './shell/useLayoutMode';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
 import { padsWithVelocities } from './drumPadVelocity';
@@ -75,6 +76,17 @@ export function notesToReleaseOnKeyboardModeChange(
   currentlyHeldNotes: Iterable<string>,
 ): string[] {
   return Array.from(new Set(currentlyHeldNotes));
+}
+
+/**
+ * The held-note release effect's trigger: it re-runs — releasing everything
+ * held — whenever this key changes. The keyboard mode is in it because key-up
+ * branches on the new mode and would find nothing to release; the layout mode
+ * because a desktop/mobile switch remounts the on-screen keyboard mid-press, so
+ * its own mouseup/touchend never arrives (DEV-430).
+ */
+export function heldNoteReleaseKey(keyboardMode: KeyboardMode, layoutMode: LayoutMode): string {
+  return `${keyboardMode}|${layoutMode}`;
 }
 
 // Releases every note currently reported as held, via the given release
@@ -413,12 +425,14 @@ interface HeldNoteRelease {
   chordKeyNotesRef: React.RefObject<Map<string, string[]>>;
   handleNoteOff: NoteHandler;
   keyboardMode: KeyboardMode;
+  layoutMode: LayoutMode;
 }
 
 /**
  * The two backstops for a release gesture that never arrives.
  *
- * A keyboard-mode change (and the unmount that ends this hook) releases every
+ * A keyboard-mode or layout-mode change (and the unmount that ends this hook)
+ * releases every
  * note still sounding and clears the chord key-tracking ref: without it, a mode
  * switch while a key is held leaves its voices hanging forever, because the
  * key-up handler that would have released them now branches on the NEW mode and
@@ -434,7 +448,9 @@ function useHeldNoteRelease({
   chordKeyNotesRef,
   handleNoteOff,
   keyboardMode,
+  layoutMode,
 }: HeldNoteRelease): void {
+  const releaseKey = heldNoteReleaseKey(keyboardMode, layoutMode);
   // Kept fresh every render so the mode-change release effect below always
   // calls the latest handleNoteOff without needing it in its dependency array
   // (which would fire the release on every params/controlTarget change, not
@@ -460,7 +476,7 @@ function useHeldNoteRelease({
     };
     // The two refs are parameters here, so the rule asks for them by name; both
     // are the caller's `useRef` objects, whose identity never changes.
-  }, [keyboardMode, arpStateRef, chordKeyNotesRef]);
+  }, [releaseKey, arpStateRef, chordKeyNotesRef]);
 
   useEffect(() => {
     const releaseHeld = () => {
@@ -677,7 +693,7 @@ function useDrumPads(): InputDeckDrumProps {
 /** Plays notes (synth + drums) and owns the global QWERTY listeners. Mounted
  *  exactly once, at App level. The dock is a purely visual surface — it never
  *  gates these listeners. */
-export function useInputDeck(): {
+export function useInputDeck(layoutMode: LayoutMode): {
   keyboardProps: InputDeckKeyboardProps;
   drumProps: InputDeckDrumProps;
 } {
@@ -727,9 +743,9 @@ export function useInputDeck(): {
   useArpPlayback(arpStateRef, arpActive);
 
   // Both backstops for a release gesture that never arrives: release every note
-  // still sounding when the keyboard mode changes or this hook's owner unmounts,
+  // still sounding when the keyboard or layout mode changes or this hook's owner unmounts,
   // and release everything held when the window loses focus.
-  useHeldNoteRelease({ arpStateRef, chordKeyNotesRef, handleNoteOff, keyboardMode });
+  useHeldNoteRelease({ arpStateRef, chordKeyNotesRef, handleNoteOff, keyboardMode, layoutMode });
 
   // Silence lingering arp voices when all keys are released in arp mode.
   // Releases every bus the arp actually triggered on — a hold that spanned a

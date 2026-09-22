@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 /** Which frame the workspace renders. Width only: no pointer, hover or orientation query. */
-type LayoutMode = 'desktop' | 'mobile';
+export type LayoutMode = 'desktop' | 'mobile';
 
 /**
  * Tailwind v4's default `md` breakpoint (48rem; `src/index.css` sets no

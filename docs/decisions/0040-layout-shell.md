@@ -41,7 +41,16 @@ the dialogs; the Header's tools were inline JSX with two kinds of layer gate (in
 
 A layout switch remounts the frame: UI state inside it (scroll, open menus, a drag in progress,
 meter history) resets, audio does not stop (R040), nothing committed is lost. Crossing 48rem is a
-rotation or a resize, so this is rare. R014's first level moved from `App.tsx` to
+rotation or a resize, so this is rare. Two consequences of that remount:
+
+- A note held on the on-screen keyboard would hang, because the remounted `KeyCap` never gets its
+  own mouseup/touchend. `Workspace` passes the mode to `useInputDeck`, which releases every held
+  note on a mode change, the same way it does on a keyboard-mode change.
+- An effects-knob drag cut off by a switch can leave the engine at the dragged value while the
+  store keeps the committed one, until the next effects write. Accepted: a rotation mid-drag is
+  rare.
+
+R014's first level moved from `App.tsx` to
 `shell/LayerPages.tsx`. U7's theme half is closed. The golden and `bun run verify` did not change.
 
 **Amends [ADR-0001](0001-always-mounted-views.md)** (R014's first gating level, now

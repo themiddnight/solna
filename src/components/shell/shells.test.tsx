@@ -72,4 +72,11 @@ describe('Workspace keeps what survives a layout switch', () => {
   test('the frame is picked by useLayoutMode', () => {
     expect(app).toContain('useLayoutMode()');
   });
+
+  // A switch remounts the on-screen keyboard mid-press; the input deck
+  // releases held notes on a mode change, so it must be given the mode.
+  test('the input deck receives the layout mode, read before it', () => {
+    expect(app).toContain('useInputDeck(mode)');
+    expect(app.indexOf('useLayoutMode()')).toBeLessThan(app.indexOf('useInputDeck(mode)'));
+  });
 });

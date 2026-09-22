@@ -120,17 +120,19 @@ function Workspace() {
   // a loop change or project install — see store/reharmonizeNav.ts.
   useReharmonizeNavClear();
 
+  // Desktop or mobile frame, by viewport width only (R315). Everything above
+  // and every element outside the shell below survives a switch (R316).
+  const mode = useLayoutMode();
+
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
-  const { keyboardProps, drumProps } = useInputDeck();
+  // Given the mode because a switch remounts the on-screen keyboard mid-press:
+  // the deck releases every held note on a mode change (DEV-430).
+  const { keyboardProps, drumProps } = useInputDeck(mode);
 
   // PWA: registers the worker and reports a waiting version. It never applies
   // one on its own — see useServiceWorkerUpdate for why a reload is the user's
   // call in an app that is usually making sound.
   const { updateReady, applyPendingUpdate, dismissUpdate } = useServiceWorkerUpdate();
-
-  // Desktop or mobile frame, by viewport width only (R315). Everything above
-  // and every element outside the shell below survives a switch (R316).
-  const mode = useLayoutMode();
 
   // Initialize audio engine on first user interaction (click, keydown, or
   // pointerdown — the global input deck's keyboard can start audio before any
