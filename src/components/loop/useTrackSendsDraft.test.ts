@@ -70,12 +70,40 @@ describe('createTrackSendsDraftMachine', () => {
     });
   });
 
-  test('a committed change arriving mid-drag does not overwrite the draft', () => {
+  test('a mid-drag re-render with the same committed row keeps the draft', () => {
     withPreviewSpy(() => {
       const machine = createTrackSendsDraftMachine(COMMITTED, 'synth');
       machine.onChange('delay', 0.1);
-      machine.sync({ reverb: 0, delay: 0, distortion: 0 });
+      machine.sync(COMMITTED);
       expect(machine.getDraft().delay).toBe(0.1);
+    });
+  });
+
+  test('a committed row that changes mid-drag (song seam) drops the gesture: nothing stale is written', () => {
+    withPreviewSpy((calls) => {
+      const writes: [SourceBusId, TrackSendLevels][] = [];
+      const write = (source: SourceBusId, sends: TrackSendLevels) => writes.push([source, sends]);
+      const machine = createTrackSendsDraftMachine(COMMITTED, 'chord');
+      machine.onChange('delay', 0.8);
+      const nextLoop: TrackSendLevels = { reverb: 0.2, delay: 0.1, distortion: 0.6 };
+      machine.sync(nextLoop);
+      // engineSync already pushed the new loop's row; the drop previews nothing.
+      expect(calls).toEqual([['chord', { reverb: 1, delay: 0.8, distortion: 0 }]]);
+      expect(machine.getDraft()).toBe(nextLoop);
+      machine.commit(write);
+      expect(writes).toEqual([]);
+    });
+  });
+
+  test('a move after the drop starts a fresh gesture from the new loop row', () => {
+    withPreviewSpy(() => {
+      const writes: [SourceBusId, TrackSendLevels][] = [];
+      const machine = createTrackSendsDraftMachine(COMMITTED, 'chord');
+      machine.onChange('delay', 0.8);
+      machine.sync({ reverb: 0.2, delay: 0.1, distortion: 0.6 });
+      machine.onChange('delay', 0.9);
+      machine.commit((source, sends) => writes.push([source, sends]));
+      expect(writes).toEqual([['chord', { reverb: 0.2, delay: 0.9, distortion: 0.6 }]]);
     });
   });
 });

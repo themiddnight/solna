@@ -102,8 +102,8 @@ const BEAT_BUS_SOURCE = 'sequencer';
  * short by the send going idle mid-ring. Shared by the delay and distortion
  * sends, whose gating is otherwise identical bar the tail computation.
  *
- * The reverb send does NOT use this: it coordinates a second feed
- * (`drumSendGate`) under one shared timer, a shape this single-feed class
+ * The reverb send does NOT use this: it coordinates a second feed (the Beat
+ * track's reverb send node, `beatReverbFeed()`) under one shared timer, a shape this single-feed class
  * doesn't fit — see `updateReverbSend`, which stays bespoke.
  */
 class DebouncedSendGate {
@@ -217,8 +217,8 @@ export class MasterRack {
   private delaySendGate: GainNode | null = null;
   private distortionSendGate: GainNode | null = null;
   private reverbSendConnected = false;
-  // Tracks drumSendGate's own connection to reverbNode — see updateReverbSend.
-  private drumSendReverbConnected = false;
+  // Tracks beatReverbFeed()'s own connection to reverbNode — see updateReverbSend.
+  private beatReverbFeedConnected = false;
   // Reverb and delay carry a real internal tail (the convolver's impulse
   // response; the delay's own feedback loop) that must finish ringing before
   // the send is physically cut, or an in-flight tail is truncated.
@@ -466,7 +466,7 @@ export class MasterRack {
     this.delaySendGate = delaySendGate;
     this.distortionSendGate = distortionSendGate;
     this.reverbSendConnected = false;
-    this.drumSendReverbConnected = false;
+    this.beatReverbFeedConnected = false;
     if (this.reverbDisconnectTimer) clearTimeout(this.reverbDisconnectTimer);
     this.reverbDisconnectTimer = null;
     this.delaySend?.dispose();
@@ -643,7 +643,7 @@ export class MasterRack {
     // send goes idle. It is the SECOND convolver input, connected after
     // reverbSendGate (C1): the sum order is part of the byte-identical golden.
     this.sendNodesFor(BEAT_BUS_SOURCE).reverb.connect(this.reverbNode);
-    this.drumSendReverbConnected = true;
+    this.beatReverbFeedConnected = true;
 
     // The fixed low -> mid -> high -> masterGain tail is wired here once and
     // never rebuilt. The four mix sources' own routing into that tail (or
@@ -811,12 +811,12 @@ export class MasterRack {
    * TWO independent feeds reach the convolver — `reverbSendGate` (every
    * non-drum source bus, gated on `updateEffects`'s reverbWet/reverbBypass)
    * and the Beat track's reverb send node (fed by `drumSendGate`, the
-   * authored per-voice drum reverb send, which has no bypass of its own). Both are driven by the SAME `active` decision —
-   * there is no separate "drum reverb send" master toggle — so this method
-   * gates both gates under the one shared tail timer rather than inventing
-   * a second one: the convolver only truly goes idle once NEITHER feed is
-   * connected, and reconnecting either feed cancels the pending disconnect
-   * for both. A per-voice send still only wires up when that voice's own
+   * authored per-voice drum reverb send, which has no bypass of its own).
+   * Both are driven by the SAME `active` decision — there is no separate
+   * "drum reverb send" master toggle — so this method gates both feeds under
+   * the one shared tail timer rather than inventing a second one: the
+   * convolver only truly goes idle once NEITHER feed is connected, and
+   * reconnecting either feed cancels the pending disconnect for both. A per-voice send still only wires up when that voice's own
    * `reverbSend` level is > 0 (see `wireDrumVoice` in drumSynth.ts); this
    * gate is the structural on/off for the shared path downstream of that.
    */
@@ -832,13 +832,13 @@ export class MasterRack {
         this.reverbSendConnected = true;
       }
       const beatFeed = this.beatReverbFeed();
-      if (beatFeed && !this.drumSendReverbConnected) {
+      if (beatFeed && !this.beatReverbFeedConnected) {
         beatFeed.connect(this.reverbNode);
-        this.drumSendReverbConnected = true;
+        this.beatReverbFeedConnected = true;
       }
       return;
     }
-    if ((!this.reverbSendConnected && !this.drumSendReverbConnected) || this.reverbDisconnectTimer) {
+    if ((!this.reverbSendConnected && !this.beatReverbFeedConnected) || this.reverbDisconnectTimer) {
       return;
     }
     const tailMs = (this.reverbDecay + 0.25) * 1000;
@@ -848,7 +848,7 @@ export class MasterRack {
       this.reverbSendConnected = false;
       const beatFeed = this.beatReverbFeed();
       if (beatFeed && this.reverbNode) beatFeed.disconnect(this.reverbNode);
-      this.drumSendReverbConnected = false;
+      this.beatReverbFeedConnected = false;
     }, tailMs);
   }
 
@@ -1012,7 +1012,7 @@ export class MasterRack {
     mode: SourceBusApplyMode,
   ): void {
     const bus = this.sourceBuses.get(source) ?? this.getSourceBus(source);
-    const nodes = source === 'sequencer' && this.drumSendGate
+    const nodes = source === BEAT_BUS_SOURCE && this.drumSendGate
       ? [bus, this.drumSendGate]
       : [bus];
     for (const node of nodes) {

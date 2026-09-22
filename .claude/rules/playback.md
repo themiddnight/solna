@@ -5,6 +5,7 @@ paths:
   - "src/audio/playback/**"
   - "src/audio/export/**"
   - "src/store/engineSync.ts"
+  - "src/store/trackSendsPreview.ts"
   - "src/store/playbackPlanSnapshots.ts"
   - "src/store/mixdownSnapshot.ts"
   - "src/store/loadLoop.ts"
@@ -73,7 +74,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ([ADR-0034](../../docs/decisions/0034-pure-song-event-timeline.md))
 
-- Sends reach the engine only through `engineSync`'s per-bus `trackSends` subscription (plus its settle pushes), the drag preview `store/trackSendsPreview.ts`, and `renderMixdown`'s per-pass `setSourceSends` beside `setSourceState`. Sends never read solo or audibility. <!-- R306 -->
+- Sends reach the engine only through `engineSync`'s per-bus `trackSends` subscription (plus its settle pushes), the drag preview `store/trackSendsPreview.ts`, `renderMixdown`'s per-pass `setSourceSends` beside `setSourceState`, and `presetPreview`'s unity push for the audition bus `'preview'` on every audition. Sends never read solo or audibility. <!-- R306 -->
 
 ([ADR-0037](../../docs/decisions/0037-per-track-sends.md))
 

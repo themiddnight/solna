@@ -50,15 +50,17 @@ or distortion at all.
     no-op on the rendered signal). Time-zero passes still always push, so the arrangement's first
     sample is always settled explicitly.
 12. UI: Rev/Dly/Dist `xs` knobs in each Mixer row, with a local draft and an engine preview,
-    committed once on release (`useTrackSendsDraft`).
+    committed once on release (`useTrackSendsDraft`). A gesture is bound to the loop it started
+    on: if the committed row changes mid-drag (a song seam loads another loop), the draft is
+    dropped and nothing is written on release, so no stale value lands in the new loop.
 13. DEV-429 stems (decided in that design, not here): dry, tapped at the bus after its fader;
     sends are ignored for the stem output.
 
 One addition the spec's decision list did not carry explicitly: the audition bus `'preview'`
 reaches `getSourceBus` (through `presetPreview.ts` → `audioSession.ts`'s `getSourceTap`) exactly
 like a track's bus does, but it is not a track and has no store row. `beginPreview()` therefore
-tells the engine `setSourceSends('preview', { reverb: 1, delay: 1, distortion: 1 })` once, so every
-audition sounds exactly as it did before this change.
+tells the engine `setSourceSends('preview', { reverb: 1, delay: 1, distortion: 1 })` on every
+audition (idempotent), so every audition sounds exactly as it did before this change.
 
 **Rejected alternatives:**
 - Keying `TrackSends` by mixer id `'drum'` — the store's per-loop mix fields, and every consumer
@@ -102,7 +104,8 @@ cap this change would otherwise have pushed past.
 - **R305** — A Beat voice's `reverbSend` multiplies the Beat track's reverb send; it is not a
   direct send to the master reverb.
 - **R306** — Sends reach the engine only through `engineSync`'s per-bus subscription and settle
-  pushes, the drag preview module, and the mixdown's per-pass `setSourceSends`; never through
+  pushes, the drag preview module, the mixdown's per-pass `setSourceSends`, and `presetPreview`'s
+  unity push for the audition bus `'preview'`; never through
   `setSourceState`, and never keyed on solo or audibility.
 
 ## Sources

@@ -150,8 +150,10 @@ function applyLoopAudioState(
     // A per-loop send change lands on this pass's first sample, through its
     // own method, never setSourceState (C2). Unlike bus state it is pushed
     // after time zero only when it differs from the previous pass: an
-    // equal-value transition is silent but not byte-neutral — a ramp held at 0
-    // on the Beat bus's delay send node changes the rendered WAV (the golden).
+    // equal-value transition is silent but was observed not to be
+    // byte-neutral: pushing it on every pass changed the golden WAV. The
+    // cause is inferred, not confirmed — likely a held-at-0 ramp on the Beat
+    // bus's delay send node.
     const before = previous?.buses.find((row) => row.source === bus.source)?.sends;
     if (state.time === 0 || !sameSendLevels(bus.sends, before)) {
       engine.setSourceSends(

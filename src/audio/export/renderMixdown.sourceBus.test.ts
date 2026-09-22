@@ -204,9 +204,44 @@ describe('renderMixdown: per-track sends', () => {
         loops: [mixdownLoop({ id: 'loop-a' }), mixdownLoop({ id: 'loop-b' })],
       }));
       expect(result.ok).toBe(true);
+      // The time-0 settle must exist for every bus, or `every` below is vacuous.
+      const settled = new Set(calls.map(([source]) => source));
+      for (const bus of mixdownSnapshot().buses) expect(settled.has(bus.source)).toBe(true);
       expect(calls.every(([, , time, mode]) => time === 0 && mode === 'settle')).toBe(true);
     } finally {
       spy.mockRestore();
     }
   });
+
+  for (const effect of ['delay', 'distortion'] as const) {
+    test(`a later pass that differs only in ${effect} pushes a transition`, async () => {
+      const calls: Parameters<AudioEngine['setSourceSends']>[] = [];
+      const spy = spyOn(AudioEngine.prototype, 'setSourceSends').mockImplementation(
+        (...args: Parameters<AudioEngine['setSourceSends']>) => {
+          calls.push(args);
+        },
+      );
+      try {
+        const base = mixdownSnapshot();
+        const withLevel = (id: string, level: number) => mixdownLoop({
+          id,
+          buses: base.buses.map((bus) => (
+            bus.source === 'chord' ? { ...bus, sends: { ...bus.sends, [effect]: level } } : bus
+          )),
+        });
+        const result = await renderMixdown(mixdownSnapshot({
+          loops: [withLevel('loop-a', 0.25), withLevel('loop-b', 0.75)],
+        }));
+        expect(result.ok).toBe(true);
+        const songLevel = base.buses.find((bus) => bus.source === 'chord')!.sends;
+        expect(calls.filter(([source]) => source === 'chord')).toEqual([
+          ['chord', songLevel, 0, 'settle'],
+          ['chord', { ...songLevel, [effect]: 0.25 }, 0, 'settle'],
+          ['chord', { ...songLevel, [effect]: 0.75 }, 2, 'transition'],
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  }
 });

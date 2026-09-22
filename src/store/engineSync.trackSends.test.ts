@@ -32,7 +32,10 @@ describe('engineSync: per-track sends', () => {
     const setSourceSends = spySends();
     try {
       startEngineSync();
-      expect(setSourceSends.mock.calls.map(([source]) => source)).toEqual(SOURCE_BUSES.map((b) => b.source));
+      const { trackSends } = useAppStore.getState();
+      expect(setSourceSends.mock.calls).toEqual(
+        SOURCE_BUSES.map((b) => [b.source, trackSends[b.source], undefined, 'transition']),
+      );
     } finally {
       setSourceSends.mockRestore();
     }

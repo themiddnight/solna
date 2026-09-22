@@ -31,8 +31,16 @@ interface DraftState {
 export function createTrackSendsDraftMachine(committed: TrackSendLevels, source: SourceBusId) {
   const state: DraftState = { draft: committed, committed, dragging: false };
 
-  /** Called once per render with the latest committed row. */
+  /**
+   * Called once per render with the latest committed row. The machine never
+   * writes mid-drag, so a new row during a drag is an outside change — a song
+   * seam loading another loop. The gesture is bound to the loop it started
+   * on, so it is dropped: the draft is discarded, nothing is written on
+   * release, and no preview is sent (engineSync already pushed the new row at
+   * its boundary). A further move starts a fresh gesture from the new row.
+   */
   function sync(next: TrackSendLevels): void {
+    if (state.dragging && next !== state.committed) state.dragging = false;
     state.committed = next;
     if (!state.dragging) state.draft = next;
   }
