@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
+import { useAppStore } from '@/store/store';
 import { SCALES } from '@/data/scales';
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
-import { useAppStore } from '@/store/store';
 import { HEADER_FIELD_SHELL, HEADER_SELECT } from '@/components/ui/fieldClasses';
 
 interface ScaleSelectsProps {
@@ -61,7 +61,9 @@ export function ScaleSelects({
 }
 
 /** The master key/scale group: an inline field from `xl` up, a dropdown below it. */
-export function ScaleMenu({ scaleRoot, scaleType }: { scaleRoot: string; scaleType: string }) {
+export function ScaleMenu() {
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const scaleType = useAppStore((s) => s.scaleType);
   return (
     <>
       {/* Scale Picker Compact (Desktop >= xl) */}

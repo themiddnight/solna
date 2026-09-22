@@ -3,15 +3,9 @@ import { Layer, layerForTab, ViewMode } from "../types";
 import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
 import { useAppStore } from "../store/store";
 import { HEADER_GROUP } from "./ui/fieldClasses";
-import { LoopCopyButton } from "./loop/LoopCopyButton";
-import { LoopSelector } from "./loop/LoopSelector";
 import { ProjectMenu } from "./project/ProjectMenu";
-import { ExportButton } from "./export/ExportButton";
 import { VIEW_META } from "./viewMeta";
-import { ProjectNameLabel } from "./header/ProjectNameLabel";
-import { FollowPlayheadToggle } from "./header/FollowPlayheadToggle";
-import { ScaleMenu } from "./header/ScaleMenu";
-import { ThemeToggle } from "./header/ThemeToggle";
+import { headerToolsFor } from "./header/headerTools";
 
 /** The two layers in toggle order. Labels are user-facing copy. */
 export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [
@@ -109,12 +103,21 @@ function LayerSwitcher({
   );
 }
 
+/** One run of Header tools: those of `group` available on `layer`, in `HEADER_TOOLS` order. */
+function HeaderToolRun({ layer, group }: { layer: Layer; group: Parameters<typeof headerToolsFor>[1] }) {
+  return (
+    <>
+      {headerToolsFor(layer, group).map(({ id, Component }) => (
+        <Component key={id} />
+      ))}
+    </>
+  );
+}
+
 export const Header = React.memo(function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
   const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const scaleRoot = useAppStore((s) => s.scaleRoot);
-  const scaleType = useAppStore((s) => s.scaleType);
 
   return (
     <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2.5 sm:px-4 py-2 select-none sticky top-0 z-40 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 sm:gap-x-3 gap-y-2 text-sm">
@@ -138,33 +141,12 @@ export const Header = React.memo(function Header() {
             themselves — the loop picker on the loop layer, the project name on
             the song layer, exactly one of the two per layer. Reading the row
             left to right now says "this loop → this view of it" rather than
-            the other way round, and the two layers open the same way. */}
-        {layer === 'loop' && (
-          <>
-            <LoopCopyButton />
-            <LoopSelector />
-          </>
-        )}
-        <ProjectNameLabel layer={layer} />
-
-        {/* Between the subject and the tabs, on the song layer only: what
-            Arrange does with the scroll position while the song plays. */}
-        <FollowPlayheadToggle layer={layer} />
-
-        {/* Beside it, song layer only: the arrangement-wide export. It sits
-        with the song's own controls rather than in the project menu, because
-        what it writes is the arrangement — not the project file. */}
-        <ExportButton layer={layer} />
-
-        {/* The key/scale group belongs with the subject, not with the theme
-            button it used to sit beside: "which loop, in which key" is one
-            question, and a master-scale field parked inside the actions zone
-            read as a third kind of thing. Putting it before the tabs also
-            anchors THEM — the most-clicked control in the header — immediately
-            left of the theme toggle on both layers, instead of jumping ~200px
-            sideways whenever the layer changed and this loop-only group
-            appeared or vanished. */}
-        {layer === 'loop' && <ScaleMenu scaleRoot={scaleRoot} scaleType={scaleType} />}
+            the other way round, and the two layers open the same way: subject,
+            then what Arrange does with it while it plays (song layer only),
+            then export (song layer only), then the key it is in (loop layer
+            only) — all before the tabs, per `HEADER_TOOLS`' order, which then
+            stay anchored beside the theme toggle on both layers. */}
+        <HeaderToolRun layer={layer} group="subject" />
         {/* Primary navigation: the active layer's tabs.
             ONE branch over `tabsForLayer`, the same function the router
             validates a URL with, so the nav and the routes cannot name
@@ -184,8 +166,7 @@ export const Header = React.memo(function Header() {
         </nav>
 
 
-        {/* Theme Toggle Button */}
-        <ThemeToggle />
+        <HeaderToolRun layer={layer} group="actions" />
       </div>
     </header>
   );

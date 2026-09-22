@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { Layer } from '@/types';
 import { useLiveStore } from '@/components/ui/useLiveStore';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from '@/components/ui/fieldClasses';
 
@@ -16,27 +15,19 @@ export function projectDisplayName(name: string | null): string {
   return name ?? UNTITLED_PROJECT_LABEL;
 }
 
-interface ProjectNameLabelProps {
-  layer: Layer;
-}
-
 /**
- * The project's name, song layer only, editable in place. Takes `layer` as a
- * prop (rather than reading `activeTab` itself) so it can be unit-tested
- * directly: under `renderToString`, `Header`'s own `activeTab` read is a plain
- * `useAppStore` selector, which serves the store's CREATION-time value and
- * never reflects a test's `setState` (see .claude/rules/testing.md) — there is
- * no way to reach the song layer through a rendered `<Header />` in a test.
+ * The project's name, song layer only, editable in place. Song layer only
+ * through its `HEADER_TOOLS` row (`headerTools.ts`), which is its only gate
+ * (R317).
  *
  * `draft` is local state, never a store value: a keystroke must not write the
  * store (each write would re-render every mounted view, and the name is
  * envelope rather than content). Commit is Enter or blur; Escape reverts.
  */
-export function ProjectNameLabel({ layer }: ProjectNameLabelProps) {
+export function ProjectNameLabel() {
   const name = useLiveStore((s) => s.projectName);
   const setProjectName = useLiveStore((s) => s.setProjectName);
   const [draft, setDraft] = useState<string | null>(null);
-  if (layer !== 'song') return null;
   const label = projectDisplayName(name);
   const value = draft ?? name ?? '';
   const commit = () => {

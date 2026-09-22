@@ -7,6 +7,8 @@ import { persistTheme, readStoredTheme, resolveInitialTheme } from './header/use
 import { projectDisplayName, ProjectNameLabel, UNTITLED_PROJECT_LABEL } from './header/ProjectNameLabel';
 import { FollowPlayheadToggle } from './header/FollowPlayheadToggle';
 import { ScaleMenu, ScaleSelects } from './header/ScaleMenu';
+import { HEADER_TOOLS } from './header/headerTools';
+import { ExportButton } from './export/ExportButton';
 import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
 import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
@@ -253,20 +255,18 @@ describe('TabButton rendering', () => {
   });
 });
 
-// ProjectNameLabel takes `layer` as a plain prop rather than reading
-// `activeTab` itself (see the comment on the component): Header's own
-// `activeTab` read is a plain `useAppStore` selector, which under
-// `renderToString` always serves the store's CREATION-time value ('sound',
-// a loop tab) regardless of `setState` — there is no way to reach the song
-// layer through a rendered `<Header />` in this suite. Testing the label via
-// its own props, the same way `TabButton` above is tested standalone, avoids
-// that trap entirely.
+// ProjectNameLabel is rendered directly, standalone, rather than through
+// `Header` (see the comment on the component): Header's own `activeTab` read
+// is a plain `useAppStore` selector, which under `renderToString` always
+// serves the store's CREATION-time value ('sound', a loop tab) regardless of
+// `setState` — there is no way to reach the song layer through a rendered
+// `<Header />` in this suite.
 //
 // The name it shows is read through `useLiveStore` (the component owns the
 // read now, so a committed edit is visible without a remount), which is also
 // what makes `setState({ projectName })` before a render reach it — the
 // `getServerSnapshot` trap does not apply to this block.
-describe('ProjectNameLabel (song layer only)', () => {
+describe('ProjectNameLabel', () => {
   const initial = useAppStore.getState().projectName;
   afterEach(() => {
     useAppStore.setState({ projectName: initial });
@@ -274,34 +274,28 @@ describe('ProjectNameLabel (song layer only)', () => {
 
   test('a named project renders an editable input holding the name', () => {
     useAppStore.setState({ projectName: 'Lo-Fi Study Session' });
-    const html = renderToString(<ProjectNameLabel layer="song" />);
+    const html = renderToString(<ProjectNameLabel />);
     expect(html).toContain('id="header-project-name"');
     expect(openTagContaining(html, 'id="header-project-name"')).toMatch(/^<input/);
     expect(html).toContain('value="Lo-Fi Study Session"');
   });
 
   test('the only project-name editor remains visible on phone widths', () => {
-    const html = renderToString(<ProjectNameLabel layer="song" />);
+    const html = renderToString(<ProjectNameLabel />);
     expect(html).toContain('id="header-project-name"');
     expect(html).not.toMatch(/class="[^"]*\bhidden\b/);
   });
 
   test('an untitled session shows the untitled placeholder', () => {
     useAppStore.setState({ projectName: null });
-    const html = renderToString(<ProjectNameLabel layer="song" />);
+    const html = renderToString(<ProjectNameLabel />);
     expect(html).toContain(`placeholder="${UNTITLED_PROJECT_LABEL}"`);
     expect(html).toContain('value=""');
   });
 
-  test('the loop layer renders no project-name control at all', () => {
-    useAppStore.setState({ projectName: 'Lo-Fi Study Session' });
-    const html = renderToString(<ProjectNameLabel layer="loop" />);
-    expect(html).not.toContain('id="header-project-name"');
-  });
-
   test('it is captioned and framed the way the loop picker is', () => {
     useAppStore.setState({ projectName: 'Alpha' });
-    const html = renderToString(<ProjectNameLabel layer="song" />);
+    const html = renderToString(<ProjectNameLabel />);
     expect(html).toContain('>Project<');
     expect(html).toContain(HEADER_FIELD_SHELL);
     expect(html).toContain(GROUP_LABEL);
@@ -315,7 +309,7 @@ describe('ProjectNameLabel (song layer only)', () => {
 
 // Reads the store through useLiveStore, so unlike the rest of the header its
 // live state IS reachable from a test's setState (see ui/useLiveStore.ts).
-describe('FollowPlayheadToggle (song layer only)', () => {
+describe('FollowPlayheadToggle', () => {
   const initial = useAppStore.getState().followPlayhead;
   afterEach(() => {
     useAppStore.setState({ followPlayhead: initial });
@@ -323,7 +317,7 @@ describe('FollowPlayheadToggle (song layer only)', () => {
 
   test('following: pressed, and the label offers the way out', () => {
     useAppStore.setState({ followPlayhead: true });
-    const html = renderToString(<FollowPlayheadToggle layer="song" />);
+    const html = renderToString(<FollowPlayheadToggle />);
     const tag = openTagContaining(html, 'id="btn-follow-playhead"');
     expect(tag).toContain('aria-pressed="true"');
     expect(tag).toContain('btn-active');
@@ -332,39 +326,37 @@ describe('FollowPlayheadToggle (song layer only)', () => {
 
   test('not following: unpressed, and the label offers the way in', () => {
     useAppStore.setState({ followPlayhead: false });
-    const html = renderToString(<FollowPlayheadToggle layer="song" />);
+    const html = renderToString(<FollowPlayheadToggle />);
     const tag = openTagContaining(html, 'id="btn-follow-playhead"');
     expect(tag).toContain('aria-pressed="false"');
     expect(tag).not.toContain('btn-active');
     expect(tag).toContain('Follow the playing loop');
   });
-
-  test('the loop layer never shows it — the scroll it governs is Arrange only', () => {
-    const html = renderToString(<FollowPlayheadToggle layer="loop" />);
-    expect(html).not.toContain('id="btn-follow-playhead"');
-  });
 });
 
 describe('export lives in its own feature folder', () => {
-  const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
+  const header = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
+  const tools = readFileSync(new URL('./header/headerTools.ts', import.meta.url), 'utf8');
 
-  test('Header renders the export root from src/components/export/', () => {
-    expect(src).toMatch(/import \{ ExportButton \} from ["']\.\/export\/ExportButton["']/);
-    expect(src).toContain('<ExportButton layer={layer} />');
+  test('the tool list takes the export root from src/components/export/', () => {
+    expect(tools).toContain("import { ExportButton } from '@/components/export/ExportButton';");
+    expect(HEADER_TOOLS.find((tool) => tool.id === 'export')?.Component).toBe(ExportButton);
   });
 
-  test('Header holds no export logic of its own', () => {
-    for (const symbol of ['startExport', 'cancelExport', 'exportJob', 'downloadBlob', 'mixdownProgressLabel', 'export-menu']) {
-      expect(src).not.toContain(symbol);
+  test('neither the Header nor its tool list holds export logic', () => {
+    for (const src of [header, tools]) {
+      for (const symbol of ['startExport', 'cancelExport', 'exportJob', 'downloadBlob', 'mixdownProgressLabel', 'export-menu']) {
+        expect(src).not.toContain(symbol);
+      }
     }
   });
 });
 
 /**
- * Order, read off the source: `Header` itself is never rendered in this suite
- * (its `activeTab` read serves the store's creation-time value under
+ * Order, read off `HEADER_TOOLS`: `Header` itself is never rendered in this
+ * suite (its `activeTab` read serves the store's creation-time value under
  * `renderToString` — see the note above), so what the row opens with is pinned
- * as a static property of the file instead.
+ * as a static property of the tool list instead.
  *
  * The rule is that the layer's SUBJECT — the loop being edited, or the project
  * the arrangement belongs to — comes before the tabs that view it, on both
@@ -373,53 +365,23 @@ describe('export lives in its own feature folder', () => {
 describe('the header cluster leads with the subject, not the tabs', () => {
   const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
   const navAt = src.indexOf('<nav className={`${HEADER_GROUP}');
+  const subject = HEADER_TOOLS.filter((tool) => tool.group === 'subject').map((tool) => tool.id);
 
-  test('the loop picker precedes the tab nav', () => {
-    expect(src.indexOf('<LoopSelector />')).toBeLessThan(navAt);
+  test('the Header renders the subject tools, then the tab nav, then the actions', () => {
+    expect(navAt).toBeGreaterThan(-1);
+    expect(src.indexOf('<HeaderToolRun layer={layer} group="subject" />')).toBeLessThan(navAt);
+    expect(src.indexOf('<HeaderToolRun layer={layer} group="actions" />')).toBeGreaterThan(navAt);
   });
 
-  test('the project name precedes the tab nav', () => {
-    expect(src.indexOf('<ProjectNameLabel')).toBeLessThan(navAt);
+  // Subject, then what Arrange does with it while it plays, then export, then
+  // the key it is in — all before the tabs, which then stay anchored beside
+  // the theme toggle on both layers.
+  test('loop picker, project name, follow toggle, export and key/scale all precede the tabs', () => {
+    expect(subject).toEqual(['loop-copy', 'loop-selector', 'project-name', 'follow-playhead', 'export', 'scale']);
   });
 
-  // Between the two, as specified: the subject, then what Arrange does with
-  // it while it plays, then the tabs.
-  test('the follow toggle sits between the project name and the tab nav', () => {
-    expect(src.indexOf('<ProjectNameLabel')).toBeLessThan(src.indexOf('<FollowPlayheadToggle'));
-    expect(src.indexOf('<FollowPlayheadToggle')).toBeLessThan(navAt);
-  });
-
-  // The key/scale group sits with the subject rather than beside the theme
-  // toggle, which is also what keeps the tabs anchored just left of that
-  // toggle on BOTH layers — this group exists on the loop layer only, so
-  // behind the tabs it moved them sideways on every layer change.
-  test('the key/scale group precedes the tab nav', () => {
-    expect(src.indexOf('<ScaleMenu')).toBeGreaterThan(-1);
-    expect(src.indexOf('<ScaleMenu')).toBeLessThan(navAt);
-  });
-
-  // Both copies render — the inline pair from xl up and the dropdown below —
-  // each under its own id prefix, so the hidden copy never duplicates an id.
-  test('the key/scale menu renders both breakpoint copies', () => {
-    const html = renderToString(<ScaleMenu scaleRoot="C" scaleType="Major" />);
-    expect(html).toContain('id="select-master-scale-root"');
-    expect(html).toContain('id="select-master-scale-compact-root"');
-  });
-});
-
-/**
- * The copy button belongs beside the loop picker, on the loop layer only,
- * because that is what it copies: the loop the header's subject names. It is
- * pinned as source text rather than rendered markup because `Header` reads
- * the layer off the store, and a `setState` before a `renderToString` would
- * silently render creation-time state (see `.claude/rules/testing.md`).
- */
-describe('the loop layer renders the copy button beside the loop selector', () => {
-  test('the copy button is imported and rendered with the loop selector', () => {
-    const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
-    expect(src).toContain('import { LoopCopyButton }');
-    expect(src).toContain('<LoopCopyButton />');
-    expect(src).toContain('<LoopSelector />');
+  test('the copy button sits immediately before the loop selector', () => {
+    expect(subject.indexOf('loop-selector')).toBe(subject.indexOf('loop-copy') + 1);
   });
 });
 
@@ -449,6 +411,14 @@ describe('key picker', () => {
     const html = renderToString(<ScaleSelects idPrefix="test" />);
     expect(html).toContain('<option value="C#">C#/Db</option>');
     expect(html).toContain('<option value="C">C</option>');
+  });
+
+  // Both copies render — the inline pair from xl up and the dropdown below —
+  // each under its own id prefix, so the hidden copy never duplicates an id.
+  test('the key/scale menu renders both breakpoint copies', () => {
+    const html = renderToString(<ScaleMenu />);
+    expect(html).toContain('id="select-master-scale-root"');
+    expect(html).toContain('id="select-master-scale-compact-root"');
   });
 
   // The header pair is FIXED width, and the scale name ellipsises inside it.

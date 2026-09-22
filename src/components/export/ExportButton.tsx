@@ -1,5 +1,4 @@
 import { Download } from 'lucide-react';
-import type { Layer } from '@/types';
 import { EXPORT_KINDS } from '@/store/exportKinds';
 import { ExportDialog } from './ExportDialog';
 import { useExportDialog, type ExportTriggerView } from './useExportDialog';
@@ -27,14 +26,11 @@ function ExportTrigger({ trigger, onOpen }: { trigger: ExportTriggerView; onOpen
 }
 
 /**
- * The export feature's root, rendered by the Header on the song layer only.
- * Takes `layer` as a prop for the reason the Header's other song-layer
- * controls do: under `renderToString` a rendered `<Header />` can never reach
- * the song layer, so the prop is what makes "song layer only" assertable.
+ * The export feature's root: a song-layer Header tool whose `HEADER_TOOLS`
+ * row (`header/headerTools.ts`) is its only layer gate (R317).
  */
-export function ExportButton({ layer }: { layer: Layer }) {
+export function ExportButton() {
   const d = useExportDialog();
-  if (layer !== 'song') return null;
   return (
     <>
       <ExportTrigger trigger={d.trigger} onOpen={d.openDialog} />
