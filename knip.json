@@ -12,7 +12,7 @@
     "src/**/*.{ts,tsx}!",
     "src/**/*.css!",
     "!src/**/*.test.{ts,tsx}!",
-    "!src/**/{engineTestHelpers,testFakes,*Fixture,*Fixtures}.{ts,tsx}!",
+    "!src/**/{engineTestHelpers,testFakes,smfTestReader,*Fixture,*Fixtures}.{ts,tsx}!",
     "scripts/**/*.{ts,mts}",
     ".claude/skills/**/scripts/**/*.ts",
     "!src/data/trimTable.ts!"
