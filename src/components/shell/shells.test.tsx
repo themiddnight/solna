@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -17,9 +17,43 @@ function stripComments(source: string): string {
 
 const read = (path: string) => stripComments(readFileSync(new URL(path, import.meta.url), 'utf8'));
 
+/**
+ * Renders both shells with every `React.lazy` in the frame already resolved.
+ *
+ * `renderToString` cannot wait for a lazy: an unresolved one renders a
+ * client-render fallback `<template>` whose dev component stack names the
+ * enclosing shell, so the two shells' markup differs only because of that.
+ * Whether a lazy is resolved depends on whether an earlier test in the same
+ * process rendered it, which made the parity check pass in the full suite and
+ * fail alone. A throwaway render starts every lazy load; awaiting the same
+ * modules and one macrotask lets each lazy settle, so both runs compare the
+ * resolved frame.
+ */
+async function renderResolvedShells(): Promise<{ desktop: string; mobile: string }> {
+  renderToString(createElement(DesktopShell, SHELL_PROPS));
+  await Promise.all([
+    import('../loop/SynthPresetLibrary'),
+    import('../loop/ChordPresetLibrary'),
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return {
+    desktop: renderToString(createElement(DesktopShell, SHELL_PROPS)),
+    mobile: renderToString(createElement(MobileShell, SHELL_PROPS)),
+  };
+}
+
 describe('the shells', () => {
-  const desktop = renderToString(createElement(DesktopShell, SHELL_PROPS));
-  const mobile = renderToString(createElement(MobileShell, SHELL_PROPS));
+  let desktop = '';
+  let mobile = '';
+  beforeAll(async () => {
+    ({ desktop, mobile } = await renderResolvedShells());
+  });
+
+  test('every lazy in the frame is resolved before the shells are compared', () => {
+    for (const html of [desktop, mobile]) {
+      expect(html).not.toContain('<template data-msg');
+    }
+  });
 
   test('the desktop shell renders the whole frame', () => {
     for (const marker of [
