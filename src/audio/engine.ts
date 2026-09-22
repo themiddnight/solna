@@ -10,7 +10,7 @@ import type { VoiceId } from './synth/voiceId';
 import type { EngineHooks } from './masterRack';
 import { audioLatencySnapshot, type AudioDiagnosticSnapshot } from './diagnostics';
 import type { SourceBusApplyMode } from './automation/sourceBusAutomation';
-import { AudioSession } from './runtime/audioSession';
+import { AudioSession, type RenderEngineOptions } from './runtime/audioSession';
 import { AudioHealthMonitor, type AudioClockEvidence, type AudioHealthSnapshot, type HealthMonitorScheduler } from './runtime/healthMonitor';
 import { detectRuntimeProfile, type RuntimeEnvironment, type RuntimeProfile } from './runtime/profile';
 import { runtimePolicyFor, type AudioRuntimePolicy } from './runtime/policy';
@@ -174,6 +174,11 @@ export class AudioEngine {
 
   getSourceLevelAnalyser(source: string): AnalyserNode | null {
     return this.session?.masterRack.getSourceLevelAnalyser(source) ?? null;
+  }
+
+  /** Render-only: an extra edge off a source bus's output (stems, R307). No-op before a context. */
+  connectSourceStem(source: string, target: AudioNode): void {
+    this.session?.masterRack.connectSourceStem(source, target);
   }
 
   getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {
@@ -472,14 +477,17 @@ export class AudioEngine {
    *
    * A render engine is never stored in the singleton, never reaches
    * engineSync.ts, and never outlives its `startRendering()` call.
+   * `options` is render-only; omitted = today's graph (R309).
    */
-  bindContext(ctx: BaseAudioContext): void {
+  bindContext(ctx: BaseAudioContext, options: RenderEngineOptions = {}): void {
     this.invalidatePendingRecovery();
     const previous = this.session;
-    this.session = AudioSession.create(ctx, {
-      ...this.hooks,
-      generation: this.nextGeneration++,
-    });
+    this.session = AudioSession.create(
+      ctx,
+      { ...this.hooks, generation: this.nextGeneration++ },
+      undefined,
+      options,
+    );
     this.healthMonitor.resetGeneration(this.session.generation);
     if (previous) void previous.dispose();
   }
@@ -746,10 +754,11 @@ export const audioEngine = new AudioEngine();
  *
  * The singleton above is deliberately NOT involved: a render must not disturb
  * the session's engine, and the session's engine must not be audible in the
- * render.
+ * render. `options.masterOutput` detaches the master for a stems render; the
+ * mixdown passes none.
  */
-export function createRenderEngine(ctx: BaseAudioContext): AudioEngine {
+export function createRenderEngine(ctx: BaseAudioContext, options?: RenderEngineOptions): AudioEngine {
   const engine = new AudioEngine();
-  engine.bindContext(ctx);
+  engine.bindContext(ctx, options);
   return engine;
 }

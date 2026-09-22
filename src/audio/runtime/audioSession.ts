@@ -19,6 +19,15 @@ const DEFAULT_FACTORIES: AudioSessionFactories = {
   createSynthManager: (options) => new SynthVoiceManager(options),
 };
 
+/**
+ * Render-only engine options (stems, ADR-0038). Omitted = today's graph, byte
+ * for byte; the realtime singleton never passes one (R309).
+ */
+export interface RenderEngineOptions {
+  /** Where the master rack's last dynamics stage connects instead of `ctx.destination`. */
+  readonly masterOutput?: AudioNode;
+}
+
 /** One complete set of objects bound to one Web Audio context. */
 export class AudioSession {
   readonly generation: number;
@@ -35,6 +44,7 @@ export class AudioSession {
     readonly context: BaseAudioContext,
     hooks: AudioSessionHooks,
     factories: AudioSessionFactories,
+    options: RenderEngineOptions,
   ) {
     this.generation = hooks.generation;
     this.masterRack = new MasterRack();
@@ -48,7 +58,7 @@ export class AudioSession {
       lfoBank: this.lfoBank,
     });
 
-    this.masterRack.bind(context);
+    this.masterRack.bind(context, options.masterOutput);
     this.drumSynth.bind(context);
     this.clock.bind(context);
     this.masterRack.setupMasterChain();
@@ -62,8 +72,9 @@ export class AudioSession {
     ctx: BaseAudioContext,
     hooks: AudioSessionHooks,
     factories: AudioSessionFactories = DEFAULT_FACTORIES,
+    options: RenderEngineOptions = {},
   ): AudioSession {
-    return new AudioSession(ctx, hooks, factories);
+    return new AudioSession(ctx, hooks, factories, options);
   }
 
   realtimeCtx(): AudioContext | null {

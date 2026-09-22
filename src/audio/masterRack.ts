@@ -332,10 +332,19 @@ export class MasterRack {
    */
   private ctx: BaseAudioContext | null = null;
 
+  /**
+   * Where `rewireMasterDynamics` connects the last stage. Null = `ctx.destination`
+   * (every realtime session and the mixdown). A stems render passes an
+   * unconnected sink so the master is built identically — the seeded reverb
+   * impulse included — but nothing of it reaches the file (ADR-0038).
+   */
+  private masterOutput: AudioNode | null = null;
+
   /** Binds the context this subsystem builds its nodes and schedules against. */
-  bind(ctx: BaseAudioContext): void {
+  bind(ctx: BaseAudioContext, masterOutput?: AudioNode): void {
     if (this.disposed) return;
     this.ctx = ctx;
+    this.masterOutput = masterOutput ?? null;
   }
 
   /** Disconnects the graph and releases every cache owned by this context. */
@@ -735,7 +744,7 @@ export class MasterRack {
       node.connect(stage);
       node = stage;
     }
-    node.connect(this.ctx.destination);
+    node.connect(this.masterOutput ?? this.ctx.destination);
 
     this.dynamicsTopology = topology;
   }
@@ -1350,6 +1359,15 @@ export class MasterRack {
       this.sourceLevelAnalysers.set(source, analyser);
     }
     return analyser;
+  }
+
+  /**
+   * Render-only (stems, R307): one more edge off the bus output — after the
+   * fader and mute, beside the dry and send edges — to a caller node. Like
+   * `getSourceLevelAnalyser`, it feeds no gate, so R303/R304 hold.
+   */
+  connectSourceStem(source: string, target: AudioNode): void {
+    this.getSourceBus(source).connect(target);
   }
 
   getByteFrequencyData(array: Uint8Array<ArrayBuffer>): void {
