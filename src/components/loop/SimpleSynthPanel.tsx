@@ -214,7 +214,7 @@ function SimpleControl({
         format={spec.format}
         onChange={onChange}
       />
-      <span className="mt-1 text-[10px] leading-tight text-base-content/50">{spec.hint}</span>
+      <span className="hidden sm:block mt-1 text-[10px] leading-tight text-base-content/50">{spec.hint}</span>
     </div>
   );
 }
@@ -352,7 +352,7 @@ function SimpleGroup({
   children: ReactNode;
 }) {
   return (
-    <section className="relative min-w-0 px-3 pt-4 pb-4 border-b border-base-300 last:border-b-0 sm:border-r sm:[&:nth-child(2n)]:border-r-0 xl:border-r xl:[&:nth-child(2n)]:border-r xl:last:border-r-0">
+    <section className="relative min-w-0 px-2 sm:px-3 pt-4 pb-4 border-b border-base-300 last:border-b-0 border-r [&:nth-child(2n)]:border-r-0 md:[&:nth-child(2n)]:border-r md:last:border-r-0">
       <span
         aria-hidden="true"
         className={`absolute inset-x-0 top-0 h-0.5 bg-current opacity-70 ${group.color}`}
@@ -384,7 +384,7 @@ export function SimpleSynthPanel({
   return (
     <PanelCard inset className="w-full min-w-0 overflow-hidden">
       <SimpleIntro summary={simpleFeelSummary(activeSynth)} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 md:grid-cols-4">
         {SIMPLE_GROUPS.map((group) => (
           <SimpleGroup key={group.id} group={group}>
             {group.controls.map((id) => (

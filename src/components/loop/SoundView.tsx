@@ -138,7 +138,7 @@ function SoundFocusChips({
             its direct children to be the joined items, which a GroupFrame
             between the outer div and three of the four chips breaks — so
             join/join-item are not used here and gap-1 carries the spacing. */}
-        <GroupFrame label="Accompaniment" className="flex items-center gap-1 p-1">
+        <GroupFrame label="Accom" className="flex items-center gap-1 p-1">
           {ACCOMPANIMENT_FOCUSES.map(renderFocusChip)}
         </GroupFrame>
         {renderFocusChip(BEAT_FOCUS)}

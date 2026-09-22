@@ -19,6 +19,8 @@ import {
 } from "../fxDescriptors";
 import { GainReductionMeter } from "../ui/GainReductionMeter";
 import { useEffectsDraft } from "./useEffectsDraft";
+import { useFxChainKnobSize } from "./useFxChainKnobSize";
+import type { KnobSize } from "@/utils/knob";
 
 /** The numeric fields of `MasterEffects` — the only ones a knob may drive. `-?` is what
  *  keeps `undefined` out of the union: MasterEffects has optional members, and a mapped
@@ -320,6 +322,9 @@ function FxCard({
   );
 }
 
+/** Below `lg` the chain cards are too narrow for three `md` knobs, so they take `sm` there. */
+type FxChainUnitProps = FxUnitProps & { knobSize: KnobSize };
+
 /** The centred knob row the reverb, delay and EQ units all lay their knobs out in. */
 function FxKnobRow({ children }: { children: React.ReactNode }) {
   return (
@@ -330,7 +335,7 @@ function FxKnobRow({ children }: { children: React.ReactNode }) {
 }
 
 /** 1. Algorithmic Reverb Unit */
-function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
+function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel, knobSize }: FxChainUnitProps) {
   return (
     <FxCard
       badge={1}
@@ -346,6 +351,7 @@ function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCance
     >
       <FxKnobRow>
         <Knob
+          size={knobSize}
           id="slider-reverb-wet"
           label="Mix"
           color="text-accent"
@@ -360,6 +366,7 @@ function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCance
           onCancel={onKnobCancel}
         />
         <Knob
+          size={knobSize}
           id="slider-reverb-decay"
           label="Decay"
           color="text-accent"
@@ -380,7 +387,7 @@ function ReverbUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCance
 }
 
 /** 2. Stereo Delay Unit */
-function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
+function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel, knobSize }: FxChainUnitProps) {
   return (
     <FxCard
       badge={2}
@@ -396,6 +403,7 @@ function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel
     >
       <FxKnobRow>
         <Knob
+          size={knobSize}
           id="slider-delay-wet"
           label="Mix"
           color="text-accent"
@@ -410,6 +418,7 @@ function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel
           onCancel={onKnobCancel}
         />
         <Knob
+          size={knobSize}
           id="slider-delay-feedback"
           label="Feedback"
           color="text-accent"
@@ -430,7 +439,7 @@ function DelayUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel
 }
 
 /** 3. Wave Distortion / Warmth Unit */
-function DistortionUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
+function DistortionUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel, knobSize }: FxChainUnitProps) {
   return (
     <FxCard
       badge={3}
@@ -445,6 +454,7 @@ function DistortionUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobC
       }}
     >
       <Knob
+        size={knobSize}
         id="slider-distortion-wet"
         label="Drive / Crunch"
         color="text-primary"
@@ -472,17 +482,20 @@ function EqBandKnob({
   onChange,
   onCommit,
   onCancel,
+  knobSize,
 }: {
   id: string;
   label: string;
   value: number;
   disabled: boolean | undefined;
+  knobSize: KnobSize;
   onChange: (value: number) => void;
   onCommit: () => void;
   onCancel: () => void;
 }) {
   return (
     <Knob
+      size={knobSize}
       id={id}
       label={label}
       color="text-secondary"
@@ -501,7 +514,7 @@ function EqBandKnob({
 }
 
 /** 4. 3-Band Equalizer */
-function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
+function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel, knobSize }: FxChainUnitProps) {
   return (
     <FxCard
       badge={4}
@@ -517,6 +530,7 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }:
     >
       <FxKnobRow>
         <EqBandKnob
+          knobSize={knobSize}
           id="slider-eq-low"
           label="LOW"
           value={effects.eqLow}
@@ -526,6 +540,7 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }:
           onCancel={onKnobCancel}
         />
         <EqBandKnob
+          knobSize={knobSize}
           id="slider-eq-mid"
           label="MID"
           value={effects.eqMid}
@@ -535,6 +550,7 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }:
           onCancel={onKnobCancel}
         />
         <EqBandKnob
+          knobSize={knobSize}
           id="slider-eq-high"
           label="HIGH"
           value={effects.eqHigh}
@@ -549,15 +565,15 @@ function EqUnit({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }:
 }
 
 /** The four-stage FX chain, in signal order. */
-export function FxChain({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel }: FxUnitProps) {
+export function FxChain({ effects, updateFx, onKnobChange, onKnobCommit, onKnobCancel, knobSize }: FxChainUnitProps) {
   return (
     <section className="space-y-2">
       <h3 className={`${SECTION_HEADER} px-1`}>FX Chain</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <ReverbUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
-        <DelayUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
-        <DistortionUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
-        <EqUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <ReverbUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} knobSize={knobSize} />
+        <DelayUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} knobSize={knobSize} />
+        <DistortionUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} knobSize={knobSize} />
+        <EqUnit effects={effects} updateFx={updateFx} onKnobChange={onKnobChange} onKnobCommit={onKnobCommit} onKnobCancel={onKnobCancel} knobSize={knobSize} />
       </div>
     </section>
   );
@@ -659,6 +675,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
   // that drag started, which a stale writer would silently overwrite back to
   // on the drag's own release.
   const draft = useEffectsDraft(effects, setEffects);
+  const knobSize = useFxChainKnobSize();
   const updateFx = (updates: Partial<MasterEffects>) => {
     draft.onPatch(updates);
     draft.onCommit();
@@ -674,6 +691,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
         onKnobChange={draft.onPatch}
         onKnobCommit={draft.onCommit}
         onKnobCancel={draft.onCancel}
+        knobSize={knobSize}
       />
 
       <MasterDynamicsSection

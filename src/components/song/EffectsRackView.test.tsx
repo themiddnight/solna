@@ -161,6 +161,7 @@ describe('EffectsRackView wires onCancel to every knob (Finding 1)', () => {
       onKnobChange: machine.onPatch,
       onKnobCommit: () => machine.commit(() => {}),
       onKnobCancel: machine.cancel,
+      knobSize: 'md',
     });
 
     const knob = byId(tree, 'slider-reverb-wet');
@@ -191,6 +192,7 @@ describe('EffectsRackView wires onCancel to every knob (Finding 1)', () => {
       onKnobChange: machine.onPatch,
       onKnobCommit: () => machine.commit(() => {}),
       onKnobCancel: machine.cancel,
+      knobSize: 'md',
     });
 
     const knob = byId(tree, 'slider-eq-low');
