@@ -386,7 +386,7 @@ sequenceDiagram
     and defaults (`sanitize.ts:19` `createDefaultLoop` from `loopSlice`, `:25` `LEAD_OCTAVE_*`
     from `leadSlice`). `store/types.ts` holds a runtime value, `DEFAULT_MIDI_MAPPINGS`
     (`types.ts:431`). Pure data helpers the store depends on live in `audio/`
-    (`audio/leadMelody.ts` transposition and resize, imported by `musicContextSlice.ts:3`,
+    (`audio/playback/leadMelody.ts` transposition and resize, imported by `musicContextSlice.ts:3`,
     `leadSlice.ts:3-15`, `loopSlice.ts:17`).
 11. **Naming and type inconsistencies.** Lead-track fields are `synthParams`/`synthVolume`/
     `synthMuted` while FX uses `fx*` (the documented irregularity, `melodyTracks.ts:48-51`). The

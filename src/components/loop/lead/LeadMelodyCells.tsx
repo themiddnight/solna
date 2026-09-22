@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
+import { leadStoredIndexAt, type LeadNote } from '@/audio/playback/leadMelody';
 import type { StepCell } from '@/components/sequencerGrid';
 import type { Meter } from '@/utils/timeSignature';
 import type { MelodyTrackId } from '@/store/melodyTracks';

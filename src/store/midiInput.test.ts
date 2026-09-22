@@ -19,7 +19,7 @@ import type { ActiveSynth } from '../types/synth';
 import { noteFrequency } from '@/utils/musicTheory';
 import { startMelodyRecordBridges } from './leadRecord';
 import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
-import type { LeadNote } from '../audio/leadMelody';
+import type { LeadNote } from '../audio/playback/leadMelody';
 
 /** The NEXT patch of one `updateSynthPatch` call — argument 1, not argument 0.
  *  Argument 0 is what the engine is told the patch WAS; the pair is what the

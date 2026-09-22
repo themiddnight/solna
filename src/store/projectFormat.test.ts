@@ -11,7 +11,7 @@ import {
   makeEnvelope,
 } from './projectFormat';
 import { parseProjectFile } from './projectFile';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE } from '../audio/playback/leadMelody';
 import { LOOP_FLAT_KEYS } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';

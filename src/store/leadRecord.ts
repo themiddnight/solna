@@ -1,6 +1,6 @@
 import { shallow } from 'zustand/shallow';
 import { subscribeNoteInput } from '../audio/playback/noteInputBus';
-import { clampLeadCursor, leadStoredIndexAt } from '../audio/leadMelody';
+import { clampLeadCursor, leadStoredIndexAt } from '../audio/playback/leadMelody';
 import { clockStepToGridColumn, heldStepLength } from '../audio/leadLiveRecord';
 import { leadLiveInputStep, startLeadLiveClock } from '../audio/playback/leadLiveClock';
 import { getMeter } from '../utils/timeSignature';

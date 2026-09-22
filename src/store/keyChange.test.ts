@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { ROOTS } from '@/musicCore';
 import type { ChordQuality } from '@/musicCore';
 import type { ChordItem } from '@/types';
-import type { LeadNote } from '../audio/leadMelody';
+import type { LeadNote } from '../audio/playback/leadMelody';
 import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
 import { changeKey, harmonizeChordsToKey, type KeyChangeSource } from './keyChange';

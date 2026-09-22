@@ -22,7 +22,7 @@ import {
 import { createDefaultLoop } from './loopSlice';
 import { defaultBeatState } from './beatPresets';
 import type { Loop } from './types';
-import { DEFAULT_LEAD_GATE } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE } from '../audio/playback/leadMelody';
 import { loopBars, loopLengthSteps } from '@/utils/songStructure';
 
 function makeLoop(overrides: Partial<Loop> = {}): Loop {

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { LOOP_FLAT_KEYS } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
-import { DEFAULT_LEAD_GATE } from '@/audio/leadMelody';
+import { DEFAULT_LEAD_GATE } from '@/audio/playback/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '@/utils/stepResolution';
 import { PROJECT_DB_LEVEL_KEYS } from './projectFormat';
 import { sanitizeLoops } from './sanitize';

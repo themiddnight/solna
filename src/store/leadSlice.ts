@@ -12,7 +12,7 @@ import {
   leadStoredIndexAtTick,
   resizeLeadMelody,
   type LeadNote,
-} from '../audio/leadMelody';
+} from '../audio/playback/leadMelody';
 import { LEAD_WINDOW_OCTAVES, leadRecordOctave } from '../audio/leadStepRecord';
 import { isNoteInScale } from '../utils/musicTheory';
 import {

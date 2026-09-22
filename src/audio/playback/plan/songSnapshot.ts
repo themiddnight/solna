@@ -11,7 +11,7 @@
  * (`src/store/playbackPlanSnapshots.ts`) and its offline twin here is a deep
  * equality assertion.
  */
-import type { LeadNote } from '@/audio/leadMelody';
+import type { LeadNote } from '@/audio/playback/leadMelody';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type {
   BeatMix,

@@ -25,7 +25,7 @@ import { clampLoopLength } from '../utils/patternTimeline';
 import { LEAD_OCTAVE_MAX, LEAD_OCTAVE_MIN } from './leadSlice';
 import { getChordQualityEntry, pitchClassOfNote } from '@/musicCore';
 import type { Loop } from './types';
-import type { LeadNote } from '../audio/leadMelody';
+import type { LeadNote } from '../audio/playback/leadMelody';
 import {
   isLeadStepResolutionId,
   type LeadStepResolutionId,

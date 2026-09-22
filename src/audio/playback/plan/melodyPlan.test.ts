@@ -5,7 +5,7 @@ import {
   leadSoundingNotes,
   resolveLeadStepTriggers,
   type LeadNote,
-} from '@/audio/leadMelody';
+} from '@/audio/playback/leadMelody';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH, strideFor } from '@/utils/stepResolution';
 import { arpStepFor } from '@/utils/timeSignature';
 import { stepDurationSec } from '@/utils/tempo';

@@ -3,7 +3,7 @@ import { audioEngine } from '../audio/engine';
 import { VIBES } from '../data/vibes';
 import { applyVibeToStore, resolveVibe, resolveVibeSynthParams, VIBE_IDS } from './vibes';
 import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
-import type { LeadNote } from '../audio/leadMelody';
+import type { LeadNote } from '../audio/playback/leadMelody';
 import { CHORD_RHYTHMS } from '../data/chordRhythms';
 import { BASS_PATTERNS } from '../data/bassPatterns';
 import { DRUM_GRIDS } from '../data/drumGrids';

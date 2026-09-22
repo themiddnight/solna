@@ -17,14 +17,14 @@ import {
   transposeLeadMelodyByRoot,
   type LeadNote,
 } from './leadMelody';
-import { buildArpSequence } from './arpeggiator';
+import { buildArpSequence } from '../arpeggiator';
 import type { ArpSettings } from '@/types/synth';
-import { computeArpTriggers } from './arpSchedule';
+import { computeArpTriggers } from '../arpSchedule';
 import {
   LEAD_TICKS_PER_BAR,
   TICKS_PER_SIXTEENTH,
   columnsPerBar,
-} from '../utils/stepResolution';
+} from '@/utils/stepResolution';
 
 describe('resizeLeadMelody', () => {
   const twoBars = Array.from({ length: 96 }, (_, i) =>

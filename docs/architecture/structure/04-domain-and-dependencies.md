@@ -371,7 +371,7 @@ for `*.tsx`.
 | 27 | 602 | src/components/loop/SynthPresetLibrary.tsx |
 | 28 | 577 | src/components/loop/chord/useChordView.ts |
 | 29 | 558 | src/components/loop/chord/CustomPatternTimeline.tsx |
-| 30 | 548 | src/audio/leadMelody.ts |
+| 30 | 548 | src/audio/playback/leadMelody.ts |
 
 The four largest DSP files are ~40-50 % comment lines (`masterRack.ts` 553, `subtractiveVoice.ts`
 543, `synthLfo.ts` 538, `drumSynth.ts` 440 comment-prefixed lines), which is how they pass

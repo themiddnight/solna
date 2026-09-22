@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { leadMarkerPublishes } from './useLeadStepPublisher';
-import { clampLeadCursor } from '@/audio/leadMelody';
+import { clampLeadCursor } from '@/audio/playback/leadMelody';
 import { clockStepToGridColumn } from '@/audio/leadLiveRecord';
 import { LEAD_STEP_RESOLUTION_IDS, columnsPerBar, strideFor } from '@/utils/stepResolution';
 import { METERS, METER_IDS } from '@/utils/timeSignature';

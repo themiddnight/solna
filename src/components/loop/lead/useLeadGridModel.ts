@@ -11,7 +11,7 @@ import {
   clampLeadCursor,
   leadCursorBar,
   type LeadNote,
-} from '@/audio/leadMelody';
+} from '@/audio/playback/leadMelody';
 import { clampLoopLength, loopLengthDivisors } from '@/utils/patternTimeline';
 import { previewSequencerNote } from '@/audio/playback/presetPreview';
 import { synthReleaseSeconds } from '@/utils/synthPatch';

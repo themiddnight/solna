@@ -1,15 +1,15 @@
 import type { ArpSettings } from '@/types/synth';
-import { buildArpSequence } from './arpeggiator';
-import { arpFiresOnStep, computeArpTriggers } from './arpSchedule';
+import { buildArpSequence } from '../arpeggiator';
+import { arpFiresOnStep, computeArpTriggers } from '../arpSchedule';
 import {
   LEAD_TICKS_PER_BAR,
   TICKS_PER_SIXTEENTH,
   clampColumn,
   columnsPerBar,
   leadNoteCells,
-} from '../utils/stepResolution';
-import { remapNoteByScaleDegree, rootSemitone, transposeNoteBySemitones } from '../utils/musicTheory';
-import { clockStepToGridColumn, tickToColumn } from './leadLiveRecord';
+} from '@/utils/stepResolution';
+import { remapNoteByScaleDegree, rootSemitone, transposeNoteBySemitones } from '@/utils/musicTheory';
+import { clockStepToGridColumn, tickToColumn } from '../leadLiveRecord';
 
 /**
  * The default per-loop gate: what fraction of a note's FINAL step sounds

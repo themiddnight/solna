@@ -126,7 +126,7 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 
 ### Organic-growth smells (refactor candidates)
 
-- **Misplaced logic.** `audio/` root holds about 8 files that build no audio (`leadMelody.ts` is 548 lines and is imported by `store/types.ts`). Preset lookups are spread across `audio/`, `store/` and `utils/`, which gives 8 duplicate filenames. Mixdown orchestration and the theme live in `Header.tsx`. (A6, D5, U7)
+- **Misplaced logic.** `audio/` root holds files that build no audio. **Partly fixed (DEV-426):** the largest, `leadMelody.ts`, now sits in `audio/playback/` with the rest of the lane planning; the remaining root files (`arpeggiator`, `bassPatterns`, `chordRhythms`, `drumGrids`, …) are lookup tables the planners read, left where they are. Preset lookups are spread across `audio/`, `store/` and `utils/`, which gives 8 duplicate filenames. Mixdown orchestration and the theme live in `Header.tsx`. (A6, D5, U7)
   **Mixdown half of U7 fixed on `refactor/dev-421-export-feature`:** export is its own feature
   (`store/exportSlice.ts`, `store/exportJob.ts`, `store/exportKinds.ts`, `components/export/`).
   **Theme half fixed (DEV-430):** the theme is `components/header/useTheme.ts`.

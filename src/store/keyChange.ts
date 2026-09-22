@@ -1,6 +1,6 @@
 import type { ChordItem } from '../types';
 import { snapProgressionToScale, transposeProgression } from '../utils/musicTheory';
-import { remapLeadMelodyByScale, transposeLeadMelodyByRoot } from '../audio/leadMelody';
+import { remapLeadMelodyByScale, transposeLeadMelodyByRoot } from '../audio/playback/leadMelody';
 import type { LoopContent } from './loop';
 import { MELODY_TRACKS } from './melodyTracks';
 

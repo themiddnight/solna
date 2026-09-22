@@ -5,7 +5,7 @@ import type { ActiveSynth } from '@/types/synth';
 import { resolveFactorySynth } from '@/utils/synthPresets';
 import type { PadState, FxState } from './types';
 import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
-import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/playback/leadMelody';
 import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 
 /**

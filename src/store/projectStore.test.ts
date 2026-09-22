@@ -3,7 +3,7 @@ import { createMemoryBackend, createProjectStore, PROJECT_SLOT_KEY, QUOTA_MESSAG
 import { UNTITLED_SOURCE, type ProjectSlotRecord, type ProjectSource } from './projectSource';
 import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
-import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, type LeadNote } from '../audio/playback/leadMelody';
 
 const body = (name: string, now = 1000): ProjectBody => ({ ...makeEnvelope(name, now), content: factoryProjectContent() });
 const record = (name: string, source: ProjectSource = UNTITLED_SOURCE, now = 1000): ProjectSlotRecord => ({

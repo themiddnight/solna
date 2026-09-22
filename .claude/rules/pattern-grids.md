@@ -4,7 +4,7 @@ paths:
   - "src/utils/customPattern.ts"
   - "src/utils/patternTimeline.ts"
   - "src/utils/patternAdapt.ts"
-  - "src/audio/leadMelody.ts"
+  - "src/audio/playback/leadMelody.ts"
   - "src/store/bassSlice.ts"
   - "src/store/chordsSlice.ts"
   - "src/components/ui/StepRow.tsx"

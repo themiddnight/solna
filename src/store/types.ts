@@ -21,7 +21,7 @@ import type { ActiveSynth, ArpSettings } from '../types/synth';
 import type { MeterId } from '../utils/timeSignature';
 import type { SynthPreset, SynthPresetCategory } from '../data/synthPresets';
 import type { BassStepChoice } from '@/data/bassPatterns';
-import type { LeadNote } from '../audio/leadMelody';
+import type { LeadNote } from '../audio/playback/leadMelody';
 import type { LoopCopyGroupId } from './loopCopy';
 import type { BatchKeyTarget, LoopKeyChangeUndo } from './loopKeyChange';
 import type { KeyChangeOptions } from './keyChange';

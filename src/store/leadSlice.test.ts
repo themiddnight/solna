@@ -7,7 +7,7 @@ import {
   LEAD_TICKS_PER_BAR,
   TICKS_PER_SIXTEENTH,
 } from '../utils/stepResolution';
-import { DEFAULT_LEAD_GATE, leadStoredIndexAt, type LeadNote } from '../audio/leadMelody';
+import { DEFAULT_LEAD_GATE, leadStoredIndexAt, type LeadNote } from '../audio/playback/leadMelody';
 
 // The melody stores 1/32 TICKS, so a stored index is not a grid column and a
 // one-cell note is not len 1. Both are spelled out here rather than as bare

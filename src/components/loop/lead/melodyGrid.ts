@@ -3,7 +3,7 @@ import { stepDurationSec } from '@/utils/tempo';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import { noteMidi, pitchClassOfNote } from '@/musicCore';
 import type { LeadMelodyView } from '@/store/types';
-import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
+import { leadStoredIndexAt, type LeadNote } from '@/audio/playback/leadMelody';
 import { wrapColumn } from '@/audio/leadLiveRecord';
 import {
   TICKS_PER_SIXTEENTH,

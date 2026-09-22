@@ -8,7 +8,7 @@ import {
 } from '@/utils/stepResolution';
 
 import { getMeter } from '@/utils/timeSignature';
-import { leadStoredIndexAt, type LeadNote } from '@/audio/leadMelody';
+import { leadStoredIndexAt, type LeadNote } from '@/audio/playback/leadMelody';
 
 const empty = (): LeadNote[][] => Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
 

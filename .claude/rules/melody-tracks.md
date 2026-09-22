@@ -7,7 +7,7 @@ paths:
   - "src/store/musicContextSlice.ts"
   - "src/store/keyChange.ts"
   - "src/store/loopCopy*.ts"
-  - "src/audio/leadMelody.ts"
+  - "src/audio/playback/leadMelody.ts"
   - "src/components/loop/lead/**"
 ---
 

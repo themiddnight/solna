@@ -93,7 +93,7 @@ const THEORY_SIBLING_CASES: Array<[label: string, source: string]> = [
   ['chordRhythms, relative',
     "import { feelToHoldScale } from '../chordRhythms';\nexport const c = feelToHoldScale;\n"],
   ['leadMelody, aliased',
-    "import { DEFAULT_LEAD_GATE } from '@/audio/leadMelody';\nexport const l = DEFAULT_LEAD_GATE;\n"],
+    "import { DEFAULT_LEAD_GATE } from '@/audio/playback/leadMelody';\nexport const l = DEFAULT_LEAD_GATE;\n"],
   ['leadMelody, relative',
     "import { DEFAULT_LEAD_GATE } from '../leadMelody';\nexport const l = DEFAULT_LEAD_GATE;\n"],
 ];

@@ -4,8 +4,8 @@ import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock, RECO
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
 import { getMeter } from '../utils/timeSignature';
 import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
-import { leadStoredIndexAt } from '../audio/leadMelody';
-import type { LeadNote } from '../audio/leadMelody';
+import { leadStoredIndexAt } from '../audio/playback/leadMelody';
+import type { LeadNote } from '../audio/playback/leadMelody';
 
 let stop: (() => void) | null = null;
 // The live clock, faked: the real one needs an AudioContext, and there is
