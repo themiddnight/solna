@@ -1,3 +1,4 @@
+import type { BeatPlanSnapshot } from '@/audio/playback/plan/beatPlan';
 import type { ChordPlanSnapshot } from '@/audio/playback/plan/chordPlan';
 import type { MelodyPlanSnapshot } from '@/audio/playback/plan/melodyPlan';
 import type { PadPlanSnapshot } from '@/audio/playback/plan/padPlan';
@@ -28,6 +29,14 @@ import type { AppStore } from './types';
  * `ChordPlanSnapshot`'s own docblock in `chordPlan.ts` for why both reads are
  * needed rather than one being redundant.
  */
+/**
+ * The Beat lane's plan snapshot from live store state. R234 twin of the
+ * offline `beatSnapshotForLoop`: a new Beat field goes in both or neither.
+ */
+export function beatPlanSnapshot(s: AppStore): BeatPlanSnapshot {
+  return { pattern: s.beatPattern, mix: s.beatMix };
+}
+
 export function padPlanSnapshot(s: AppStore): PadPlanSnapshot {
   return {
     mode: s.padMode,

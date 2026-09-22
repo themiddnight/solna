@@ -282,7 +282,7 @@ describe('engineSync: synth params and drum levels', () => {
 
   /**
    * One mute decision, expressed in two places that must agree: the engine
-   * voice gain here and the scheduled hit `beatStepEvents` skips. A muted
+   * voice gain here and the scheduled hit `planBeatStep` skips. A muted
    * voice therefore builds no voice AND would be silent if one were built —
    * never a fader value the pads would still play through.
    */

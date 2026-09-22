@@ -64,7 +64,7 @@ export function SequencerGrid({
           mirrored in StepHeader's DRUM_HEADER_CLASS. */}
       <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
         {/* One row per CANONICAL voice, in the roster's order — not per stored
-            row. The roster is the same list `beatStepEvents` walks, so what the
+            row. The roster is the same list `planBeatStep` walks, so what the
             grid draws and what the clock plays can never be two different
             rosters. */}
         {BEAT_VOICE_ROWS.map((voice) => (

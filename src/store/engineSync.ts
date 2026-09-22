@@ -168,7 +168,7 @@ function pushSourceState(
 /**
  * Every Beat voice's fader, as the engine's linear per-voice gain.
  *
- * ONE of the two mute layers, and the other one is `beatStepEvents`, which
+ * ONE of the two mute layers, and the other one is `planBeatStep`, which
  * skips a muted voice's scheduled hits so no silent voice is ever built. They
  * are the same decision expressed where each consumer can act on it: a gain of
  * 0 also covers what the step walk cannot reach — a drum PAD hit, a live MIDI

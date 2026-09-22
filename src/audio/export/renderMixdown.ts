@@ -46,7 +46,7 @@ import { getMeter, type MeterId } from '@/utils/meter';
 import { encodeWav } from '@/utils/encodeWav';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import { applyBeatParams } from '../beatAdapter';
-import { beatStepEvents } from '../beatSteps';
+import { planBeatStep } from '../playback/plan/beatPlan';
 import type {
   BeatMix,
   BeatParams,
@@ -232,7 +232,7 @@ export interface MixdownLoop {
    * too, and the renderer reads only its per-voice MUTE flags — the dB in it
    * is never read here, because the levels arrive already converted as
    * `beatVoiceGains` and the bus level arrives in `buses`. Two fields rather
-   * than one because the mute is a SCHEDULING decision (`beatStepEvents`
+   * than one because the mute is a SCHEDULING decision (`planBeatStep`
    * builds no voice for a muted row) while the level is an AudioParam.
    */
   beatParams: BeatParams;
@@ -582,8 +582,8 @@ async function scheduleArrangement(
       // never disagree with what the grid played. The per-voice mute is
       // honoured inside it; solo is not, and must not be — solo is a
       // session-only monitoring gesture and never reaches an export.
-      for (const event of beatStepEvents(loop.beatPattern, loop.beatMix, stepInBar)) {
-        engine.triggerDrum(event.voice, DEFAULT_VELOCITY, time);
+      for (const event of planBeatStep({ pattern: loop.beatPattern, mix: loop.beatMix }, { stepInBar })) {
+        engine.triggerDrum(event.voice, event.velocity, time);
       }
 
       if (!chordless) {

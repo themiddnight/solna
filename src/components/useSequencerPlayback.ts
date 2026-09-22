@@ -2,12 +2,12 @@ import { useEffect, useRef } from "react";
 import { useAppStore } from "../store/store";
 import { publishStepAt, resetStep } from "./playbackStep";
 import { ensureDrumEngine, triggerPad } from "../audio/playback/drumPlayback";
-import { beatStepEvents, type BeatStepEvent } from "@/audio/beatSteps";
+import { planBeatStep, type BeatStepEvent } from "@/audio/playback/plan/beatPlan";
 import { STEPS_PER_BAR } from "../utils/musicTheory";
 import { subscribePlaybackClock } from "../audio/playback/playbackEngine";
 import { getMeter } from "../utils/meter";
-import { DEFAULT_VELOCITY } from "../audio/constants";
 import { armOnBarLine, isSoftStopBoundary } from "./playerStop";
+import { beatPlanSnapshot } from "../store/playbackPlanSnapshots";
 import type { PlayerState } from "../store/types";
 
 /** Whether the stepper has caught a bar line and started running. */
@@ -40,25 +40,25 @@ export function sequencerStepAction(
 }
 
 /**
- * Fires the given step events at the engine. A VELOCITY, not a level, and a
- * fixed one — variable velocity is deferred (see the plan's Deferred
- * section). The Beat fader reaches the drums exactly once, on the sequencer
- * source bus, via engineSync's setSourceGain('sequencer', …) — engine.ts
- * connects drumBusFilter into that bus. This used to ALSO hand the fader
- * value to triggerPad as the velocity argument, where clampVelocity(v)
- * scales every voice's peak, so drum output was proportional to
- * the bus fader SQUARED: the 0.8 default read as -3.9 dB rather than
- * -1.9, and a fader at -6 dB delivered -12. Exported (pure, no store read) so
- * the fix is testable directly — the hook's clock effect never runs under
- * `renderToString`.
+ * Fires the given step events at the engine. The velocity is decided by
+ * `planBeatStep` (fixed at `DEFAULT_VELOCITY` today; see the plan's Deferred
+ * section for variable velocity). The Beat fader reaches the drums exactly
+ * once, on the sequencer source bus, via engineSync's
+ * setSourceGain('sequencer', …) — engine.ts connects drumBusFilter into that
+ * bus. This used to ALSO hand the fader value to triggerPad as the velocity
+ * argument, where clampVelocity(v) scales every voice's peak, so drum output
+ * was proportional to the bus fader SQUARED: the 0.8 default read as -3.9 dB
+ * rather than -1.9, and a fader at -6 dB delivered -12. Exported (pure, no
+ * store read) so the fix is testable directly — the hook's clock effect never
+ * runs under `renderToString`.
  *
- * Drums only, and there is no branch left to take: `beatStepEvents` can name
+ * Drums only, and there is no branch left to take: `planBeatStep` can name
  * eleven drum voices and nothing else, so this is the whole of what a Beat
  * step does.
  */
 export function fireBeatStepEvents(events: readonly BeatStepEvent[], time: number): void {
   for (const event of events) {
-    triggerPad(event.voice, DEFAULT_VELOCITY, time);
+    triggerPad(event.voice, event.velocity, time);
   }
 }
 
@@ -136,7 +136,7 @@ export function useSequencerPlayback(): void {
       // the meter read above, and the pattern the lead and chord schedulers'
       // own clock callbacks already use.
       const live = useAppStore.getState();
-      fireBeatStepEvents(beatStepEvents(live.beatPattern, live.beatMix, stepInLoop), time);
+      fireBeatStepEvents(planBeatStep(beatPlanSnapshot(live), { stepInBar: stepInLoop }), time);
     });
   }, [isPlaying, hardStop]);
 }

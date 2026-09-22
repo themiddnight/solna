@@ -43,7 +43,7 @@ describe('buildMixdownSnapshot', () => {
       expect(gains.find((v) => v.voice === 'kick')?.gain).toBe(0);
       expect(gains.find((v) => v.voice === 'snare')?.gain).toBeGreaterThan(0);
       // The raw mix travels too: it is the SCHEDULING half of the same mute,
-      // and `beatStepEvents` reads it to build no voice at all.
+      // and `planBeatStep` reads it to build no voice at all.
       expect(snapshot.loops[0].beatMix.voices.kick.muted).toBe(true);
     } finally {
       useAppStore.setState((state) => ({ loops: [{ ...state.loops[0], beatMix: before }] }));

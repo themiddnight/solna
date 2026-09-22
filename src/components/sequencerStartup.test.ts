@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { freshEngine } from '../audio/testFakes';
-import { beatStepEvents } from '../audio/beatSteps';
+import { planBeatStep } from '../audio/playback/plan/beatPlan';
 import { defaultBeatState } from '../store/beatPresets';
 import { fireBeatStepEvents, sequencerStepAction } from './useSequencerPlayback';
 
@@ -39,7 +39,10 @@ describe('sequencer song-start kick', () => {
     const unsubscribe = engine.subscribeClock((step, _beat, time) => {
       const action = sequencerStepAction('playing', step, arming, 16);
       if (action !== 'play') return;
-      fireBeatStepEvents(beatStepEvents(beat.beatPattern, beat.beatMix, step % 16), time);
+      fireBeatStepEvents(
+        planBeatStep({ pattern: beat.beatPattern, mix: beat.beatMix }, { stepInBar: step % 16 }),
+        time,
+      );
     });
 
     const tick = () => (engine as unknown as { clock: { clockTick(): void } }).clock.clockTick();

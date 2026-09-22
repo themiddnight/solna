@@ -113,14 +113,20 @@ describe('the Beat fader is a bus gain, never a velocity', () => {
     useAppStore.getState().setBeatLevel(0.3);
     const live = useAppStore.getState();
     expect(live.beatMix.levelDb).toBe(0.3);
-    fireBeatStepEvents([{ voice: 'kick' }], 1);
+    fireBeatStepEvents([{ voice: 'kick', velocity: DEFAULT_VELOCITY }], 1);
     expect(drumSpy).toHaveBeenCalledWith('kick', DEFAULT_VELOCITY, 1);
     expect(drumSpy.mock.calls[0]?.[1]).not.toBe(live.beatMix.levelDb);
   });
 
   test('every event in a step is fired at the same time, in the order given', () => {
     const drumSpy = spyOn(audioEngine, 'triggerDrum').mockImplementation(() => {});
-    fireBeatStepEvents([{ voice: 'kick' }, { voice: 'hihat' }], 2);
+    fireBeatStepEvents(
+      [
+        { voice: 'kick', velocity: DEFAULT_VELOCITY },
+        { voice: 'hihat', velocity: DEFAULT_VELOCITY },
+      ],
+      2,
+    );
     expect(drumSpy.mock.calls.map((call) => [call[0], call[2]])).toEqual([
       ['kick', 2],
       ['hihat', 2],
@@ -139,8 +145,14 @@ describe('the Beat fader is a bus gain, never a velocity', () => {
     );
     expect(source).not.toContain('triggerPad(event.voice, live.beatMix.levelDb');
     expect(source).not.toContain('const volume = live.beatMix.levelDb');
-    expect(source).toContain('DEFAULT_VELOCITY');
+    expect(source).toContain('triggerPad(event.voice, event.velocity, time)');
     expect(source).not.toContain('playbackNoteOn');
+  });
+
+  test("fireBeatStepEvents passes each event's velocity", () => {
+    const drumSpy = spyOn(audioEngine, 'triggerDrum').mockImplementation(() => {});
+    fireBeatStepEvents([{ voice: 'kick', velocity: 0.42 }], 3);
+    expect(drumSpy).toHaveBeenCalledWith('kick', 0.42, 3);
   });
 });
 
@@ -151,7 +163,7 @@ describe('the clock callback plays the Beat pattern', () => {
       'utf8',
     );
     expect(source).toContain(
-      'fireBeatStepEvents(beatStepEvents(live.beatPattern, live.beatMix, stepInLoop), time)',
+      'fireBeatStepEvents(planBeatStep(beatPlanSnapshot(live), { stepInBar: stepInLoop }), time)',
     );
     // The legacy per-track array it replaced is named nowhere: a reader of
     // that shape reappearing here would be a second source of what plays.

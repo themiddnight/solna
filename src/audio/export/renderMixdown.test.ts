@@ -782,7 +782,7 @@ describe('renderMixdown: every loop plays its OWN Beat patch', () => {
   });
 
   /** The per-voice mute layer travels with the loop, and a muted voice
-   *  schedules nothing at all — the same decision `beatStepEvents` takes live. */
+   *  schedules nothing at all — the same decision `planBeatStep` takes live. */
   test('a voice muted in a loop`s Beat Mix is never scheduled for that loop', async () => {
     const muted = beatMixFixture();
     muted.voices.kick = { levelDb: 0, muted: true };
