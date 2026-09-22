@@ -10,7 +10,7 @@ How `src/utils/` is organised and what may go there. Its place in the layer map 
 ## Grouped by topic, one theme per file
 
 - A `utils/` file is named for one theme (`gainUnits.ts`, `stepResolution.ts`, `noteSpelling.ts`); no `helpers.ts`, `misc.ts`, `common.ts` or `utils.ts` junk drawer. <!-- R277 -->
-- A file whose contents span two themes is split, on the change that next substantially edits it. Known debt, tracked in DEV-426: `musicTheory.ts` mixes pitch/chord theory with timing (`STEPS_PER_BAR`, `stepDurationSec`, `clampBpm`), and `meter.ts` (time signature) reads as a sibling of the level-meter files `meterLevel.ts`/`meterScale.ts`/`meterZones.ts`. <!-- R278 -->
+- A file whose contents span two themes is split, on the change that next substantially edits it. Both known cases are cleared (DEV-426): timing left `musicTheory.ts` for `tempo.ts`, and the time-signature table is `timeSignature.ts`, no longer a sibling name of the level-meter files `meterLevel.ts`/`meterScale.ts`/`meterZones.ts`. <!-- R278 -->
 
 ```
 ✅ gainUnits.ts   stepResolution.ts   noteSpelling.ts     (the file names its theme)
@@ -31,7 +31,7 @@ How `src/utils/` is organised and what may go there. Its place in the layer map 
 ## Placement
 
 - Code used by one feature or area stays with it; code used by two or more is lifted to the shared location its layer already has. `utils/` is the shared location for helpers several layers need, not a default home for code one area uses. <!-- R276 -->
-- Known debt, tracked in DEV-426 (structure audit A6/D5): music logic and library lookups in the `src/audio/` root that are not audio (`chordProgressions.ts`, `groupByStyle.ts`), and preset lookups spread across three layers (`store/beatPresets.ts`' `beatPresetById`, `utils/synthPresets.ts`' `presetById`, `audio/chordProgressions.ts`).
+- Remaining after DEV-426 (structure audit A6/D5, waived there with a reason): lookup tables in the `src/audio/` root that build no audio (`chordProgressions.ts`, `groupByStyle.ts`), and preset lookups spread across three layers (`store/beatPresets.ts`' `beatPresetById`, `utils/synthPresets.ts`' `presetById`, `audio/chordProgressions.ts`). The lane planning that was the largest of them is now `audio/playback/leadMelody.ts`.
 
 ([ADR-0031](../../docs/decisions/0031-component-hook-store-selector-and-placement-conventions.md))
 

@@ -126,22 +126,22 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 
 ### Organic-growth smells (refactor candidates)
 
-- **Misplaced logic.** `audio/` root holds files that build no audio. **Partly fixed (DEV-426):** the largest, `leadMelody.ts`, now sits in `audio/playback/` with the rest of the lane planning; the remaining root files (`arpeggiator`, `bassPatterns`, `chordRhythms`, `drumGrids`, …) are lookup tables the planners read, left where they are. Preset lookups are spread across `audio/`, `store/` and `utils/`, which gives 8 duplicate filenames. Mixdown orchestration and the theme live in `Header.tsx`. (A6, D5, U7)
+- **Misplaced logic.** `audio/` root holds files that build no audio. **Partly fixed (DEV-426):** the largest, `leadMelody.ts`, now sits in `audio/playback/` with the rest of the lane planning; the remaining root files (`arpeggiator`, `bassPatterns`, `chordRhythms`, `drumGrids`, …) are lookup tables the planners read, left where they are. Preset lookups are spread across `audio/`, `store/` and `utils/` (**waived (DEV-426):** the names are already distinct per layer). Mixdown orchestration and the theme live in `Header.tsx`. (A6, D5, U7)
   **Mixdown half of U7 fixed on `refactor/dev-421-export-feature`:** export is its own feature
   (`store/exportSlice.ts`, `store/exportJob.ts`, `store/exportKinds.ts`, `components/export/`).
   **Theme half fixed (DEV-430):** the theme is `components/header/useTheme.ts`.
 - **Duplicated shapes.** The per-loop field list is written out in 5+ places, and slice defaults duplicate `createDefaultLoop`. (S7) **Fixed on `refactor/dev-424-loop-content`:** `LoopContent` is bound to `LOOP_FLAT_KEYS` and slice defaults read `createDefaultLoopContent()`; `sanitizeLoops` still validates field by field on purpose and `LOOP_COPY_GROUPS` stays a test-pinned partition.
-- **Large files.** `MasterRack` (1,286 lines, with 23 external field accesses from `DrumSynth`), `SortableLoopCard.tsx` (886), `PresetLibrary.tsx` (798), `useInputDeck.ts` (776). (A7, U)
+- **Large files.** `MasterRack`, `SortableLoopCard.tsx`, `PresetLibrary.tsx`, `useInputDeck.ts`. (A7, U) **Waived (DEV-426):** each is under the ESLint code-line cap and cohesive; split one when a feature next touches it, not as a sweep.
 - **Naming.**
   - `utils/meter.ts` is time signature, while `meterLevel` and `meterScale` are level meters: **fixed (DEV-426)** — the table is `utils/timeSignature.ts`.
   - `utils/musicTheory.ts` mixes theory and timing: **fixed (DEV-426)** — timing is `utils/tempo.ts`.
-  - `src/types.ts` holds runtime code and is the most-imported file (91 edges).
-  - 229 cross-folder `../` imports remain despite the `@/` rule.
+  - `src/types.ts` holds runtime code and is the most-imported file. **Waived (DEV-426):** the runtime bits (`isSongLayer`, `layerForTab`, the id/tab tuples) are small, pure and genuinely shared; splitting them turns one obvious import into several.
+  - Cross-folder `../` imports remain despite the `@/` rule. **Waived (DEV-426):** ESLint bans `../../`; a single `../` inside a folder is legal and readable, and a blanket sweep is churn.
   - (D4, D6-D8)
 - **Dead or stale code.**
   - `getByteFrequencyData`/`getByteTimeDomainData` and `isInitialized`: **fixed (DEV-426)** — removed from the engine and the rack; `AudioVisualizer` reads the analyser node directly.
   - The `KEYBOARD_NOTES` re-export in `loop/SoundView.tsx` reads as dead inside `src/`, but `scripts/check-key-bindings.ts` imports it: it is the gate's historical path, kept on purpose (DEV-426).
-  - Six copies of a toast timer (`ui/useTimedToast.ts` now exists; only `InstantVibesBar` moved onto it).
+  - Toast timers: **fixed (DEV-426)** — every site is on `ui/useTimedToast.ts`, so a pending timer is cleared on unmount and an older timer can no longer dismiss a newer toast.
   - Stale comments. (The skill's stale `AmbientBackdrop.tsx` entry is fixed on this branch.)
   - (A8, U8)
 

@@ -19,7 +19,7 @@ Adopted from the e-form repos' conventions and adapted to solna's always-mounted
 - Never spread one props bag across several children; destructure and pass explicit props. A `ui/` primitive forwarding the rest of its native attributes to its one DOM element, or a thin wrapper forwarding its whole props to the one component it wraps, is not this. <!-- R270 -->
 - Do not pre-split a small component into hook + context + parts; extract when it grows. <!-- R271 -->
 - A colocated hook is extracted **in place**: it never lifts high-frequency state (the playback step, the playhead beat, a value mid-drag) above the subtree that shows it — not into a slice, not into a context provided higher up. That state stays local, or in the module pub/subs (`playbackStep.ts`, `playheadBeat.ts`), because every view stays mounted (R016). The `useXxxDraft` hooks and `useChordView.ts` are the precedent. <!-- R272 -->
-- Scope: new components, and an existing component when it is substantially edited. No mass refactor. Known debt, the largest files by `wc -l`: `song/SortableLoopCard.tsx`, `ui/PresetLibrary.tsx`, `loop/ChordPresetLibrary.tsx`, `song/EffectsRackView.tsx`, `loop/SoundSynthSection.tsx` — tracked in DEV-426. <!-- R273 -->
+- Scope: new components, and an existing component when it is substantially edited. No mass refactor. Known debt, the largest files by `wc -l`: `song/SortableLoopCard.tsx`, `ui/PresetLibrary.tsx`, `loop/ChordPresetLibrary.tsx`, `song/EffectsRackView.tsx`, `loop/SoundSynthSection.tsx` — DEV-426 weighed splitting them and waived it: each is cohesive and under the cap, so a split rides the next feature that touches one. <!-- R273 -->
 
 ```tsx
 // ✅ useLoopCard.ts beside it: export interface UseLoopCard { label; isActive; onSelect }
