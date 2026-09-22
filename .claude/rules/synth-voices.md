@@ -66,6 +66,7 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 
 - Each source bus reaches the three send gates only through its own three send nodes (`sourceSends.ts`), taken after the fader and mute. No bus connects straight to a gate, and there is no per-source exclusion set — the one exception is R304. `getSourceBus` requires the gates and throws without them. The audition bus `'preview'` is not a track and is told unity sends by `presetPreview.ts`. <!-- R303 -->
 - Beat has no bus→reverb send. Its reverb is the per-voice path `drumSendFilter → drumSendGate → send[sequencer].reverb → convolver`; that feed is the convolver's second input, connected after `reverbSendGate`, and `drumSendGate` is written only by the bus level/mute path (`applySourceLevel`). Sends are set only through `setSourceSends`, never `setSourceState`. <!-- R304 -->
+- The render-only stem edge off a bus is R307 (`export.md`); it feeds no gate.
 
 ([ADR-0037](../../docs/decisions/0037-per-track-sends.md))
 

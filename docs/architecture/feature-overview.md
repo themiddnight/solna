@@ -24,7 +24,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | 7 | Transport & music context | TransportBar (bottom) + Header | Play/stop, BPM, meter, metronome, playhead in TransportBar; key & scale in Header |
 | 8 | Performance input | Bottom dock + Sound view | Dock: focus chip, QWERTY / on-screen keyboard, drum pads (per-pad velocity persisted). Arpeggiator is a per-track Sound panel; Web MIDI is a background bridge; solo/mute live on the mixer |
 | 9 | Project management | Project menu | IndexedDB autosave, `.solna` file open/save, Google Drive open/save |
-| 10 | Export (mixdown WAV, MIDI) | Header Export button (song layer) → Export dialog | Offline render of the song to WAV, or the song timeline to a Standard MIDI File; one job at a time, kinds as data (`store/exportKinds.ts`) |
+| 10 | Export (mixdown WAV, MIDI, stems) | Header Export button (song layer) → Export dialog | Offline render of the song to WAV, the song timeline to a Standard MIDI File, or dry per-track stems in one ZIP; one job at a time, kinds as data (`store/exportKinds.ts`) |
 | 11 | Audio health & recovery | Transport | AudioContext health monitor; recovery is a branch of `IncidentDialog`, surfaced by the `IncidentWarning` chip |
 | 12 | Incident reporting | Dialog | Privacy-safe bug reports, explicit GitHub export |
 | 13 | Diagnostics | Project menu → Tools (DEV builds only) | Session recorder, render counts, exportable diagnostics |
@@ -39,7 +39,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | `utils/` | Helpers (theory, timing, gain units, meters, WAV encode, storage); not all pure — no layering block | `musicTheory`, `noteSpelling`, `gainUnits`, `meterScheduler`, `encodeWav` |
 | `audio/` | Raw Web Audio engine, plus root-level pattern/melody logic that builds no nodes | `engine` (singleton), `masterRack`, `synth/*` (subtractive voices), `drumSynth`, `clock`, `leadMelody`, `chordRhythms` |
 | `audio/playback/` | Engine bridges + planners (controllers themselves are hooks in `components/`) | `playbackEngine`, `plan/{padPlan,chordPlan,melodyPlan,chordEvents,beatPlan,songSnapshot,songTimeline}`, `chordPlayback`, `synthPlayback`, `arpPlayback`, `noteInputBus` |
-| `audio/export/` | Offline mixdown and MIDI export | `renderMixdown`, `renderMidi` |
+| `audio/export/` | Offline mixdown, MIDI and stems export | `renderMixdown`, `renderMidi`, `renderStems` |
 | `audio/runtime/` | AudioContext session & health | `audioSession`, `healthMonitor`, `policy` |
 | `store/` | Zustand store (slices) + bridges | `store`, `*Slice`, `engineSync`, `sanitize`, `projectStore`, `projectAutosave`, `drive*`, `midiInput`, `vibes` |
 | `components/` | React views **and** the playback controller hooks (`useChordPlayback`, `useLeadPlayback`, `useSequencerPlayback`, `useInputDeck`) | `loop/*`, `song/*`, `project/*`, `ui/*`, `Header`, `TransportBar`, `InstantVibesBar` |
@@ -87,7 +87,7 @@ flowchart TB
     Synth["synth/ voice manager<br/>subtractive voices"]
     Drums["drumSynth (11 voices)"]
     Rack["masterRack<br/>buses · sends (not the Beat bus) · dynamics · analysers"]
-    Export["export/renderMixdown<br/>(OfflineAudioContext)"]
+    Export["export/renderMixdown · renderStems<br/>(OfflineAudioContext)"]
     Midi["export/renderMidi<br/>(no AudioContext)"]
     Runtime["runtime/ health · session"]
   end

@@ -123,7 +123,7 @@ export function stemsFileName(projectName: string | null): string {
   return `${slugifyProjectName(projectName ?? '')}-stems.zip`;
 }
 
-/** One ZIP of dry per-track WAVs (ADR-0038): one Blob, so the runner downloads it unchanged (R293). */
+/** One ZIP of dry per-track WAVs (ADR-0038): one Blob, so the runner downloads it unchanged (R294). */
 const STEMS_EXPORT: ExportKindSpec = {
   id: 'stems',
   label: 'Export stems (WAV, .zip)',

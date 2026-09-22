@@ -30,7 +30,7 @@ physical lines pass it.
 
 | File | Responsibility | Main exports | Ext. imports |
 |---|---|---|---|
-| `engine.ts` | `AudioEngine` facade. Owns one `AudioSession` per context generation, the idle-suspend timer, the health monitor and realtime recovery. Nearly every method delegates one-to-one to a subsystem (`engine.ts:132-392`) | `AudioEngine`, `audioEngine` singleton (`:719`), `createRenderEngine(ctx)` (`:732`), `AudioRecoveryResult`, `SESSION_CLOSE_TIMEOUT_MS`; re-exports `STEPS_PER_BAR` (`:713`) and `DRUM_ALIASES`/`METAL_*` (`:717`) | `types`, `utils/musicTheory` (`STEPS_PER_BAR`), `utils/meter`, `types/synth` |
+| `engine.ts` | `AudioEngine` facade. Owns one `AudioSession` per context generation, the idle-suspend timer, the health monitor and realtime recovery. Nearly every method delegates one-to-one to a subsystem (`engine.ts:132-392`) | `AudioEngine`, `audioEngine` singleton (`:719`), `createRenderEngine(ctx, options?)` (`:732`), `connectSourceStem` (render-only stem edge), `AudioRecoveryResult`, `SESSION_CLOSE_TIMEOUT_MS`; re-exports `STEPS_PER_BAR` (`:713`) and `DRUM_ALIASES`/`METAL_*` (`:717`) | `types`, `utils/musicTheory` (`STEPS_PER_BAR`), `utils/meter`, `types/synth` |
 | `masterRack.ts` | Master graph: source taps and buses, send gates, delay, distortion, reverb (with an impulse cache), 3-band EQ, master gain, the analysers, compressor and limiter, and the Beat filter banks. Also hosts shared helpers (`release`, `cancelAndHold`, `createNoiseNode`) | `MasterRack`, `EngineHooks`, `SourceBusState`, `BeatFilterLane`, `BEAT_FILTER_XFADE_SEC` | `types`, `utils/gainUnits` |
 | `sourceSends.ts` | Per-source send nodes: build, clamp, automate. Owns the DSP for a bus's own three send taps (delay/reverb/distortion), taken after its fader and mute | `SourceSendNodes`, `clampSendLevels`, `createSourceSendNodes`, `applySourceSendLevels` | `types` |
 | `drumSynth.ts` | The 11-voice Beat synthesizer. `triggerDrum` dispatch, per-voice track gains, `setDrumKit`, `setBeatFilter` | `DrumSynth`, `DRUM_ALIASES`, `METAL_RATIOS`, `METAL_BAND_B_HZ` | `data/beatPresets`, `utils/gainUnits`, `types` |
@@ -95,10 +95,13 @@ Ext. imports: `types/synth`, `utils/synthPatch`.
 | `runtime/healthMonitor.ts` | `AudioHealthMonitor`: samples every `sampleIntervalMs` via an injectable `setInterval` (`:71` of the class), keeps recent evidence, notifies subscribers |
 | `runtime/health.ts` | Pure state machine `idle → healthy → suspected → unhealthy` from the audio-to-wall clock ratio (`advanceAudioHealth`) |
 | `runtime/policy.ts`, `runtime/profile.ts` | Thresholds (ratio 0.75–1.25, 3 suspicious samples, 1 s interval, 2.5 s max gap), plus iOS WebKit detection (`policy.ts:13-33`) |
-| `export/renderMixdown.ts` | Offline arrangement render to WAV (§4) |
+| `export/renderMixdown.ts` | Offline arrangement render to WAV; `renderSongBuffer` is the body it shares with stems (§4) |
 | `export/renderMidi.ts` | Song timeline → SMF: lane/GM/meter tables, audibility, the overlap rule, a seeded walk (§4) |
 | `export/smfWriter.ts` | Pure SMF format-1 byte encoder |
 | `export/smfTestReader.ts` | Test-only SMF parser; excluded from the production Knip graph |
+| `export/renderStems.ts` | Dry per-track stems: one multichannel render through renderSongBuffer, a post-fader tap per bus, WAVs zipped (§4) |
+| `export/zipStore.ts` | Pure store-only ZIP encoder (CRC-32, DOS time, no ZIP64) |
+| `export/zipTestReader.ts` | Test-only ZIP reader; excluded from the production Knip graph |
 | `export/mixdownFixture.ts` | Test fixture builders. No non-test importer; lives beside production code |
 | `automation/sourceBusAutomation.ts` | `applySourceBusAutomation`: `settle` vs `transition` ramps for bus gains |
 | `testFakes.ts`, `engineTestHelpers.ts` | Fake `AudioContext`/nodes for tests. Non-test files in the production folder |
@@ -380,6 +383,18 @@ assembles the conductor and lane tracks into an `SmfFile`, and `encodeSmf` (`smf
 the bytes. The walk yields the same way the WAV renderer does, through `rng.ts`'s
 `yieldPreservingRandomStream` (§1.1); this export also shares `walkSongTimeline`, `planArrangement`
 and `MIXDOWN_SEED` with the renderer.
+
+### Stems (`export/renderStems.ts`)
+
+One `renderSongBuffer` call with `{ channels: STEM_CHANNELS, detachMaster: true, wire }` builds the
+same seeded, walked render the mixdown does, on a multichannel context instead of stereo.
+`createRenderEngine(ctx, { masterOutput })` routes the master rack's last stage to an unconnected
+sink (`MasterRack.bind`'s `masterOutput`, the same field `rewireMasterDynamics` reads) instead of
+`ctx.destination`, so nothing of the master reaches the file even though it is still built and its
+reverb impulse still draws from the seeded RNG. `wire` taps each bus with `connectSourceStem` into a
+2-channel `'speakers'` gain, then a splitter and a merger, landing on that stem's pair of channels
+on a discrete destination. Only buses a walk event reached (`sourcesWithEvents`, returned by
+`renderSongBuffer`) get an encoded file. `zipStore.ts` packs the kept WAVs store-only into one ZIP.
 
 ---
 
