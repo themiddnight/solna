@@ -1,16 +1,15 @@
 import type { StoreApi } from 'zustand';
 import { normalizePatternSpans } from '@/utils/customPattern';
 import type { BassStepChoice } from '@/data/bassPatterns';
-import { INITIAL_CHORDS } from './initialState';
-import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import {
   customChordSpans,
+  type LoopContent,
   reclampCustomPattern,
   resizedCustomPattern,
   resizePatternSpanAt,
   writePatternEvent,
 } from './loop';
-import { getMeter, MAX_STEPS_PER_BAR } from '../utils/meter';
+import { getMeter } from '../utils/meter';
 import type { AppStore, ChordsSlice } from './types';
 import type { ChordItem } from '../types';
 
@@ -69,18 +68,18 @@ export function chordsPatch(
  * similar reason: a chord boundary and a hold that may not cross it are one
  * fact, and a subscriber must never see new chords under an old cycle.
  */
-export function createChordsSlice(set: Set): ChordsSlice {
+export function createChordsSlice(set: Set, defaults: LoopContent): ChordsSlice {
   return {
-    chords: INITIAL_CHORDS,
-    chordRhythmId: 'sustained',
-    chordRhythmMode: 'preset',
-    customChordRhythm: new Array<boolean>(MAX_STEPS_PER_BAR).fill(false),
-    customChordLoopLength: 1,
-    customChordHoldSteps: new Array<number>(MAX_STEPS_PER_BAR).fill(1),
-    chordFeel: 0.5,
-    chordOctave: 4,
-    chordMuted: false,
-    chordVolume: DEFAULT_BUS_TRIM_DB,
+    chords: defaults.chords,
+    chordRhythmId: defaults.chordRhythmId,
+    chordRhythmMode: defaults.chordRhythmMode,
+    customChordRhythm: defaults.customChordRhythm,
+    customChordLoopLength: defaults.customChordLoopLength,
+    customChordHoldSteps: defaults.customChordHoldSteps,
+    chordFeel: defaults.chordFeel,
+    chordOctave: defaults.chordOctave,
+    chordMuted: defaults.chordMuted,
+    chordVolume: defaults.chordVolume,
 
     setChords: (chords) => set((state) => chordsPatch(state, chords)),
     setChordRhythmId: (chordRhythmId) => set({ chordRhythmId }),

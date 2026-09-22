@@ -17,6 +17,7 @@ import { createUiSlice } from './uiSlice';
 import { createPresetsSlice } from './presetsSlice';
 import { createLoopSlice } from './loopSlice';
 import { createLoopCopySlice } from './loopCopySlice';
+import { createDefaultLoopContent } from './loopDefaults';
 import { migrateLegacyPresets, removeLegacyKeys, LEGACY_PERSIST_KEY } from './migrate';
 import { createLoopMirroringSet } from './loopSync';
 import { createProjectSlice } from './projectSlice';
@@ -326,15 +327,19 @@ export const useAppStore = create<AppStore>()(
       // independent setState that doubled persist writes and render waves on
       // every per-loop edit.
       const setWithLoopMirror = createLoopMirroringSet(set, get);
+      // The one default content (S7): every slice owning per-loop fields reads
+      // its initial values from it. loops[0] gets its own copy via
+      // createDefaultLoop.
+      const defaults = createDefaultLoopContent();
       return {
         ...createTransportSlice(setWithLoopMirror, get),
-        ...createMusicContextSlice(setWithLoopMirror),
-        ...createSynthSlice(setWithLoopMirror),
-        ...createChordsSlice(setWithLoopMirror),
-        ...createBassSlice(setWithLoopMirror),
+        ...createMusicContextSlice(setWithLoopMirror, defaults),
+        ...createSynthSlice(setWithLoopMirror, defaults),
+        ...createChordsSlice(setWithLoopMirror, defaults),
+        ...createBassSlice(setWithLoopMirror, defaults),
         ...createPadSlice(setWithLoopMirror),
-        ...createLeadSlice(setWithLoopMirror, get),
-        ...createFxSlice(setWithLoopMirror, get),
+        ...createLeadSlice(setWithLoopMirror, get, defaults),
+        ...createFxSlice(setWithLoopMirror, get, defaults),
         ...createBeatSlice(setWithLoopMirror),
         ...createEffectsSlice(setWithLoopMirror),
         ...createUiSlice(setWithLoopMirror),

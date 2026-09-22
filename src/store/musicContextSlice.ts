@@ -1,5 +1,6 @@
 import type { StoreApi } from 'zustand';
 import type { AppStore, MusicContextSlice } from './types';
+import type { LoopContent } from './loop';
 import { remapLeadMelodyByScale, transposeLeadMelodyByRoot } from '../audio/leadMelody';
 import { MELODY_TRACKS, type MelodyTrack } from './melodyTracks';
 
@@ -39,10 +40,10 @@ export function keyChangePatch(
  * Every melody track in `MELODY_TRACKS` follows a key change (keyChangePatch);
  * the loop-copy `key` group deliberately transposes none (see `impliesKeyCopy`).
  */
-export function createMusicContextSlice(set: Set): MusicContextSlice {
+export function createMusicContextSlice(set: Set, defaults: LoopContent): MusicContextSlice {
   return {
-    scaleRoot: 'A',
-    scaleType: 'Natural Minor',
+    scaleRoot: defaults.scaleRoot,
+    scaleType: defaults.scaleType,
     selectedVibeId: null,
 
     setScaleRoot: (scaleRoot) => set((state) => keyChangePatch(state, { scaleRoot })),

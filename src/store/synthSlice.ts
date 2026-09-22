@@ -1,7 +1,6 @@
 import type { StoreApi } from 'zustand';
-import { defaultTrackArp, defaultTrackSynth } from './initialState';
-import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import type { AppStore, SynthSlice } from './types';
+import type { LoopContent } from './loop';
 
 type Set = StoreApi<AppStore>['setState'];
 
@@ -12,16 +11,16 @@ type Set = StoreApi<AppStore>['setState'];
  * is derived from the ui slice's `focusTrack` through
  * `controlTargetForFocus` (store/focusTrack.ts).
  */
-export function createSynthSlice(set: Set): SynthSlice {
+export function createSynthSlice(set: Set, defaults: LoopContent): SynthSlice {
   return {
-    synthParams: defaultTrackSynth('synth'),
-    chordSynthParams: defaultTrackSynth('chord'),
-    bassSynthParams: defaultTrackSynth('bass'),
-    synthArpSettings: defaultTrackArp('synth'),
-    chordArpSettings: defaultTrackArp('chord'),
-    bassArpSettings: defaultTrackArp('bass'),
-    synthVolume: DEFAULT_BUS_TRIM_DB,
-    synthMuted: false,
+    synthParams: defaults.synthParams,
+    chordSynthParams: defaults.chordSynthParams,
+    bassSynthParams: defaults.bassSynthParams,
+    synthArpSettings: defaults.synthArpSettings,
+    chordArpSettings: defaults.chordArpSettings,
+    bassArpSettings: defaults.bassArpSettings,
+    synthVolume: defaults.synthVolume,
+    synthMuted: defaults.synthMuted,
 
     // Setters backing the SoundView control panel (previously App.tsx
     // setState wrappers with the same semantics).

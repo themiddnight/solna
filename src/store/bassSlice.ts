@@ -1,10 +1,9 @@
 import type { StoreApi } from 'zustand';
-import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
+import type { BassStepChoice } from '@/data/bassPatterns';
 import { normalizePatternSpans } from '@/utils/customPattern';
-import { MAX_STEPS_PER_BAR } from '../utils/meter';
-import { DEFAULT_BUS_TRIM_DB } from './levelUnits';
 import {
   customBassSpans,
+  type LoopContent,
   resizedCustomPattern,
   resizePatternSpanAt,
   writePatternEvent,
@@ -21,17 +20,17 @@ type Set = StoreApi<AppStore>['setState'];
  * lives on `setChords` (chordsSlice) rather than here, because that is the
  * write that moves the boundaries both lanes fold onto.
  */
-export function createBassSlice(set: Set): BassSlice {
+export function createBassSlice(set: Set, defaults: LoopContent): BassSlice {
   return {
-    bassPatternId: BASS_PATTERNS[0].id,
-    bassPatternMode: 'preset',
-    customBassPattern: new Array<BassStepChoice>(MAX_STEPS_PER_BAR).fill('rest'),
-    customBassLoopLength: 1,
-    customBassHoldSteps: new Array<number>(MAX_STEPS_PER_BAR).fill(1),
-    bassFeel: 0.5,
-    bassOctave: 2,
-    bassMuted: false,
-    bassVolume: DEFAULT_BUS_TRIM_DB,
+    bassPatternId: defaults.bassPatternId,
+    bassPatternMode: defaults.bassPatternMode,
+    customBassPattern: defaults.customBassPattern,
+    customBassLoopLength: defaults.customBassLoopLength,
+    customBassHoldSteps: defaults.customBassHoldSteps,
+    bassFeel: defaults.bassFeel,
+    bassOctave: defaults.bassOctave,
+    bassMuted: defaults.bassMuted,
+    bassVolume: defaults.bassVolume,
 
     setBassPatternId: (bassPatternId) => set({ bassPatternId }),
     setBassPatternMode: (bassPatternMode) => set({ bassPatternMode }),

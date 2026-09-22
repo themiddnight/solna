@@ -77,7 +77,7 @@ export const LOOP_FLAT_KEYS = [
   'fxMuted',
 ] as const satisfies readonly (keyof Loop)[];
 
-export type LoopFlatKey = (typeof LOOP_FLAT_KEYS)[number];
+type LoopFlatKey = (typeof LOOP_FLAT_KEYS)[number];
 
 /**
  * A loop's musical content: every field except its slot identity (`id`,

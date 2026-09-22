@@ -17,12 +17,12 @@ import { LEAD_WINDOW_OCTAVES, leadRecordOctave } from '../audio/leadStepRecord';
 import { isNoteInScale } from '../utils/musicTheory';
 import {
   DEFAULT_LEAD_STEP_RESOLUTION,
-  LEAD_TICKS_PER_BAR,
   TICKS_PER_SIXTEENTH,
   isLeadStepResolutionId,
   strideFor,
 } from '../utils/stepResolution';
 import { clampFinite } from './sanitize';
+import type { LoopContent } from './loop';
 import { melodyTrack, type MelodyTrack, type MelodyTrackId } from './melodyTracks';
 import type { AppStore, LeadMelodyView, LeadNotePaintMode, LeadSlice } from './types';
 
@@ -327,16 +327,17 @@ export function createMelodySlice(
   // write land?" before returning — every other action here writes through
   // `set`'s updater form and never reads.
   get: Get,
+  defaults: LoopContent,
 ): Partial<AppStore> {
   const actions = MELODY_ACTIONS[track.id];
 
   const slice: Record<string, unknown> = {
-    [track.steps]: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
-    [track.loopLength]: 1,
-    [track.stepResolution]: DEFAULT_LEAD_STEP_RESOLUTION,
-    [track.view]: 'scale-locked',
-    [track.octave]: 3,
-    [track.gate]: DEFAULT_LEAD_GATE,
+    [track.steps]: defaults[track.steps],
+    [track.loopLength]: defaults[track.loopLength],
+    [track.stepResolution]: defaults[track.stepResolution],
+    [track.view]: defaults[track.view],
+    [track.octave]: defaults[track.octave],
+    [track.gate]: defaults[track.gate],
     [track.cursor]: 0,
     [track.clipboard]: null,
 
@@ -422,6 +423,6 @@ export function createMelodySlice(
   return slice as Partial<AppStore>;
 }
 
-export function createLeadSlice(set: Set, get: Get): LeadSlice {
-  return createMelodySlice(melodyTrack('lead'), set, get) as LeadSlice;
+export function createLeadSlice(set: Set, get: Get, defaults: LoopContent): LeadSlice {
+  return createMelodySlice(melodyTrack('lead'), set, get, defaults) as LeadSlice;
 }

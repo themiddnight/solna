@@ -3,7 +3,8 @@ import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { createChordsSlice } from './chordsSlice';
 import { createBassSlice } from './bassSlice';
-import { customBassSpans, customChordSpans } from './loop';
+import { customBassSpans, customChordSpans, loopStatePatch } from './loop';
+import { createDefaultLoopContent } from './loopDefaults';
 import { BASS_PATTERNS, type BassStepChoice } from '@/data/bassPatterns';
 import type { SynthPreset } from '../data/synthPresets';
 import type { BeatVoiceId, CustomChordProgressionItem } from '../types';
@@ -308,9 +309,7 @@ describe('chords initial state', () => {
   // mutated by earlier tests (e.g. setChordOctave(6)), so its live state
   // cannot be assumed pristine.
   test('initial chords are INITIAL_CHORDS verbatim (no per-loop derivation)', () => {
-    const slice = createChordsSlice(
-      (() => {}) as unknown as StoreApi<AppStore>['setState']
-    );
+    const slice = createChordsSlice((() => {}) as unknown as StoreApi<AppStore>['setState'], createDefaultLoopContent());
     expect(slice.chords).toEqual(INITIAL_CHORDS);
   });
 
@@ -735,7 +734,8 @@ function customPatternLanes(meterId: MeterId) {
     state = { ...state, ...patch } as unknown as AppStore;
   }) as StoreApi<AppStore>['setState'];
 
-  const slice = { ...createChordsSlice(set), ...createBassSlice(set) };
+  const defaults = createDefaultLoopContent();
+  const slice = { ...createChordsSlice(set, defaults), ...createBassSlice(set, defaults) };
   state = { ...slice, meterId } as unknown as AppStore;
   return { slice, state: () => state };
 }
@@ -1024,5 +1024,19 @@ describe('the merged navigation state', () => {
     expect('patternSegment' in s).toBe(false);
     expect('setControlTarget' in s).toBe(false);
     expect('setPatternSegment' in s).toBe(false);
+  });
+});
+
+describe('one default source (S7)', () => {
+  test('the store boots with exactly the default loop content in its flat fields', async () => {
+    const { useAppStore } = await getStore();
+    expect(loopStatePatch(useAppStore.getInitialState())).toEqual(createDefaultLoopContent());
+  });
+
+  test('each call returns fresh mutable substructure', () => {
+    const [a, b] = [createDefaultLoopContent(), createDefaultLoopContent()];
+    expect(a.customChordRhythm).not.toBe(b.customChordRhythm);
+    expect(a.leadMelodySteps).not.toBe(b.leadMelodySteps);
+    expect(a.beatPattern).not.toBe(b.beatPattern);
   });
 });

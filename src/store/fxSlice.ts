@@ -2,6 +2,7 @@ import type { StoreApi } from 'zustand';
 import { createMelodySlice } from './leadSlice';
 import { melodyTrack } from './melodyTracks';
 import { defaultFxBusState } from './initialState';
+import type { LoopContent } from './loop';
 import type { AppStore, FxSlice } from './types';
 
 /**
@@ -12,8 +13,9 @@ import type { AppStore, FxSlice } from './types';
 export function createFxSlice(
   set: StoreApi<AppStore>['setState'],
   get: StoreApi<AppStore>['getState'],
+  defaults: LoopContent,
 ): FxSlice {
-  const melody = createMelodySlice(melodyTrack('fx'), set, get);
+  const melody = createMelodySlice(melodyTrack('fx'), set, get, defaults);
 
   return {
     ...melody,
