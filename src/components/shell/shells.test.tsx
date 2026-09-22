@@ -63,6 +63,17 @@ describe('the shells', () => {
     }
   });
 
+  test('the mobile shell renders the same feature children (R014 level 1)', () => {
+    for (const marker of [
+      '<main class="flex-1 min-h-0 relative overflow-y-auto pb-9">',
+      'id="btn-vibe-',
+      'id="btn-focus-chip"',
+      'id="btn-bottom-transport"',
+    ]) {
+      expect(mobile).toContain(marker);
+    }
+  });
+
   test('the desktop frame carries none of the mobile chrome', () => {
     for (const marker of ['class="dock', 'id="btn-mobile-menu"', 'modal-bottom']) {
       expect(desktop).not.toContain(marker);

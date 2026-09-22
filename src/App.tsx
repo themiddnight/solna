@@ -162,8 +162,9 @@ function Workspace() {
       // held in landscape puts the notch column over the navbar's brand and
       // the transport bar's master fader otherwise. `env()` is 0px in a normal
       // tab, so this is inert outside an installed, rotated app. The bottom
-      // inset is on the transport bar itself (see index.css) so that bar's own
-      // background sits under the home indicator.
+      // inset is on the transport bar itself on desktop, and on the mobile
+      // tab bar on mobile (R321) — one consumer per frame, each so that
+      // element's own background sits under the home indicator.
       className="h-dvh bg-canvas text-base-content flex flex-col font-sans selection:bg-primary selection:text-primary-content relative overflow-hidden pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
     >
       {/* Every transport controller, mounted once (DEV-422, R312): a lane

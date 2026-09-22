@@ -1,19 +1,10 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cx } from './cx';
 
-/**
- * How a Header tool renders: `bar` inline in a toolbar (default), `row` as a
- * labelled menu row. Part of this module's public interface (consumed by
- * `ToolVariantProps` here and named directly by later mobile-menu work) —
- * not dead code.
- *
- * @public
- */
-export type ToolVariant = 'bar' | 'row';
-
 /** The only prop a `HEADER_TOOLS` component takes; field tools ignore it. */
 export interface ToolVariantProps {
-  variant?: ToolVariant;
+  /** `bar` inline in a toolbar (default), `row` as a labelled menu row. */
+  variant?: 'bar' | 'row';
 }
 
 export interface MenuRowButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
