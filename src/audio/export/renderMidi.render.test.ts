@@ -15,7 +15,7 @@ import {
 } from './renderMidi';
 import { readSmf, type ReadNote } from './smfTestReader';
 import { beatPatternFixture, mixdownLoop, mixdownMelodyBar, mixdownSnapshot } from './mixdownFixture';
-import type { MixdownRenderProgress } from './renderMixdown';
+import type { MixdownRenderProgress } from './renderResult';
 import { MIXDOWN_SEED, getRandomSource, withSeededRandom } from '../rng';
 import { buildSongTimeline, type TimelineEvent } from '../playback/plan/songTimeline';
 import type { MixdownSnapshot } from '../playback/plan/songSnapshot';

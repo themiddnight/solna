@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
 import type { ExportKindSpec } from './exportKinds';
+import { DOWNLOAD_FAILED_MESSAGE } from '@/utils/projectFileIO';
 import {
-  EXPORT_DOWNLOAD_FAILED_MESSAGE,
   exportSuccessMessage,
   runExportJob,
   type ExportJobDeps,
@@ -82,12 +82,12 @@ describe('runExportJob — success and delivery', () => {
     });
     const outcome = await runExportJob(h.deps);
     expect(outcome).toEqual({ status: 'download-failed', fileName: 'my-song.wav' });
-    expect(h.notices).toEqual([EXPORT_DOWNLOAD_FAILED_MESSAGE]);
+    expect(h.notices).toEqual([DOWNLOAD_FAILED_MESSAGE]);
   });
 
   test('the messages keep their wording', () => {
     expect(exportSuccessMessage('a.wav')).toBe('Exported a.wav.');
-    expect(EXPORT_DOWNLOAD_FAILED_MESSAGE).toBe('Could not write the file. Check the browser’s download settings.');
+    expect(DOWNLOAD_FAILED_MESSAGE).toBe('Could not write the file. Check the browser’s download settings.');
   });
 });
 

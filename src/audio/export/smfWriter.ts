@@ -83,7 +83,8 @@ function encodeEvent(event: SmfEvent): number[] {
   return [0xff, event.type, ...writeVlq(event.data.length), ...event.data];
 }
 
-function encodeTrack(track: SmfTrack): number[] {
+/** Appends one `MTrk` chunk to `out` rather than returning it, so the file is built in one array. */
+function appendTrack(out: number[], track: SmfTrack): void {
   for (const event of track.events) validateEvent(event);
   const sorted = track.events
     .map((event, index) => ({ event, index }))
@@ -99,7 +100,8 @@ function encodeTrack(track: SmfTrack): number[] {
   const eotTick = Math.max(track.endTick, lastTick);
   body.push(...writeVlq(eotTick - lastTick), 0xff, EOT_META_TYPE, 0x00);
 
-  return [...MTRK, ...u32(body.length), ...body];
+  out.push(...MTRK, ...u32(body.length));
+  for (const byte of body) out.push(byte);
 }
 
 function validatePpq(ppq: number): void {
@@ -108,7 +110,7 @@ function validatePpq(ppq: number): void {
 
 export function encodeSmf(file: SmfFile): Uint8Array<ArrayBuffer> {
   validatePpq(file.ppq);
-  const header = [...MTHD, ...u32(6), ...u16(1), ...u16(file.tracks.length), ...u16(file.ppq)];
-  const trackBytes = file.tracks.flatMap((track) => encodeTrack(track));
-  return Uint8Array.from([...header, ...trackBytes]);
+  const bytes = [...MTHD, ...u32(6), ...u16(1), ...u16(file.tracks.length), ...u16(file.ppq)];
+  for (const track of file.tracks) appendTrack(bytes, track);
+  return Uint8Array.from(bytes);
 }

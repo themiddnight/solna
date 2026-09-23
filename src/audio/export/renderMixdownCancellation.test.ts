@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
-import { renderMixdown, type MixdownRenderProgress } from './renderMixdown';
+import { renderMixdown } from './renderMixdown';
+import type { MixdownRenderProgress } from './renderResult';
 import { mixdownLoop, mixdownSnapshot } from './mixdownFixture';
 
 /**
@@ -18,7 +19,7 @@ describe('renderMixdown: cancellation mid-scheduling-walk', () => {
     const controller = new AbortController();
     const phases: string[] = [];
     // repeatCount 40 pushes dwellSteps to 640 (16 steps/bar * 40), comfortably
-    // past SCHEDULE_YIELD_INTERVAL_STEPS (200) so the walk crosses at least
+    // past WALK_YIELD_INTERVAL_STEPS (200) so the walk crosses at least
     // one yield/abort checkpoint before it could possibly finish.
     const snapshot = mixdownSnapshot({ loops: [mixdownLoop({ repeatCount: 40 })] });
     const onProgress = (progress: MixdownRenderProgress) => {

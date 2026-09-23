@@ -66,8 +66,8 @@ two outputs cannot disagree about what plays when:
 
 An ESLint block scoped to `renderMidi.ts`/`smfWriter.ts` restates the `audio/` layering bans and
 additionally bans the engine module and its DSP neighbours outright; it allows only a type-only
-import from `./renderMixdown` (`MixdownFailureReason`/`MixdownProgressReporter`), so the ban is
-mechanical, not a convention. `smfTestReader.ts` is excluded from the production Knip graph, like
+import from `./renderMixdown`, so the ban is mechanical, not a convention. The failure and
+progress types and helpers every renderer shares live in the engine-free `./renderResult.ts`. `smfTestReader.ts` is excluded from the production Knip graph, like
 the other test-only support files beside their production code. R287 (ADR-0034) widens: the "one
 place an arrangement becomes timed events, no lane planner" guarantee it states for
 `renderMixdown.ts` now also names `renderMidi.ts`.

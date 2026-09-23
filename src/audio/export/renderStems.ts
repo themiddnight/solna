@@ -12,15 +12,15 @@
  */
 import type { AudioEngine } from '../engine';
 import type { MixdownSnapshot } from '../playback/plan/songSnapshot';
+import { MIXDOWN_SAMPLE_RATE, renderSongBuffer, type SongRenderLayout } from './renderMixdown';
 import {
-  MIXDOWN_SAMPLE_RATE,
+  RENDER_CANCELLED,
+  nextTask,
   renderFailed,
-  renderSongBuffer,
   safeProgressReporter,
-  type MixdownFailureReason,
   type MixdownProgressReporter,
-  type SongRenderLayout,
-} from './renderMixdown';
+  type RenderFailure,
+} from './renderResult';
 import { crc32, encodeZipStore, type ZipEntry } from './zipStore';
 import { encodeWavBytes } from '@/utils/encodeWav';
 
@@ -39,9 +39,7 @@ export const STEM_TRACKS: readonly { source: string; name: string }[] = [
 
 export const STEM_CHANNELS = STEM_TRACKS.length * 2;
 
-export type StemsRenderResult =
-  | { ok: true; buffer: AudioBuffer; blob: Blob; entries: readonly string[] }
-  | { ok: false; reason: MixdownFailureReason };
+export type StemsRenderResult = { ok: true; buffer: AudioBuffer; blob: Blob; entries: readonly string[] } | RenderFailure;
 
 /**
  * Stem i → destination channels 2i, 2i+1. The tap is an explicit 2-channel
@@ -88,8 +86,8 @@ export async function renderStems(
     report({ phase: 'encoding' });
     const entries: ZipEntry[] = [];
     for (const track of kept) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      if (signal?.aborted) return { ok: false, reason: { kind: 'cancelled' } };
+      await nextTask();
+      if (signal?.aborted) return RENDER_CANCELLED;
       const data = encodeWavBytes(
         [buffer.getChannelData(2 * track.index), buffer.getChannelData(2 * track.index + 1)],
         MIXDOWN_SAMPLE_RATE,
@@ -99,11 +97,11 @@ export async function renderStems(
       entries.push({ name: `${baseName}-${track.name}.wav`, data, crc: crc32(data) });
     }
     // One more yield/abort point between the last encode and the ZIP + Blob step.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    if (signal?.aborted) return { ok: false, reason: { kind: 'cancelled' } };
+    await nextTask();
+    if (signal?.aborted) return RENDER_CANCELLED;
     const blob = new Blob(encodeZipStore(entries, modified), { type: 'application/zip' });
     return { ok: true, buffer, blob, entries: entries.map((entry) => entry.name) };
   } catch (err) {
-    return { ok: false, reason: renderFailed(err) };
+    return renderFailed(err);
   }
 }

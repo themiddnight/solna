@@ -4,6 +4,12 @@ import { MenuRowButton, type ToolVariantProps } from '@/components/ui/MenuRowBut
 import { ExportDialog } from './ExportDialog';
 import { useExportDialog, type ExportTriggerView } from './useExportDialog';
 
+function ExportTriggerIcon({ busy }: { busy: boolean }) {
+  return busy
+    ? <span className="loading loading-spinner loading-sm" aria-hidden="true" />
+    : <Download className="w-4 h-4" aria-hidden="true" />;
+}
+
 /**
  * Never disabled: while a job runs it is the way back into the dialog, where
  * the user can watch or cancel. Starting twice is prevented by the dialog's
@@ -14,11 +20,7 @@ function ExportTrigger({ trigger, onOpen }: { trigger: ExportTriggerView; onOpen
     <button id="btn-export" type="button" className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold"
       aria-haspopup="dialog" aria-label={trigger.ariaLabel} title={trigger.ariaLabel}
       aria-busy={trigger.busy} onClick={onOpen}>
-      {trigger.busy ? (
-        <span className="loading loading-spinner loading-sm" aria-hidden="true" />
-      ) : (
-        <Download className="w-4 h-4" />
-      )}
+      <ExportTriggerIcon busy={trigger.busy} />
       {trigger.text !== null && (
         <span className={trigger.busy ? 'tabular-nums' : 'hidden lg:inline'}>{trigger.text}</span>
       )}
@@ -31,9 +33,7 @@ function ExportRowTrigger({ trigger, onOpen }: { trigger: ExportTriggerView; onO
   return (
     <MenuRowButton id="btn-export" aria-haspopup="dialog" aria-busy={trigger.busy}
       label={trigger.busy ? trigger.ariaLabel : 'Export'}
-      icon={trigger.busy
-        ? <span className="loading loading-spinner loading-sm" aria-hidden="true" />
-        : <Download className="w-4 h-4" aria-hidden="true" />}
+      icon={<ExportTriggerIcon busy={trigger.busy} />}
       onClick={onOpen} />
   );
 }

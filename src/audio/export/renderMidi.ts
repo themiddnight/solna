@@ -7,10 +7,10 @@
  * chord rhythm, a strum or a hold — `walkSongTimeline` (`../playback/plan/songTimeline`)
  * already resolved every note and drum hit, and this file only converts that
  * resolved event into MIDI's units (ticks, a 0..127 velocity, a channel and a
- * note number). It imports only TYPES from `./renderMixdown` (never a value —
- * that file pulls in `createRenderEngine` — and never the engine module
- * itself, directly or otherwise): the MIDI export must run where
- * `OfflineAudioContext` does not exist.
+ * note number). It never imports the engine, directly or through a value
+ * from `./renderMixdown` (lint allows that file's types only); what it shares
+ * with the WAV renderer lives in `./renderResult`. The MIDI export must run
+ * where `OfflineAudioContext` does not exist.
  */
 import {
   planArrangement,
@@ -22,12 +22,22 @@ import {
 import { songTrackVoice, type MixdownSnapshot } from '../playback/plan/songSnapshot';
 import { MIXDOWN_SEED, withSeededRandom, yieldPreservingRandomStream } from '../rng';
 import { encodeSmf, type SmfEvent, type SmfFile, type SmfTrack } from './smfWriter';
-import type { MixdownFailureReason, MixdownProgressReporter } from './renderMixdown';
+import {
+  RENDER_CANCELLED,
+  WALK_YIELD_INTERVAL_STEPS,
+  nextTask,
+  renderFailed,
+  safeProgressReporter,
+  type MixdownProgressReporter,
+  type RenderFailure,
+} from './renderResult';
 import { noteMidi } from '@/musicCore';
 import type { BeatVoiceId } from '@/types';
 import type { MeterId } from '@/utils/timeSignature';
 
 export const MIDI_PPQ = 480;
+/** One 16th step. */
+const TICKS_PER_STEP = MIDI_PPQ / 4;
 
 // GM channel 10, zero-based on the wire.
 const GM_DRUM_CHANNEL = 9;
@@ -111,43 +121,35 @@ export function eventAudible(snapshot: MixdownSnapshot, e: TimelineEvent): boole
 }
 
 /**
- * No channel ever sounds two instances of one pitch (§5.3): grouped by
- * `(channel, note)`, sorted by `startTick` (stable); a same-tick duplicate
+ * No channel ever sounds two instances of one pitch (§5.3): one stable sort
+ * by `(startTick, channel, note)`, then per `(channel, note)` a same-tick duplicate
  * merges into the kept note (`velocity` and `endTick` both take the max), and
  * a note starting before the kept one ends cuts the kept one's `endTick` at
  * the new start. Returns new objects in `(startTick, channel, note)` order;
  * the input array and its notes are never mutated.
  */
 export function resolveNoteOverlaps(notes: MidiNote[]): MidiNote[] {
-  const groups = new Map<string, MidiNote[]>();
-  for (const note of notes) {
-    const key = `${note.channel}:${note.note}`;
-    const group = groups.get(key);
-    if (group) group.push(note);
-    else groups.set(key, [note]);
-  }
-
-  const result: MidiNote[] = [];
-  for (const group of groups.values()) {
-    const sorted = [...group].sort((a, b) => a.startTick - b.startTick);
-    let kept: MidiNote | null = null;
-    for (const note of sorted) {
-      if (kept && note.startTick === kept.startTick) {
-        kept.velocity = Math.max(kept.velocity, note.velocity);
-        kept.endTick = Math.max(kept.endTick, note.endTick);
-        continue;
-      }
-      if (kept && note.startTick < kept.endTick) {
-        kept.endTick = note.startTick;
-      }
-      kept = { ...note };
-      result.push(kept);
-    }
-  }
-
-  return result.sort(
+  const sorted = [...notes].sort(
     (a, b) => a.startTick - b.startTick || a.channel - b.channel || a.note - b.note,
   );
+  const keptByKey = new Map<string, MidiNote>();
+  const result: MidiNote[] = [];
+  for (const note of sorted) {
+    const key = `${note.channel}:${note.note}`;
+    const kept = keptByKey.get(key);
+    if (kept && note.startTick === kept.startTick) {
+      kept.velocity = Math.max(kept.velocity, note.velocity);
+      kept.endTick = Math.max(kept.endTick, note.endTick);
+      continue;
+    }
+    if (kept && note.startTick < kept.endTick) {
+      kept.endTick = note.startTick;
+    }
+    const copy = { ...note };
+    keptByKey.set(key, copy);
+    result.push(copy);
+  }
+  return result;
 }
 
 function metaText(type: number, text: string): SmfEvent {
@@ -209,7 +211,7 @@ export function songMidiFile(
   title: string,
   plan: ArrangementPlan,
 ): SmfFile {
-  const songEndTick = (plan.totalSteps * MIDI_PPQ) / 4;
+  const songEndTick = plan.totalSteps * TICKS_PER_STEP;
   const tracks: SmfTrack[] = [
     conductorTrack(snapshot, title, songEndTick),
     ...MIDI_LANES.map((lane) => laneTrack(lane, notes, songEndTick)),
@@ -217,15 +219,7 @@ export function songMidiFile(
   return { ppq: MIDI_PPQ, tracks };
 }
 
-/**
- * Steps between progress reports, cooperative yields and abort checks — the
- * same cadence as the WAV renderer's scheduling walk.
- */
-const MIDI_YIELD_INTERVAL_STEPS = 200;
-
-type MidiRenderResult = { ok: true; blob: Blob } | { ok: false; reason: MixdownFailureReason };
-
-const CANCELLED: MidiRenderResult = { ok: false, reason: { kind: 'cancelled' } };
+type MidiRenderResult = { ok: true; blob: Blob } | RenderFailure;
 
 /** One audible timeline event as a `MidiNote`, or `null` when it is dropped (§5.3, §8). */
 function midiNoteFor(snapshot: MixdownSnapshot, e: TimelineEvent): MidiNote | null {
@@ -239,14 +233,15 @@ function midiNoteFor(snapshot: MixdownSnapshot, e: TimelineEvent): MidiNote | nu
   const endTick =
     e.kind === 'note'
       ? Math.max(startTick + 1, secondsToTicks(e.endSec, snapshot.bpm))
-      : startTick + MIDI_PPQ / 4;
+      : startTick + TICKS_PER_STEP;
   const channel = MIDI_LANES.find((entry) => entry.lane === lane)!.channel;
   return { lane, channel, note, velocity, startTick, endTick };
 }
 
 /**
  * Drains the song walk into `MidiNote`s, reporting, yielding and checking the
- * signal every `MIDI_YIELD_INTERVAL_STEPS` steps. Returns `null` when cancelled.
+ * signal every `WALK_YIELD_INTERVAL_STEPS` steps, the WAV walk's cadence.
+ * Returns `null` when cancelled.
  */
 async function collectMidiNotes(
   snapshot: MixdownSnapshot,
@@ -258,7 +253,7 @@ async function collectMidiNotes(
   for (const item of walkSongTimeline(snapshot, plan)) {
     if (item.kind === 'pass') continue;
     if (item.kind === 'stepEnd') {
-      if ((item.step + 1) % MIDI_YIELD_INTERVAL_STEPS !== 0) continue;
+      if ((item.step + 1) % WALK_YIELD_INTERVAL_STEPS !== 0) continue;
       report({ phase: 'rendering', percent: Math.floor((100 * (item.step + 1)) / plan.totalSteps) });
       await yieldPreservingRandomStream();
       if (signal?.aborted) return null;
@@ -286,28 +281,22 @@ export async function renderMidi(
   onProgress?: MixdownProgressReporter,
   signal?: AbortSignal,
 ): Promise<MidiRenderResult> {
-  const report: MixdownProgressReporter = (progress) => {
-    try {
-      onProgress?.(progress);
-    } catch {
-      // A progress observer never fails the export.
-    }
-  };
+  const report = safeProgressReporter(onProgress);
   try {
-    if (signal?.aborted) return CANCELLED;
+    if (signal?.aborted) return RENDER_CANCELLED;
     if (snapshot.loops.length === 0) return { ok: false, reason: { kind: 'empty-arrangement' } };
     report({ phase: 'preparing' });
 
     const plan = planArrangement(snapshot);
     const notes = await withSeededRandom(MIXDOWN_SEED, () => collectMidiNotes(snapshot, plan, report, signal));
-    if (notes === null) return CANCELLED;
+    if (notes === null) return RENDER_CANCELLED;
 
     report({ phase: 'encoding' });
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    if (signal?.aborted) return CANCELLED;
+    await nextTask();
+    if (signal?.aborted) return RENDER_CANCELLED;
     const bytes = encodeSmf(songMidiFile(snapshot, resolveNoteOverlaps(notes), title, plan));
     return { ok: true, blob: new Blob([bytes], { type: 'audio/midi' }) };
   } catch (err) {
-    return { ok: false, reason: { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) } };
+    return renderFailed(err);
   }
 }

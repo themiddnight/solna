@@ -8,11 +8,8 @@
  * lowest layer allowed to import both, and components read it without
  * touching `audio/engine` (ADR-0035).
  */
-import {
-  renderMixdown,
-  type MixdownFailureReason,
-  type MixdownRenderProgress,
-} from '@/audio/export/renderMixdown';
+import { renderMixdown } from '@/audio/export/renderMixdown';
+import type { MixdownFailureReason, MixdownRenderProgress, RenderFailure } from '@/audio/export/renderResult';
 import { renderMidi } from '@/audio/export/renderMidi';
 import { renderStems } from '@/audio/export/renderStems';
 import type { MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
@@ -25,6 +22,8 @@ export type ExportKindId = 'mixdown-wav' | 'midi' | 'stems';
 /** A kind reports the renderer's phases: preparing, rendering(percent), encoding. */
 export type ExportProgress = MixdownRenderProgress;
 export type ExportFailureReason = MixdownFailureReason;
+/** One sentence per actionable failure; cancellation is deliberate and says nothing. */
+type ExportFailureMessages = Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string>;
 export type IncidentOperation = Parameters<typeof reportOperationFailure>[0];
 
 /** Captured once, synchronously, in the click's task — before any await. */
@@ -33,9 +32,7 @@ export interface ExportSnapshot {
   projectName: string | null;
 }
 
-export type ExportKindResult =
-  | { ok: true; blob: Blob; fileName: string }
-  | { ok: false; reason: ExportFailureReason };
+export type ExportKindResult = { ok: true; blob: Blob; fileName: string } | RenderFailure;
 
 export interface ExportKindSpec {
   id: ExportKindId;
@@ -43,8 +40,7 @@ export interface ExportKindSpec {
   label: string;
   /** `${rendering}… ${percent}%` and `${encoding}…`. */
   progressLabels: { rendering: string; encoding: string };
-  /** One sentence per actionable failure; cancellation is deliberate and says nothing. */
-  failureMessages: Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string>;
+  failureMessages: ExportFailureMessages;
   /** The incident operation a `render-failed` is reported under. */
   incidentOperation: IncidentOperation;
   /** Renders and names the file. Never downloads, writes a notice or touches the job. */
@@ -61,7 +57,7 @@ export interface ExportKindSpec {
  * `kind`, so a new actionable failure is a compile error here instead of an
  * empty toast.
  */
-export const MIXDOWN_FAILURE_MESSAGE: Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string> = {
+export const MIXDOWN_FAILURE_MESSAGE: ExportFailureMessages = {
   'empty-arrangement': 'There is nothing to export — the arrangement has no loops.',
   'unsupported-context': 'This browser cannot render audio offline, so the mixdown could not be written.',
   'render-failed': 'The mixdown could not be rendered. Your project is unchanged; try again.',
@@ -86,7 +82,7 @@ const MIXDOWN_WAV_EXPORT: ExportKindSpec = {
 };
 
 /** One sentence per failure, in the same voice as `MIXDOWN_FAILURE_MESSAGE`. */
-export const MIDI_FAILURE_MESSAGE: Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string> = {
+export const MIDI_FAILURE_MESSAGE: ExportFailureMessages = {
   'empty-arrangement': 'There is nothing to export — the arrangement has no loops.',
   'unsupported-context': 'This browser cannot write the MIDI file.', // unreachable; the Record demands it
   'render-failed': 'The MIDI file could not be written. Your project is unchanged; try again.',
@@ -112,7 +108,7 @@ const MIDI_EXPORT: ExportKindSpec = {
 };
 
 /** One sentence per failure, in the same voice as `MIXDOWN_FAILURE_MESSAGE`. */
-export const STEMS_FAILURE_MESSAGE: Record<Exclude<ExportFailureReason['kind'], 'cancelled'>, string> = {
+export const STEMS_FAILURE_MESSAGE: ExportFailureMessages = {
   'empty-arrangement': 'There is nothing to export — the arrangement has no loops or no notes.',
   'unsupported-context': 'This browser cannot render audio offline, so the stems could not be written.',
   'render-failed': 'The stems could not be rendered. Your project is unchanged; try again.',

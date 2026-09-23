@@ -7,13 +7,13 @@
  * cleared in the `finally`, so one lifecycle runs from click to download.
  */
 import type { StoreApi } from 'zustand';
+import { nextTask } from '@/audio/export/renderResult';
 import { reportOperationFailure } from '@/incidents/operationFailure';
 import { downloadBlob } from '@/utils/projectFileIO';
 import { exportKind, type ExportKindId, type ExportSnapshot } from './exportKinds';
 import {
   runExportJob,
   yieldToBrowserPaint,
-  yieldToTask,
   type ExportJob,
   type ExportJobPhase,
   type ExportOutcome,
@@ -79,7 +79,7 @@ export function createExportSlice(set: Set, get: Get): ExportSlice {
           publish,
           setNotice: (projectNotice) => set({ projectNotice }),
           download: downloadBlob,
-          yieldToTask,
+          yieldToTask: nextTask,
           yieldToBrowserPaint,
           reportFailure: (operation, detail) => reportOperationFailure(operation, new Error(detail), 'degraded'),
         });

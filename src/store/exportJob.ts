@@ -16,6 +16,8 @@ import type {
   ExportSnapshot,
   IncidentOperation,
 } from './exportKinds';
+import { nextTask, renderFailed } from '@/audio/export/renderResult';
+import { DOWNLOAD_FAILED_MESSAGE } from '@/utils/projectFileIO';
 
 export type ExportJobPhase = ExportProgress | { phase: 'downloading' } | { phase: 'cancelling' };
 
@@ -38,31 +40,19 @@ export interface ExportJobDeps {
   publish: (phase: ExportJobPhase) => void;
   setNotice: (message: string) => void;
   download: (fileName: string, blob: Blob) => void;
+  /** Puts the render in the next task so React can paint the pending state first. */
   yieldToTask: () => Promise<void>;
   yieldToBrowserPaint: () => Promise<void>;
   reportFailure: (operation: IncidentOperation, detail: string) => void;
 }
 
-/**
- * What a download that threw reads as. The same sentence — and the same
- * reasoning — as `ProjectMenu`'s `downloadCopy`: the anchor/blob path can
- * throw in a restricted embedding, and downloading is best-effort.
- */
-export const EXPORT_DOWNLOAD_FAILED_MESSAGE =
-  'Could not write the file. Check the browser’s download settings.';
-
 export function exportSuccessMessage(fileName: string): string {
   return `Exported ${fileName}.`;
 }
 
-/** Put the render in the next task so React can paint the pending state first. */
-export function yieldToTask(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 /** Let React commit the delivery phase for one visible frame before download. */
 export function yieldToBrowserPaint(): Promise<void> {
-  if (typeof requestAnimationFrame !== 'function') return yieldToTask();
+  if (typeof requestAnimationFrame !== 'function') return nextTask();
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => resolve());
@@ -75,10 +65,7 @@ async function runKind(deps: ExportJobDeps): Promise<ExportKindResult> {
   try {
     return await deps.kind.run(deps.snapshot, deps.publish, deps.signal);
   } catch (err) {
-    return {
-      ok: false,
-      reason: { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) },
-    };
+    return renderFailed(err);
   }
 }
 
@@ -108,7 +95,7 @@ async function deliver(deps: ExportJobDeps, blob: Blob, fileName: string): Promi
   try {
     deps.download(fileName, blob);
   } catch {
-    deps.setNotice(EXPORT_DOWNLOAD_FAILED_MESSAGE);
+    deps.setNotice(DOWNLOAD_FAILED_MESSAGE);
     return { status: 'download-failed', fileName };
   }
   deps.setNotice(exportSuccessMessage(fileName));

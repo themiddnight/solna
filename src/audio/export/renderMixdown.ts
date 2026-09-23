@@ -53,29 +53,20 @@ import { encodeWav } from '@/utils/encodeWav';
 import { applyBeatParams } from '../beatAdapter';
 import { SEND_EFFECTS, type BeatParams, type TrackSendLevels } from '@/types';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
+import {
+  RENDER_CANCELLED,
+  WALK_YIELD_INTERVAL_STEPS,
+  nextTask,
+  renderFailed,
+  safeProgressReporter,
+  type MixdownProgressReporter,
+  type RenderFailure,
+} from './renderResult';
 
 export const MIXDOWN_SAMPLE_RATE = 44100;
 const MIXDOWN_CHANNELS = 2;
 /** The floor on the tail: release + reverb. Never shorter than this. */
 const MIXDOWN_TAIL_SEC = 2;
-
-/** How many total dwell-steps to schedule between yields. Chosen so a yield
- * lands roughly every few hundred AudioNode constructions on a dense
- * arrangement — frequent enough that Cancel feels responsive, rare enough
- * that the yield overhead (a macrotask hop) stays negligible next to the
- * scheduling work itself. */
-const SCHEDULE_YIELD_INTERVAL_STEPS = 200;
-
-/**
- * Why a render produced no file. A union rather than a string so the slice's
- * `projectNotice` sentence is a switch the compiler checks, and so a test can
- * assert the reason without matching prose.
- */
-export type MixdownFailureReason =
-  | { kind: 'empty-arrangement' }
-  | { kind: 'unsupported-context' }
-  | { kind: 'cancelled' }
-  | { kind: 'render-failed'; detail: string };
 
 /**
  * The buffer is returned BESIDE the blob, not instead of it: the spec's own
@@ -83,9 +74,7 @@ export type MixdownFailureReason =
  * against samples, and the encode has to sit inside the same `try` that turns
  * a throw into a failed result.
  */
-export type MixdownRenderResult =
-  | { ok: true; buffer: AudioBuffer; blob: Blob }
-  | { ok: false; reason: MixdownFailureReason };
+export type MixdownRenderResult = { ok: true; buffer: AudioBuffer; blob: Blob } | RenderFailure;
 
 export interface LoopAudioAutomation {
   loopIndex: number;
@@ -101,13 +90,10 @@ export function planLoopAudioAutomation(
   plan: ArrangementPlan,
 ): LoopAudioAutomation[] {
   const stepDur = stepDurationSec(snapshot.bpm);
-  return plan.passes.map((pass) => ({
-    loopIndex: pass.loopIndex,
-    time: pass.startStep * stepDur,
-    buses: snapshot.loops[pass.loopIndex].buses,
-    beatParams: snapshot.loops[pass.loopIndex].beatParams,
-    beatVoiceGains: snapshot.loops[pass.loopIndex].beatVoiceGains,
-  }));
+  return plan.passes.map((pass) => {
+    const { buses, beatParams, beatVoiceGains } = snapshot.loops[pass.loopIndex];
+    return { loopIndex: pass.loopIndex, time: pass.startStep * stepDur, buses, beatParams, beatVoiceGains };
+  });
 }
 
 /**
@@ -228,7 +214,7 @@ async function scheduleArrangement(
       applyLoopAudioState(engine, loopAutomation[item.passIndex], loopAutomation[item.passIndex - 1]);
     } else if (item.kind === 'stepEnd') {
       stepsSinceYield += 1;
-      if (stepsSinceYield >= SCHEDULE_YIELD_INTERVAL_STEPS) {
+      if (stepsSinceYield >= WALK_YIELD_INTERVAL_STEPS) {
         stepsSinceYield = 0;
         await yieldPreservingRandomStream();
         if (signal?.aborted) return { cancelled: true, sourcesWithEvents };
@@ -241,24 +227,6 @@ async function scheduleArrangement(
 }
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
-
-export type MixdownRenderProgress =
-  | { phase: 'preparing' }
-  | { phase: 'rendering'; percent: number }
-  | { phase: 'encoding' };
-
-export type MixdownProgressReporter = (progress: MixdownRenderProgress) => void;
-
-/** A progress observer must never be able to turn a valid render into a failure. */
-export function safeProgressReporter(reporter?: MixdownProgressReporter): MixdownProgressReporter {
-  return (progress) => {
-    try {
-      reporter?.(progress);
-    } catch {
-      // Reporting is best-effort; the audio render remains authoritative.
-    }
-  };
-}
 
 /**
  * Pause the offline timeline at two-percent checkpoints, publish its position,
@@ -314,13 +282,7 @@ export interface SongRenderLayout {
   wire?: (engine: AudioEngine, ctx: OfflineAudioContext) => void;
 }
 
-type SongBufferResult =
-  | { ok: true; buffer: AudioBuffer; sourcesWithEvents: ReadonlySet<string> }
-  | { ok: false; reason: MixdownFailureReason };
-
-export function renderFailed(err: unknown): MixdownFailureReason {
-  return { kind: 'render-failed', detail: err instanceof Error ? err.message : String(err) };
-}
+type SongBufferResult = { ok: true; buffer: AudioBuffer; sourcesWithEvents: ReadonlySet<string> } | RenderFailure;
 
 /**
  * Renders the arrangement to an `AudioBuffer`. NEVER THROWS. Shared by the
@@ -351,9 +313,7 @@ export async function renderSongBuffer(
   signal?: AbortSignal,
 ): Promise<SongBufferResult> {
   try {
-    if (signal?.aborted) {
-      return { ok: false, reason: { kind: 'cancelled' } };
-    }
+    if (signal?.aborted) return RENDER_CANCELLED;
     if (snapshot.loops.length === 0) {
       return { ok: false, reason: { kind: 'empty-arrangement' } };
     }
@@ -389,9 +349,7 @@ export async function renderSongBuffer(
       layout.wire?.(engine, ctx);
       return scheduleArrangement(engine, snapshot, plan, walkSongTimeline(snapshot, plan), signal);
     });
-    if (scheduled.cancelled) {
-      return { ok: false, reason: { kind: 'cancelled' } };
-    }
+    if (scheduled.cancelled) return RENDER_CANCELLED;
 
     report({ phase: 'rendering', percent: 1 });
     scheduleProgressCheckpoints(ctx, report);
@@ -399,13 +357,11 @@ export async function renderSongBuffer(
     // Yield between the terminal render state and encoding so both named
     // phases can be painted instead of collapsing into one React commit.
     report({ phase: 'rendering', percent: 100 });
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    if (signal?.aborted) {
-      return { ok: false, reason: { kind: 'cancelled' } };
-    }
+    await nextTask();
+    if (signal?.aborted) return RENDER_CANCELLED;
     return { ok: true, buffer, sourcesWithEvents: scheduled.sourcesWithEvents };
   } catch (err) {
-    return { ok: false, reason: renderFailed(err) };
+    return renderFailed(err);
   }
 }
 
@@ -425,16 +381,14 @@ export async function renderMixdown(
     if (!rendered.ok) return rendered;
     const { buffer } = rendered;
     report({ phase: 'encoding' });
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    if (signal?.aborted) {
-      return { ok: false, reason: { kind: 'cancelled' } };
-    }
+    await nextTask();
+    if (signal?.aborted) return RENDER_CANCELLED;
     const blob = encodeWav(
       [buffer.getChannelData(0), buffer.getChannelData(1)],
       MIXDOWN_SAMPLE_RATE,
     );
     return { ok: true, buffer, blob };
   } catch (err) {
-    return { ok: false, reason: renderFailed(err) };
+    return renderFailed(err);
   }
 }

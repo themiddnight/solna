@@ -2,13 +2,24 @@
  * The arrangement snapshot every export kind renders from.
  * Takes the state as an argument, like `playbackPlanSnapshots.ts` (R233).
  */
-import type { MixdownLoop, MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
+import type { MixdownBusState, MixdownLoop, MixdownSnapshot } from '@/audio/playback/plan/songSnapshot';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
+import type { TrackSends } from '@/types';
 import { getMeter } from '@/utils/timeSignature';
 import { buildProjectContent } from './projectFormat';
 import { faderDbToGain } from './levelUnits';
-import { SOURCE_BUSES } from './sourceBuses';
+import { SOURCE_BUSES, type SourceBusLevels } from './sourceBuses';
 import type { AppStore } from './types';
+
+/** One linear row per source bus — for the song-level mixer and for each loop's own. */
+function busRows(mixer: SourceBusLevels & { trackSends: TrackSends }): MixdownBusState[] {
+  return SOURCE_BUSES.map((bus) => ({
+    source: bus.source,
+    gain: faderDbToGain(bus.selectLevelDb(mixer)),
+    muted: bus.selectMuted(mixer),
+    sends: mixer.trackSends[bus.source],
+  }));
+}
 
 /**
  * The snapshot the renderer works from: the `.solna` CONTENT set plus the mix
@@ -30,12 +41,7 @@ export function buildMixdownSnapshot(s: AppStore): MixdownSnapshot {
   const content = buildProjectContent(s);
   const loops: MixdownLoop[] = content.loops.map((loop) => ({
     ...loop,
-    buses: SOURCE_BUSES.map((bus) => ({
-      source: bus.source,
-      gain: faderDbToGain(bus.selectLevelDb(loop)),
-      muted: bus.selectMuted(loop),
-      sends: loop.trackSends[bus.source],
-    })),
+    buses: busRows(loop),
     // One row per voice, in canonical order, with the voice's MUTE folded into
     // its gain — `muted ? 0 : faderDbToGain(levelDb)` is the same one-line rule
     // `engineSync.ts` applies live, written here because src/audio/ may not
@@ -56,12 +62,7 @@ export function buildMixdownSnapshot(s: AppStore): MixdownSnapshot {
     // The raw mute flag, NOT isTrackAudible: solo is a session-only monitoring
     // gesture and must never reach the export, while mute is arrangement intent
     // and must.
-    buses: SOURCE_BUSES.map((bus) => ({
-      source: bus.source,
-      gain: faderDbToGain(bus.selectLevelDb(s)),
-      muted: bus.selectMuted(s),
-      sends: s.trackSends[bus.source],
-    })),
+    buses: busRows(s),
     // No arrangement-wide Beat: it belongs to a loop, and every loop row above
     // carries its own.
     loops,

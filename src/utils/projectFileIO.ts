@@ -75,6 +75,13 @@ export type FileReadResult = { ok: true; text: string } | { ok: false; cause: un
 export const UNREADABLE_FILE_MESSAGE =
   'Could not read the file. It may have been moved, deleted, or its storage access revoked.';
 
+/**
+ * What a browser download that threw reads as — a project copy or an export.
+ * The anchor/blob path can throw in a restricted embedding; downloading is
+ * best-effort and the live session is untouched.
+ */
+export const DOWNLOAD_FAILED_MESSAGE = 'Could not write the file. Check the browser’s download settings.';
+
 /** A directory or a zero-byte pick reads as ok:true with empty text. */
 export async function readFileAsText(file: Pick<File, 'text' | 'size'>): Promise<FileReadResult> {
   if (file.size === 0) return { ok: true, text: '' };

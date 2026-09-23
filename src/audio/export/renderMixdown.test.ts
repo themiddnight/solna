@@ -4,8 +4,8 @@ import {
   MIXDOWN_SAMPLE_RATE,
   planLoopAudioAutomation,
   renderMixdown,
-  type MixdownRenderProgress,
 } from './renderMixdown';
+import type { MixdownRenderProgress } from './renderResult';
 import {
   beatMixFixture,
   beatParamsFixture,

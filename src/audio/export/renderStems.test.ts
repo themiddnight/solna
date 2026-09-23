@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
-import { renderMixdown, type MixdownRenderProgress } from './renderMixdown';
+import { renderMixdown } from './renderMixdown';
+import type { MixdownRenderProgress } from './renderResult';
 import { renderStems, STEM_CHANNELS, STEM_TRACKS } from './renderStems';
 import * as zipStore from './zipStore';
 import { readZip } from './zipTestReader';
