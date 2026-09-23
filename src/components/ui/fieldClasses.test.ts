@@ -218,12 +218,6 @@ describe('button and dialog chrome', () => {
  * host that ignores the frame's slot and the dialog hold.
  */
 describe('feedback surfaces', () => {
-  /** Every surface has migrated to the feedback host (§5.5, §5.6): empty on purpose. */
-  const NOT_YET_MIGRATED = {
-    toast: [] as string[],
-    fixedAlert: [] as string[],
-  };
-
   /** Comments name the toast freely (this very describe does); only code counts. */
   const withoutComments = (text: string): string =>
     text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
@@ -235,26 +229,11 @@ describe('feedback surfaces', () => {
     );
 
   test('no component renders the daisyUI toast class', () => {
-    const hits = offenders('src', 'FeedbackHost.tsx', toastClasses).filter(
-      (hit) => !NOT_YET_MIGRATED.toast.some((path) => hit.startsWith(`${path}:`)),
-    );
-    expect(hits).toEqual([]);
+    expect(offenders('src', 'FeedbackHost.tsx', toastClasses)).toEqual([]);
   });
 
   test('a fixed alert appears only in FeedbackHost.tsx', () => {
-    const hits = offenders('src', 'FeedbackHost.tsx', (text) => literalsCarrying(text, ['fixed', 'alert'])).filter(
-      (hit) => !NOT_YET_MIGRATED.fixedAlert.some((path) => hit.startsWith(`${path}:`)),
-    );
-    expect(hits).toEqual([]);
-  });
-
-  test('the allow-list names only files that still need it', () => {
-    const stillHit = (paths: string[], find: (text: string) => string[]) =>
-      paths.filter((path) => find(readFileSync(path, 'utf8')).length > 0);
-    expect(stillHit(NOT_YET_MIGRATED.toast, toastClasses)).toEqual(NOT_YET_MIGRATED.toast);
-    expect(stillHit(NOT_YET_MIGRATED.fixedAlert, (text) => literalsCarrying(text, ['fixed', 'alert']))).toEqual(
-      NOT_YET_MIGRATED.fixedAlert,
-    );
+    expect(offenders('src', 'FeedbackHost.tsx', (text) => literalsCarrying(text, ['fixed', 'alert']))).toEqual([]);
   });
 });
 

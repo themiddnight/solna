@@ -171,7 +171,7 @@ export const InstantVibesBar = React.memo(function InstantVibesBar() {
   };
 
   return (
-    <div className="shrink-0 bg-base-300 border-b border-base-300 px-3 py-1.5 select-none relative z-30 transition-all">
+    <div className="shrink-0 bg-base-300 border-b border-base-300 px-3 py-1.5 select-none transition-all">
       <div className="flex items-center justify-between gap-2 max-w-full">
         {/* Left Label */}
         <div className="flex items-center gap-1.5 shrink-0">

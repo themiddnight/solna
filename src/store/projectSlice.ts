@@ -73,7 +73,7 @@ export interface ProjectSlice {
    * id cannot answer it.
    */
   projectInstallCount: number;
-  /** A non-blocking toast surface: unknown references, quota, unavailable. */
+  /** The in-flow, persistent notice banner: unknown references, quota, unavailable. */
   projectNotice: string | null;
   setProjectNotice: (notice: string | null) => void;
   setProjectName: (name: string) => void;

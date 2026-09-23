@@ -187,6 +187,30 @@ function BeatSectionActions({
 }
 
 /**
+ * The library drawer, Suspense-gated: `BeatPresetLibrary` is code-split (it is
+ * never needed on first paint), so opening it shows a spinner for the one
+ * frame the chunk takes to arrive — gated on `isOpen` itself, never rendered
+ * for the (invisible) closed state. Its own component, the same reason
+ * `BeatSectionActions` is one: it keeps `BeatSoundSection` under this repo's
+ * function-length rule.
+ */
+function BeatPresetDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  return (
+    <Suspense
+      fallback={
+        isOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
+            <span className="loading loading-spinner loading-lg text-primary" />
+          </div>
+        ) : null
+      }
+    >
+      <BeatPresetLibrary isOpen={isOpen} onClose={onClose} />
+    </Suspense>
+  );
+}
+
+/**
  * The Beat instrument's sound editor, and the ONLY one: preset toolbar, the
  * Beat-wide filter, then one card per voice in canonical order.
  *
@@ -224,30 +248,6 @@ function BeatSectionActions({
  * rendering: zustand serves the store's CREATION-time state to
  * `renderToString` otherwise (.claude/rules/testing.md).
  */
-/**
- * The library drawer, Suspense-gated: `BeatPresetLibrary` is code-split (it is
- * never needed on first paint), so opening it shows a spinner for the one
- * frame the chunk takes to arrive — gated on `isOpen` itself, never rendered
- * for the (invisible) closed state. Its own component, the same reason
- * `BeatSectionActions` is one: it keeps `BeatSoundSection` under this repo's
- * function-length rule.
- */
-function BeatPresetDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  return (
-    <Suspense
-      fallback={
-        isOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
-            <span className="loading loading-spinner loading-lg text-primary" />
-          </div>
-        ) : null
-      }
-    >
-      <BeatPresetLibrary isOpen={isOpen} onClose={onClose} />
-    </Suspense>
-  );
-}
-
 export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, activeTab }: BeatSoundSectionProps) {
   const beatParams = useLiveStore((s) => s.beatParams);
   const activeLoopId = useLiveStore((s) => s.activeLoopId);

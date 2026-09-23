@@ -122,8 +122,8 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
     listDriveProjects: async (pageToken) => {
       const result = await guard(() => deps.client.listProjects(pageToken));
       // The message is NOT written to projectNotice: a failed listing is
-      // rendered inside the modal it belongs to, and a toast over a modal
-      // would be the same sentence twice.
+      // rendered inside the modal it belongs to, and the banner would say
+      // the same sentence a second time.
       return result.ok ? { ok: true, page: result.value } : { ok: false, message: result.message };
     },
 

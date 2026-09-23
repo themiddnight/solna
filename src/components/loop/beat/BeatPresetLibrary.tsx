@@ -68,8 +68,8 @@ function useBeatLibraryIndex() {
  * `beatParams` at submit time — the same "whatever the loop holds now, not
  * whatever it held when the drawer opened" rule the synth library's Save
  * follows — and reports through this drawer's own inline toast (content,
- * R329), never through `showFeedback`: that host toast is Quick Save's (task
- * 4), and firing it again here for the same kind of save would duplicate it.
+ * R329), never through `showFeedback`: that host toast is Quick Save's, and
+ * firing it again here for the same kind of save would duplicate it.
  * Delete goes behind the same confirm step the synth drawer uses, because a
  * kit removed here cannot be undone from this screen.
  */
