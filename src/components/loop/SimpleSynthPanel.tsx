@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { Knob } from '../ui/Knob';
 import type { KnobScale } from '../ui/Knob';
 import { PanelCard } from '../ui/PanelCard';
+import { HINT_TEXT } from '../ui/fieldClasses';
 import { ToggleButton, ToggleRow, type ProModuleColor } from './synth/proControls';
 import type { SynthChannel } from '@/utils/synthControl';
 import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
@@ -214,7 +215,7 @@ function SimpleControl({
         format={spec.format}
         onChange={onChange}
       />
-      <span className="hidden sm:block mt-1 text-[10px] leading-tight text-base-content/50">{spec.hint}</span>
+      <span className={`${HINT_TEXT} block mt-1 text-[10px] leading-tight text-base-content/50`}>{spec.hint}</span>
     </div>
   );
 }
@@ -229,7 +230,7 @@ function SimpleIntro({ summary }: { summary: string }) {
     <header className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3 border-b border-base-300">
       <div className="min-w-0 flex-1">
         <h2 className="text-sm font-bold text-base-content">Shape the sound</h2>
-        <p className="text-[10px] text-base-content/60">
+        <p className={`${HINT_TEXT} text-[10px] text-base-content/60`}>
           Eight musical controls for fast changes. Open Pro when you need the routing underneath.
         </p>
       </div>
@@ -359,7 +360,7 @@ function SimpleGroup({
       />
       <div className="flex items-baseline justify-between gap-2 mb-3">
         <h3 className="text-[11px] font-bold text-base-content">{group.title}</h3>
-        <span className="text-[10px] text-base-content/50 truncate">{group.kicker}</span>
+        <span className={`${HINT_TEXT} text-[10px] text-base-content/50 truncate`}>{group.kicker}</span>
       </div>
       <div className="grid grid-cols-2 gap-2 min-w-0">{children}</div>
     </section>

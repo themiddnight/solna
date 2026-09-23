@@ -17,6 +17,14 @@
 export const FIELD_LABEL = 'text-[10px] text-base-content/60 block mb-1';
 
 /**
+ * Prose that describes or teaches a surface — a card's subtitle, a how-to
+ * line — shows on the desktop frame only. On a phone the height is worth more
+ * than the sentence, and the controls and headings have to explain themselves.
+ * State, feedback and warnings are not hints and never wear this.
+ */
+export const HINT_TEXT = 'max-md:hidden';
+
+/**
  * The select a card's control row uses. Denser contexts legitimately size down
  * (`select-xs` inside a chord bar card, `select-sm w-full text-xs` in a save
  * form) — it is the LABEL above them that must never vary, not the control.

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { COUNT_BADGE, FIELD_LABEL, FIELD_LANE, FIELD_SELECT, HEADER_FIELD_SHELL, HEADER_GROUP, HEADER_SELECT, JOIN_LANE, SECTION_HEADER, STEP_BADGE } from './fieldClasses';
+import { COUNT_BADGE, FIELD_LABEL, FIELD_LANE, FIELD_SELECT, HEADER_FIELD_SHELL, HEADER_GROUP, HEADER_SELECT, HINT_TEXT, JOIN_LANE, SECTION_HEADER, STEP_BADGE } from './fieldClasses';
 import { ICON_BUTTON_BASE } from './IconButton';
 import { MODAL_BOX } from './Modal';
 import { MODULE_HEADER_ROW, MODULE_TITLE } from './ModuleHeader';
@@ -79,6 +79,33 @@ describe('field label token', () => {
       return hit ? [hit[0]] : [];
     };
     expect(offenders('src', 'fieldClasses.ts', copy)).toEqual([]);
+  });
+});
+
+describe('hint text token', () => {
+  test('hides on the phone frame only', () => {
+    expect(HINT_TEXT).toBe('max-md:hidden');
+  });
+
+  // Each descriptive line, by a marker inside it. The element that opens on the
+  // marker's line or the line above must wear HINT_TEXT; state, feedback and
+  // warnings are deliberately absent from this table.
+  const HINT_SITES: Array<[file: string, marker: string]> = [
+    ['src/components/loop/chord/ModulePanelCard.tsx', '{description}'],
+    ['src/components/loop/SimpleSynthPanel.tsx', '{spec.hint}'],
+    ['src/components/loop/SimpleSynthPanel.tsx', 'Eight musical controls'],
+    ['src/components/loop/SimpleSynthPanel.tsx', '{group.kicker}'],
+    ['src/components/loop/chord/ProgressionCard.tsx', 'Hold to preview, + to add:'],
+    ['src/components/loop/chord/ProgressionCard.tsx', 'Add colorful non-diatonic flavor:'],
+    ['src/components/song/EffectsRackView.tsx', 'Both stages sit after'],
+    ['src/components/ui/PresetLibrary.tsx', '{headerSubtitle}</p>'],
+  ];
+
+  test.each(HINT_SITES)('%s: "%s" is hidden on phones', (file, marker) => {
+    const lines = readFileSync(file, 'utf8').split('\n');
+    const at = lines.findIndex((line) => line.includes(marker));
+    expect(at).toBeGreaterThan(-1);
+    expect(lines.slice(Math.max(0, at - 1), at + 1).join('\n')).toContain('${HINT_TEXT}');
   });
 });
 

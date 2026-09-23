@@ -439,7 +439,7 @@ function FactoryProgressionCard({
           <div className="text-[11px] text-secondary font-semibold mt-0.5">
             {progression.roman}
           </div>
-          <p className="text-[11px] text-base-content/60 mt-1 line-clamp-2">
+          <p className="text-[11px] text-base-content/60 mt-1 line-clamp-2 max-md:line-clamp-1">
             {progression.description}
           </p>
           <div className="text-[10px] text-base-content/50 mt-1">

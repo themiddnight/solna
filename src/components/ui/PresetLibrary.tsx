@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { FIELD_LABEL } from './fieldClasses';
+import { FIELD_LABEL, HINT_TEXT } from './fieldClasses';
 import { IconButton } from './IconButton';
 import { Modal } from './Modal';
 import { ModuleHeader } from './ModuleHeader';
@@ -191,7 +191,7 @@ function PresetLibraryHeader(props: {
               )}
               {headerAccessory}
             </h3>
-            {headerSubtitle && <p className="text-[11px] text-base-content/60">{headerSubtitle}</p>}
+            {headerSubtitle && <p className={`${HINT_TEXT} text-[11px] text-base-content/60`}>{headerSubtitle}</p>}
           </div>
         </div>
 

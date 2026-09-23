@@ -57,6 +57,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0040](0040-layout-shell.md) | Layout shell and one layout-mode switch | useLayoutMode picks DesktopShell or MobileShell by width at Tailwind md; Workspace keeps the coordinators, PlaybackHost and dialogs; the Header's tools are HEADER_TOOLS rows gated by layer. |
 | [0041](0041-mobile-frame.md) | Mobile frame — bottom tabs, top bar, menu sheet | Below md, MobileShell renders a four-tab bottom dock over setActiveTab, a top bar with the field tools inline and a bottom-sheet Modal holding the other HEADER_TOOLS as rows plus the project actions; the tab bar owns the bottom inset. |
 | [0042](0042-flat-view-nav.md) | Flat view nav — no layer switch on desktop | The desktop Header shows all four views as two joins (loop tabs, song tabs) beside ProjectMenu, the tab implies the layer as on the phone, and no frame renders a Loop/Song switch. |
+| [0043](0043-hint-text-on-desktop-only.md) | Hint text on the desktop frame only | Prose that describes or teaches a surface wears `HINT_TEXT` and is hidden below `md`; state, feedback and warnings stay on every frame. |
 
 ## Adding or changing a decision
 

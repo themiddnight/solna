@@ -7,7 +7,7 @@ import { PowerToggle } from "../ui/PowerToggle";
 import { ViewHeader } from "../ui/ViewHeader";
 import { ModuleHeader } from "../ui/ModuleHeader";
 import { PanelCard } from "../ui/PanelCard";
-import { SECTION_HEADER } from "../ui/fieldClasses";
+import { HINT_TEXT, SECTION_HEADER } from "../ui/fieldClasses";
 import { AudioVisualizer, VISUALIZER_MODES, VISUALIZER_MODE_LABEL, type VisualizerMode } from "../AudioVisualizer";
 import {
   compressorRatioDescriptor,
@@ -584,7 +584,7 @@ export function MasterDynamicsSection({ effects, updateFx, onKnobChange, onKnobC
   return (
     <section className="space-y-2">
       <h3 className={`${SECTION_HEADER} px-1`}>Master Dynamics</h3>
-      <p className="px-1 text-[11px] text-base-content/60">
+      <p className={`${HINT_TEXT} px-1 text-[11px] text-base-content/60`}>
         Both stages sit after the master fader and after the meter, so the level you see is
         the mix you made. The limiter starts on as a safety net for the occasional over; the
         compressor starts off. Switch either one to taste.

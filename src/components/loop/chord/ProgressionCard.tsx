@@ -1,7 +1,7 @@
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 import { Music, Plus, Sparkles } from 'lucide-react';
-import { HEADER_BADGE, SECTION_HEADER } from '@/components/ui/fieldClasses';
+import { HEADER_BADGE, HINT_TEXT, SECTION_HEADER } from '@/components/ui/fieldClasses';
 import { ModuleHeader } from '@/components/ui/ModuleHeader';
 import { SortableChordCard } from './SortableChordCard';
 import { beatsPerBarFor, resolveBeatCounter } from '@/utils/playhead';
@@ -138,7 +138,7 @@ function QuickAddPalette({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-base-content/60">
+          <span className={`${HINT_TEXT} text-[10px] text-base-content/60`}>
             Hold to preview, + to add:
           </span>
           <button
@@ -175,7 +175,7 @@ function QuickAddPalette({
             <Music className="w-3.5 h-3.5 text-secondary" />
             <span>Borrowed Chords (Modal Interchange):</span>
           </div>
-          <span className="text-[10px] text-base-content/60">
+          <span className={`${HINT_TEXT} text-[10px] text-base-content/60`}>
             Add colorful non-diatonic flavor:
           </span>
         </div>
