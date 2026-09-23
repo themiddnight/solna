@@ -130,9 +130,9 @@ export function driveAccountLabel(user: DriveUserProfile | null): string | null 
  * labelled. A pure function, not several `&&`s in the render: the rule is
  * testable without a DOM and lives in one place.
  *
- * The Drive rows need a configured deployment; Disconnect additionally needs an
- * actual connection (a sign-out row on a signed-out app is a row that does
- * nothing). A section whose rows all vanish drops out entirely, so an
+ * The Drive rows need a configured deployment; Disconnect additionally needs a
+ * connection to end — a token held now, or an account remembered from an
+ * earlier page (a sign-out row with neither is a row that does nothing). A section whose rows all vanish drops out entirely, so an
  * unconfigured build renders no "Drive" heading. Save is the one
  * source-dependent row: it follows the file into the section that binds it —
  * Local for a local/untitled file, Drive for a Drive-bound one — and the Drive
@@ -151,7 +151,7 @@ export function visibleMenuSections(
     heading: section.heading,
     rows: section.rows.filter(({ action }) => {
       if (action === 'open-drive' || action === 'save-as-drive') return driveAvailable;
-      if (action === 'disconnect-drive') return driveAvailable && driveSignedIn;
+      if (action === 'disconnect-drive') return driveAvailable && (driveSignedIn || driveUser !== null);
       return true;
     }),
   }));

@@ -18,7 +18,7 @@ import type { GisOauth2, GisTokenClient, GisTokenResponse } from '../utils/googl
 /** A GIS stand-in: it answers with whatever the test queued and records its config. */
 function fakeGis(responses: Array<GisTokenResponse | 'error'> = []) {
   const configs: Array<{ client_id: string; scope: string; include_granted_scopes: boolean }> = [];
-  const prompts: Array<{ prompt?: string } | undefined> = [];
+  const prompts: Array<Parameters<GisTokenClient['requestAccessToken']>[0]> = [];
   const revoked: string[] = [];
   const oauth2: GisOauth2 = {
     initTokenClient: (config) => {
@@ -157,6 +157,41 @@ describe('createDriveAuth', () => {
     expect(auth.signedIn()).toBe(false);
     await auth.token();
     expect(gis.configs).toHaveLength(2);
+  });
+});
+
+describe('createDriveAuth with a remembered account', () => {
+  test('a remembered account skips the account chooser on the first request of a page', async () => {
+    const gis = fakeGis();
+    const auth = await preparedAuth({
+      loadOauth2: async () => ({ ok: true, value: gis.oauth2 }),
+      clientId: 'cid',
+      rememberedAccount: () => ({ email: 'me@example.com' }),
+    });
+    expect(await auth.token()).toBe('token-1');
+    expect(gis.prompts[0]).toEqual({ prompt: '', login_hint: 'me@example.com' });
+  });
+
+  test('a remembered account with a hidden email still skips the chooser, without a hint', async () => {
+    const gis = fakeGis();
+    const auth = await preparedAuth({
+      loadOauth2: async () => ({ ok: true, value: gis.oauth2 }),
+      clientId: 'cid',
+      rememberedAccount: () => ({ email: '' }),
+    });
+    await auth.token();
+    expect(gis.prompts[0]).toEqual({ prompt: '' });
+  });
+
+  test('no remembered account leaves the first request free to show the chooser', async () => {
+    const gis = fakeGis();
+    const auth = await preparedAuth({
+      loadOauth2: async () => ({ ok: true, value: gis.oauth2 }),
+      clientId: 'cid',
+      rememberedAccount: () => null,
+    });
+    await auth.token();
+    expect(gis.prompts[0]).toBeUndefined();
   });
 });
 

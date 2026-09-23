@@ -26,6 +26,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - One Zustand app store composed from the slices `store.ts` lists (that list binds), plus one separate vanilla store, `audioRecovery.ts`, outside the persisted store. <!-- R033 --> ([ADR-0002](../../docs/decisions/0002-four-layer-import-architecture.md))
 - `store/driveAuth.ts` holds the only Google access token, in a closure; no getter hands it out. <!-- R036 -->
 - No slice reads the token; `driveSignedIn` is a mirror of "an unexpired token is held"; every Drive call acquires one through `withDriveToken` at the moment it needs it; a token never enters a slice or `partialize`. <!-- R037 -->
+- The connected account is remembered, never the session: `driveUser` (`{ email, name }`) is a persist key, validated by `sanitizeDriveUser` on read; `driveAuth` reads it through `rememberedAccount` at request time so a page's first token request sends `prompt: ''` plus `login_hint` instead of opening the chooser, still from a user gesture. Only Disconnect clears it; a denied or closed popup does not. <!-- R324 -->
 
 ([ADR-0025](../../docs/decisions/0025-drive-token-in-closure.md))
 
@@ -76,6 +77,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 ## Prohibited
 
 - A token getter, or the Drive token in a slice or `partialize` <!-- R036 --> <!-- R037 -->
+- Requesting a Drive token at boot or outside a user gesture because an account is remembered, or forgetting it on anything but Disconnect <!-- R324 -->
 - Mutating a persisted value in place <!-- R210 -->
 - Writing `localStorage` outside `coalescedStorage.ts` <!-- R211 -->
 - Pointer-, clock- or frame-driven writes to persisted state <!-- R212 -->

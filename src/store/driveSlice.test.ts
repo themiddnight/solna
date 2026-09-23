@@ -124,6 +124,32 @@ describe('connectDrive', () => {
     expect(useAppStore.getState().driveSignedIn).toBe(true);
     expect(useAppStore.getState().driveUser).toBeNull();
   });
+
+  test('a reconnect replaces the remembered profile object, never mutates it', async () => {
+    const { useAppStore, drive } = await freshStore({
+      client: okClient({ userProfile: async () => ({ email: 'ann@example.com', name: 'Ann' }) }),
+    });
+    await drive.connectDrive();
+    const first = useAppStore.getState().driveUser;
+    await drive.connectDrive();
+    expect(useAppStore.getState().driveUser).not.toBe(first);
+  });
+
+  test('a closed or denied popup keeps the remembered account — only Disconnect forgets it', async () => {
+    const { useAppStore, drive } = await freshStore({
+      auth: {
+        ...okAuth(),
+        token: async () => {
+          throw new DriveAuthError('denied', DRIVE_DENIED_MESSAGE);
+        },
+        signedIn: () => false,
+      },
+    });
+    const remembered = { email: 'ann@example.com', name: 'Ann' };
+    useAppStore.setState({ driveUser: remembered });
+    expect(await drive.connectDrive()).toBe(false);
+    expect(useAppStore.getState().driveUser).toBe(remembered);
+  });
 });
 
 describe('listDriveProjects', () => {

@@ -199,6 +199,10 @@ Shared, presentation-only controls under `src/components/ui/`. These own the dai
   itself created**: the app requests the single scope `.../auth/drive.file`, under which Google
   returns only files this app made, so a user's other Drive files are neither shown nor
   reachable. Both are deliberate, not gaps.
+- **Drive remembers the account, not the session.** The access token never outlives the page,
+  but the connected account does: after a reload the Drive heading still names it, and the next
+  Connect opens a popup that closes by itself instead of the account chooser. Staying signed in
+  with no popup at all would need a refresh token, and so a backend — solna has none.
 
 ### Resolved: the forked Instant Vibes module
 

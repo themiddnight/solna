@@ -103,7 +103,7 @@ export interface GisTokenResponse {
 }
 
 export interface GisTokenClient {
-  requestAccessToken(overrides?: { prompt?: string }): void;
+  requestAccessToken(overrides?: { prompt?: string; login_hint?: string }): void;
 }
 
 export interface GisOauth2 {

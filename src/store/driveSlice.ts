@@ -23,7 +23,11 @@ export interface DriveSlice {
   /** Mirrors DriveAuth.signedIn(). Never persisted — see .claude/rules and the design's token hygiene. */
   driveSignedIn: boolean;
   driveAvailable: boolean;
-  /** The connected account's identity for the Drive section heading; null when signed out. */
+  /**
+   * The connected account's identity for the Drive section heading, persisted so
+   * a reload remembers it and the next token request skips Google's chooser.
+   * Identity only, never a token; null once Disconnect forgets it.
+   */
   driveUser: DriveUserProfile | null;
   /** Ask for a token. Returns whether the app is now connected. */
   connectDrive: () => Promise<boolean>;

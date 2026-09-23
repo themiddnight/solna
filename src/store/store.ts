@@ -25,7 +25,7 @@ import { createLoopMirroringSet } from './loopSync';
 import { createProjectSlice } from './projectSlice';
 import { createExportSlice } from './exportSlice';
 import { createDriveAuth, driveClientId, DriveUnavailableError } from './driveAuth';
-import { createDriveClient } from './driveClient';
+import { createDriveClient, type DriveUserProfile } from './driveClient';
 import { createGapiTransport } from './driveGapi';
 import { createDriveSlice } from './driveSlice';
 import { createProjectAutosave } from './projectAutosave';
@@ -192,6 +192,7 @@ export function partializeAppState(state: AppStore): PersistedState {
     customBeatPresets: state.customBeatPresets,
     activeLoopId: state.activeLoopId,
     drumPadVelocities: state.drumPadVelocities,
+    driveUser: state.driveUser,
   };
 }
 
@@ -213,6 +214,20 @@ function sanitizeDrumPadVelocities(
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1) out[id] = v;
   }
   return out;
+}
+
+/**
+ * The remembered Drive account, rebuilt field by field: a plain object with at
+ * least one non-empty string among `email`/`name` becomes a fresh profile, and
+ * anything else is `null` — no account remembered, so the next connect shows
+ * Google's chooser as it did before this key existed.
+ */
+function sanitizeDriveUser(value: unknown): DriveUserProfile | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const email = typeof raw.email === 'string' ? raw.email : '';
+  const name = typeof raw.name === 'string' ? raw.name : '';
+  return email === '' && name === '' ? null : { email, name };
 }
 
 /**
@@ -239,6 +254,7 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   };
   const drumPadVelocities = sanitizeDrumPadVelocities(input.drumPadVelocities);
   if (drumPadVelocities) sanitized.drumPadVelocities = drumPadVelocities;
+  sanitized.driveUser = sanitizeDriveUser(input.driveUser);
 
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);
   // Sanitizing here is what removes the bad-value case altogether — see the
@@ -290,7 +306,13 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
 /** Read once: an unset VITE_GOOGLE_CLIENT_ID is a normal degraded state, not a boot failure. */
 const DRIVE_CLIENT_ID = driveClientId();
 const DRIVE_AVAILABLE = DRIVE_CLIENT_ID !== '';
-const driveAuth = createDriveAuth({ loadOauth2: loadGis, clientId: DRIVE_CLIENT_ID });
+const driveAuth = createDriveAuth({
+  loadOauth2: loadGis,
+  clientId: DRIVE_CLIENT_ID,
+  // Read at request time, after hydration: the account a previous page
+  // connected lets the first request of this page skip Google's chooser.
+  rememberedAccount: () => storeApi?.getState().driveUser ?? null,
+});
 // Load GIS before the user presses Connect. Token acquisition itself remains
 // user-initiated, so the consent popup stays within that gesture. Skipped when
 // there is no client id: the script could never produce a token, so fetching it

@@ -29,6 +29,7 @@ import type { LeadStepResolutionId } from '../utils/stepResolution';
 import type { MelodyTrackId } from './melodyTracks';
 import type { PlaybackScope } from './playbackScope';
 import type { DriveSlice } from './driveSlice';
+import type { DriveUserProfile } from './driveClient';
 import type { ProjectSlice } from './projectSlice';
 import type { ExportSlice } from './exportSlice';
 import type { TrackSendsSlice } from './trackSendsSlice';
@@ -829,4 +830,6 @@ export interface PersistedState {
   customBeatPresets: BeatPreset[];
   activeLoopId: string;
   drumPadVelocities: Partial<Record<BeatVoiceId, number>>;
+  /** The Drive account a previous page connected. Identity only — never a token (R037). */
+  driveUser: DriveUserProfile | null;
 }

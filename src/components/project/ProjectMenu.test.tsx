@@ -54,6 +54,16 @@ const allActions = () => PROJECT_MENU_SECTIONS.flatMap((section) => section.rows
 const visibleActions = (available: boolean, signedIn: boolean, sourceKind: 'drive' | 'local' | 'untitled') =>
   visibleMenuSections(available, signedIn, sourceKind, null).flatMap((s) => s.rows.map((r) => r.action));
 
+describe('ProjectMenu with a remembered Drive account', () => {
+  test('a remembered account offers Disconnect before this page holds a token', () => {
+    const remembered = { email: 'ann@example.com', name: 'Ann' };
+    const sections = visibleMenuSections(true, false, 'untitled', remembered);
+    const drive = sections.find((section) => section.id === 'drive');
+    expect(drive?.rows.map((row) => row.action)).toContain('disconnect-drive');
+    expect(drive?.subtitle).toBe('ann@example.com');
+  });
+});
+
 describe('ProjectMenu menu composition', () => {
   test('orders the menu as New, then Local, Drive, and tools', () => {
     expect(PROJECT_MENU_SECTIONS.map((s) => s.heading)).toEqual([null, 'Local', 'Drive', 'Tools']);

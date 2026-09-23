@@ -68,6 +68,11 @@ export interface DriveAuthDeps {
   loadOauth2: () => Promise<LoadResult<GisOauth2>>;
   clientId: string;
   now?: () => number;
+  /**
+   * The account a previous page connected, read at request time; null when none
+   * is remembered. Never a token — only enough to skip the account chooser.
+   */
+  rememberedAccount?: () => { email: string } | null;
 }
 
 /** The default GIS lifetime when it does not say. An hour, like the real one. */
@@ -100,12 +105,21 @@ export function createDriveAuth(deps: DriveAuthDeps): DriveAuth {
   };
 
   /**
-   * `prompt: ''` on every acquisition after the first: the user already granted
-   * this scope, so GIS re-issues from its own consent cookie without a second
-   * screen. The first call has no prompt override, which is what lets a consent
-   * screen appear at all.
+   * `prompt: ''` on every acquisition after the first, and on the first one too
+   * when an earlier page remembered the account: the user already granted this
+   * scope, so GIS re-issues from its own consent cookie without a second screen
+   * (Google still shows one if the grant is gone). `login_hint` pins the popup to
+   * the remembered account so it does not stop at the chooser. Otherwise the
+   * first call has no override, which is what lets a consent screen appear at all.
    */
-  const request = (prompt: string | undefined): Promise<string> => {
+  const overrides = (): { prompt?: string; login_hint?: string } | undefined => {
+    if (acquired) return { prompt: '' };
+    const remembered = deps.rememberedAccount?.() ?? null;
+    if (remembered === null) return undefined;
+    return remembered.email === '' ? { prompt: '' } : { prompt: '', login_hint: remembered.email };
+  };
+
+  const request = (): Promise<string> => {
     // Do not await GIS here. `requestAccessToken()` must be called on the
     // click's stack; waiting for a script load first makes browsers block the
     // consent popup. App boot calls `preload`, and an early click can retry.
@@ -132,8 +146,9 @@ export function createDriveAuth(deps: DriveAuthDeps): DriveAuth {
         },
         error_callback: deny,
       });
-      if (prompt === undefined) tokenClient.requestAccessToken();
-      else tokenClient.requestAccessToken({ prompt });
+      const override = overrides();
+      if (override === undefined) tokenClient.requestAccessToken();
+      else tokenClient.requestAccessToken(override);
     }).finally(() => {
       pending = null;
     });
@@ -144,7 +159,7 @@ export function createDriveAuth(deps: DriveAuthDeps): DriveAuth {
     preload,
     token: async () => {
       if (token && token.expiresAt > now()) return token.value;
-      return request(acquired ? '' : undefined);
+      return request();
     },
     invalidate: () => {
       token = null;
