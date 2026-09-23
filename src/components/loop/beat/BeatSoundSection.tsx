@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Bookmark, Drum, RotateCcw } from 'lucide-react';
+import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import { Bookmark, Drum, Library, RotateCcw } from 'lucide-react';
 import { BEAT_PRESETS } from '@/data/beatPresets';
 import { useAppStore } from '@/store/store';
 import { BEAT_PREVIEW_VELOCITY, ensureDrumEngine, triggerPad } from '@/audio/playback/drumPlayback';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { useLiveStore } from '@/components/ui/useLiveStore';
+import { COUNT_BADGE } from '@/components/ui/fieldClasses';
 import { ModulePasteButton } from '../ModulePasteButton';
 import { SoundScope } from '../SoundScope';
 import { MIX_LAYER_LABELS } from '@/components/mixLayers';
@@ -15,6 +16,13 @@ import { BeatVoiceGrid } from './BeatVoiceGrid';
 import { useBeatParamDraft } from './useBeatParamDraft';
 import type { BeatFilterParams, BeatParams, BeatPreset, BeatVoiceId, BeatVoices } from '@/types';
 import type { SoundDepth } from '../useSoundDepth';
+
+// The drawer is never needed on first paint — PresetLibrary early-returns
+// null when closed — so it is code-split out of the main chunk, the same
+// deferral `SoundSynthSection` gives its own library.
+const BeatPresetLibrary = React.lazy(() =>
+  import('./BeatPresetLibrary').then((m) => ({ default: m.BeatPresetLibrary })),
+);
 
 /**
  * The one preset list the toolbar reads, and the entry the current patch is
@@ -106,6 +114,7 @@ const BEAT_TINT_CLASS = 'ring-1 ring-accent/40 tint-accent';
  */
 function BeatSectionActions({
   base,
+  presetCount,
   isSaving,
   saveName,
   onOpenQuickSave,
@@ -113,9 +122,12 @@ function BeatSectionActions({
   onSaveNameChange,
   onQuickSaveSubmit,
   onResetAll,
+  onOpenLibrary,
 }: {
   /** The resolved base preset, or undefined when the loop names none. */
   base: BeatPreset | undefined;
+  /** Factory kits plus the user's saved ones — the "Kits" button's count. */
+  presetCount: number;
   isSaving: boolean;
   saveName: string;
   onOpenQuickSave: () => void;
@@ -123,6 +135,7 @@ function BeatSectionActions({
   onSaveNameChange: (name: string) => void;
   onQuickSaveSubmit: (e: React.FormEvent) => void;
   onResetAll: () => void;
+  onOpenLibrary: () => void;
 }) {
   return (
     <>
@@ -144,6 +157,17 @@ function BeatSectionActions({
         onNameChange={onSaveNameChange}
         onSubmit={onQuickSaveSubmit}
       />
+      <button
+        id="btn-open-beat-library"
+        type="button"
+        onClick={onOpenLibrary}
+        className="btn btn-sm btn-primary gap-1 text-xs font-semibold"
+        title="Beat Kit Library"
+      >
+        <Library className="w-3.5 h-3.5" />
+        <span>Kits</span>
+        <span className={COUNT_BADGE}>{presetCount}</span>
+      </button>
       {/* Source-dependent: a reset copies from the base preset, and there is
           nothing to copy from when the base cannot be resolved. */}
       <button
@@ -200,6 +224,30 @@ function BeatSectionActions({
  * rendering: zustand serves the store's CREATION-time state to
  * `renderToString` otherwise (.claude/rules/testing.md).
  */
+/**
+ * The library drawer, Suspense-gated: `BeatPresetLibrary` is code-split (it is
+ * never needed on first paint), so opening it shows a spinner for the one
+ * frame the chunk takes to arrive — gated on `isOpen` itself, never rendered
+ * for the (invisible) closed state. Its own component, the same reason
+ * `BeatSectionActions` is one: it keeps `BeatSoundSection` under this repo's
+ * function-length rule.
+ */
+function BeatPresetDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  return (
+    <Suspense
+      fallback={
+        isOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-300/60">
+            <span className="loading loading-spinner loading-lg text-primary" />
+          </div>
+        ) : null
+      }
+    >
+      <BeatPresetLibrary isOpen={isOpen} onClose={onClose} />
+    </Suspense>
+  );
+}
+
 export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, activeTab }: BeatSoundSectionProps) {
   const beatParams = useLiveStore((s) => s.beatParams);
   const activeLoopId = useLiveStore((s) => s.activeLoopId);
@@ -215,6 +263,7 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveName, setSaveName] = useState('');
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   const { draft, update, commit, cancel } = useBeatParamDraft(
     beatParams,
@@ -243,87 +292,97 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
   }, []);
 
   return (
-    <SectionCard
-      icon={Drum}
-      title="Beat Sound"
-      tint={BEAT_TINT_CLASS}
-      /* The Beat bus's own scope, the counterpart of the Synth band's. It taps
-         `'sequencer'` — the engine's name for the drum bus, which predates
-         Beat being an instrument rather than a kit name — and traces in
-         ACCENT, the role this card is already tinted with. There is no
-         per-voice scope: the tap is the bus, so one well shows the whole kit,
-         which is also the only thing a Preview tap or a running pattern can
-         put through it. */
-      monitor={
-        <SoundScope
-          source="sequencer"
-          label={MIX_LAYER_LABELS.drum}
-          colorTheme="accent"
-          paused={activeTab !== 'sound'}
-        />
-      }
-      /* Quick Save, Reset All, paste — the patch-wide gestures, in the band's
-         actions cell, which is where the Synth section keeps its own pair.
-         They used to ride the kit row below, where a control that rewrites
-         every voice sat beside the control that picks a kit and read as one
-         more way to browse the library. */
-      actions={
-        <BeatSectionActions
-          base={base}
-          isSaving={isSaving}
-          saveName={saveName}
-          onOpenQuickSave={() => {
-            setSaveName(base ? `${base.name} Edit` : 'My Beat');
-            setIsSaving(true);
-          }}
-          onCloseQuickSave={() => setIsSaving(false)}
-          onSaveNameChange={setSaveName}
-          onQuickSaveSubmit={(e: React.FormEvent) => {
-            e.preventDefault();
-            saveBeatPreset(saveName, beatParams);
-            setIsSaving(false);
-          }}
-          onResetAll={resetBeatParams}
-        />
-      }
-    >
-      {/* The KIT ROW: everything here is bus-level — how the whole kit is
-          filtered, and which kit it is. Everything below it is per-voice.
-          That split is why the filter is not a card: a card in this editor
-          means one voice. Wraps as two groups rather than four controls, so a
-          narrow viewport stacks filter over picker instead of shuffling a
-          knob under a menu. */}
-      <div className="flex items-end justify-between gap-x-5 gap-y-3 flex-wrap">
-        <BeatFilterPanel
-          filter={draft.filter}
-          onDraft={draftFilter}
-          onCommit={commit}
-          onCancel={cancel}
-        />
+    <>
+      <SectionCard
+        icon={Drum}
+        title="Beat Sound"
+        tint={BEAT_TINT_CLASS}
+        /* The Beat bus's own scope, the counterpart of the Synth band's. It taps
+           `'sequencer'` — the engine's name for the drum bus, which predates
+           Beat being an instrument rather than a kit name — and traces in
+           ACCENT, the role this card is already tinted with. There is no
+           per-voice scope: the tap is the bus, so one well shows the whole kit,
+           which is also the only thing a Preview tap or a running pattern can
+           put through it. */
+        monitor={
+          <SoundScope
+            source="sequencer"
+            label={MIX_LAYER_LABELS.drum}
+            colorTheme="accent"
+            paused={activeTab !== 'sound'}
+          />
+        }
+        /* Quick Save, Reset All, paste — the patch-wide gestures, in the band's
+           actions cell, which is where the Synth section keeps its own pair.
+           They used to ride the kit row below, where a control that rewrites
+           every voice sat beside the control that picks a kit and read as one
+           more way to browse the library. */
+        actions={
+          <BeatSectionActions
+            base={base}
+            presetCount={presets.length}
+            isSaving={isSaving}
+            saveName={saveName}
+            onOpenQuickSave={() => {
+              setSaveName(base ? `${base.name} Edit` : 'My Beat');
+              setIsSaving(true);
+            }}
+            onCloseQuickSave={() => setIsSaving(false)}
+            onSaveNameChange={setSaveName}
+            onQuickSaveSubmit={(e: React.FormEvent) => {
+              e.preventDefault();
+              saveBeatPreset(saveName, beatParams);
+              setIsSaving(false);
+            }}
+            onResetAll={resetBeatParams}
+            onOpenLibrary={() => setIsLibraryOpen(true)}
+          />
+        }
+      >
+        {/* The KIT ROW: everything here is bus-level — how the whole kit is
+            filtered, and which kit it is. Everything below it is per-voice.
+            That split is why the filter is not a card: a card in this editor
+            means one voice. Wraps as two groups rather than four controls, so a
+            narrow viewport stacks filter over picker instead of shuffling a
+            knob under a menu. */}
+        <div className="flex items-end justify-between gap-x-5 gap-y-3 flex-wrap">
+          <BeatFilterPanel
+            filter={draft.filter}
+            onDraft={draftFilter}
+            onCommit={commit}
+            onCancel={cancel}
+          />
 
-        <BeatPresetToolbar params={beatParams} presets={presets} onSelect={setBeatPreset} />
-      </div>
+          <BeatPresetToolbar params={beatParams} presets={presets} onSelect={setBeatPreset} />
+        </div>
 
-      {/* `minimal` UNMOUNTS the grid rather than hiding it. Nothing in a voice
-          card subscribes to a clock or holds an analyser — the knobs read the
-          draft and the Preview button is inert until pressed — so there is no
-          audio or animation reason to keep eleven cards mounted with `hidden`,
-          and unmounting is what actually returns the height. It changes no
-          sound: depth is a view preference that reaches no store slice and no
-          engine setter, so a hidden voice still plays. */}
-      {depth !== 'minimal' && (
-        <BeatVoiceGrid
-          voices={draft.voices}
-          depth={depth}
-          onPreview={preview}
-          onDraft={draftVoiceParam}
-          onCommit={commit}
-          onCancel={cancel}
-          onResetVoice={resetBeatVoice}
-          resetDisabled={!baseResolves}
-          mutedVoices={mutedVoices}
-        />
-      )}
-    </SectionCard>
+        {/* `minimal` UNMOUNTS the grid rather than hiding it. Nothing in a voice
+            card subscribes to a clock or holds an analyser — the knobs read the
+            draft and the Preview button is inert until pressed — so there is no
+            audio or animation reason to keep eleven cards mounted with `hidden`,
+            and unmounting is what actually returns the height. It changes no
+            sound: depth is a view preference that reaches no store slice and no
+            engine setter, so a hidden voice still plays. */}
+        {depth !== 'minimal' && (
+          <BeatVoiceGrid
+            voices={draft.voices}
+            depth={depth}
+            onPreview={preview}
+            onDraft={draftVoiceParam}
+            onCommit={commit}
+            onCancel={cancel}
+            onResetVoice={resetBeatVoice}
+            resetDisabled={!baseResolves}
+            mutedVoices={mutedVoices}
+          />
+        )}
+      </SectionCard>
+
+      {/* The drawer is a sibling of the card, not a child: it is a full-viewport
+          overlay (`PresetLibrary`'s `fixed inset-0`), and nesting it inside the
+          tinted card would sit an unrelated z-50 layer under that card's own
+          stacking context for no reason. */}
+      <BeatPresetDrawer isOpen={isLibraryOpen} onClose={() => setIsLibraryOpen(false)} />
+    </>
   );
 });

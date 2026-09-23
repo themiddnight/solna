@@ -298,6 +298,31 @@ describe('the Beat preset toolbar', () => {
   });
 });
 
+/**
+ * R327: Beat's user library can be deleted from, so the section also offers
+ * the `PresetLibrary` drawer beside the quick-pick `<select>` the toolbar
+ * above already keeps — both, not one replacing the other.
+ */
+describe('the Beat kit library button', () => {
+  test('names the drawer and counts the live catalogue, factory plus custom', () => {
+    const html = render();
+    const btn = html.slice(html.indexOf('id="btn-open-beat-library"'));
+    expect(btn.slice(0, 800)).toContain('Kits');
+    expect(btn.slice(0, 800)).toContain(`>${BEAT_PRESETS.length}<`);
+  });
+
+  test('the count grows with a saved user preset, same as the quick-pick selector', () => {
+    const saved = useAppStore.getState().saveCustomBeatPreset('My Beat', baseParams());
+    try {
+      const html = render();
+      const btn = html.slice(html.indexOf('id="btn-open-beat-library"'));
+      expect(btn.slice(0, 800)).toContain(`>${BEAT_PRESETS.length + 1}<`);
+    } finally {
+      useAppStore.getState().deleteCustomBeatPreset(saved.id);
+    }
+  });
+});
+
 describe('the Beat filter panel', () => {
   test('offers the three filter types plus cutoff and resonance', () => {
     const html = render();
