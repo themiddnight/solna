@@ -27,14 +27,13 @@ import { buildRouteUrl } from '@/routing/tabRouting';
 import { getMeter } from '@/utils/timeSignature';
 import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
-import { useTimedToast } from '../ui/useTimedToast';
 import { KeyChangeDialog } from './KeyChangeDialog';
 import { LoopCopyDialog } from './LoopCopyDialog';
 import { LoopUndoToast } from './LoopUndoToast';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
-import { LOOP_UNDO_MS } from './loopUndo';
+import { useLoopUndo } from './useLoopUndo';
 import { keyChangeToastMessage, useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
 
 /** Stable identity for the closed-dialog case — see the `labels` memo below. */
@@ -232,35 +231,20 @@ function useArrangeDrag(loops: Loop[]) {
  * wrapped in the same seam a song advance crosses (the deleted loop's voices
  * cut, the clock reset). `undoLoopDelete` re-inserts the snapshot and, when it
  * was the active loop, switches back the same way — or through `loadLoop` when
- * nothing plays. A project install dismisses a pending Undo.
+ * nothing plays. A project install dismisses a pending Undo (useLoopUndo).
  */
 function useLoopDeleteUndo() {
-  const { toast, show, dismiss } = useTimedToast<DeletedLoop>();
-
-  // ArrangeView stays mounted across a project install, and an Undo after one
-  // would re-insert the OLD project's loop into the new one. Dismissed off a
-  // store subscription rather than a selector, so the view never re-renders
-  // for it.
-  useEffect(
-    () => useAppStore.subscribe((s) => s.projectInstallCount, dismiss),
-    [dismiss]
-  );
+  const { pending, offer, undo } = useLoopUndo<DeletedLoop>(undoLoopDelete);
 
   const onDelete = useCallback(
     (id: string) => {
       const deleted = deleteLoopLive(id);
-      if (deleted) show(deleted, LOOP_UNDO_MS);
+      if (deleted) offer(deleted);
     },
-    [show]
+    [offer]
   );
 
-  const onUndoDelete = useCallback(() => {
-    if (!toast) return;
-    undoLoopDelete(toast);
-    dismiss();
-  }, [toast, dismiss]);
-
-  return { deletedLoop: toast, onDelete, onUndoDelete };
+  return { deletedLoop: pending, onDelete, onUndoDelete: undo };
 }
 
 /**

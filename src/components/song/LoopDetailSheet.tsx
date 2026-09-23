@@ -47,7 +47,20 @@ export function LoopDetailSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const { loop, index, totalLoops, label, onEdit, onReorder, onDuplicate, onCopyInto, onDelete } = card;
+  const {
+    loop,
+    index,
+    totalLoops,
+    label,
+    isPlaying,
+    onSetRepeat,
+    onSetMix,
+    onEdit,
+    onReorder,
+    onDuplicate,
+    onCopyInto,
+    onDelete,
+  } = card;
   const closeThen = (run: (id: string) => void) => () => {
     onClose();
     run(loop.id);
@@ -55,8 +68,15 @@ export function LoopDetailSheet({
 
   return (
     <Modal open={open} onClose={onClose} title={label} placement="bottom" boxClassName="flex flex-col gap-3">
-      <LoopCardMetaRow card={card} activeChordIndex={activeChordIndex} idScope="sheet-" />
-      <LoopCardMixer card={card} idScope="sheet-" />
+      <LoopCardMetaRow
+        loop={loop}
+        label={label}
+        isPlaying={isPlaying}
+        activeChordIndex={activeChordIndex}
+        onSetRepeat={onSetRepeat}
+        idScope="sheet-"
+      />
+      <LoopCardMixer loop={loop} onSetMix={onSetMix} idScope="sheet-" />
       <div className="flex flex-col">
         <MenuRowButton
           id={`btn-sheet-loop-edit-${loop.id}`}

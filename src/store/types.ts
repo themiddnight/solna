@@ -94,9 +94,7 @@ export interface MusicContextSlice {
   setScaleRoot: (root: string) => void;
   setScaleType: (type: string) => void;
   setSelectedVibeId: (id: string | null) => void;
-  /** session-only: never persisted, never in a project. */
   setAutoReharmonize: (on: boolean) => void;
-  /** session-only: never persisted, never in a project. */
   setReharmonizedIndicator: (on: boolean) => void;
 }
 

@@ -28,6 +28,11 @@ describe('targetKeyFor', () => {
     expect(targetKeyFor(loop('a', 'E', 'Dorian'), { mode: 'transpose', semitones: 2 }))
       .toEqual({ root: 'F#', scaleType: 'Dorian' });
   });
+  test('a loop already in its target key, or with an unreadable root, is null', () => {
+    expect(targetKeyFor(loop('a', 'C', 'Major'), { mode: 'set', root: 'C', scaleType: 'Major' })).toBeNull();
+    expect(targetKeyFor(loop('a', 'E'), { mode: 'transpose', semitones: 12 })).toBeNull();
+    expect(targetKeyFor(loop('a', 'Bb'), { mode: 'transpose', semitones: 1 })).toBeNull();
+  });
 });
 
 describe('changeKeyAcrossLoops', () => {

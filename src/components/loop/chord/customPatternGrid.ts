@@ -178,7 +178,7 @@ export function customPatternPositionLabel(
   const bar = Math.floor(column / stepsPerBar) + 1;
   // `beatIndexAt` takes the meter's mutable `accentGroups` array, so the
   // readonly view is copied rather than widened for everybody: the labeling
-  // arithmetic stays one function, in `utils/meter.ts`, where the metronome
+  // arithmetic stays one function, in `utils/timeSignature.ts`, where the metronome
   // and the sequencer read it too.
   const beat = beatIndexAt(column % stepsPerBar, [...accentGroups]) + 1;
   const beatStart = accentGroups.slice(0, beat - 1).reduce((sum, size) => sum + size, 0);

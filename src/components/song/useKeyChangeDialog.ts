@@ -22,14 +22,13 @@ export const TRANSPOSE_STEPS: readonly number[] = [
 export function keyChangePreview(loops: readonly Loop[], target: BatchKeyTarget): KeyChangePreviewRow[] {
   return loops.map((loop) => {
     const key = targetKeyFor(loop, target);
-    const changes = key !== null && (key.root !== loop.scaleRoot || key.scaleType !== loop.scaleType);
     const from = formatKeyLabel(loop.scaleRoot, loop.scaleType);
     return {
       id: loop.id,
       label: loopLabel(loop),
       from,
       to: key ? formatKeyLabel(key.root, key.scaleType) : from,
-      changes,
+      changes: key !== null,
     };
   });
 }
@@ -73,13 +72,11 @@ export function useKeyChangeDialog({ loops, activeLoopId, onApply, onClose }: Ke
   const [harmonizeChords, setHarmonizeChords] = useState(true);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(loops.map((l) => l.id)));
 
-  const target: BatchKeyTarget = mode === 'set' ? { mode, root, scaleType } : { mode, semitones };
-  const rows = useMemo(
-    () => keyChangePreview(loops, target),
-    // `target` is rebuilt every render; its inputs are the real dependencies.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- depends on target's fields, not its identity
-    [loops, mode, root, scaleType, semitones],
+  const target = useMemo<BatchKeyTarget>(
+    () => (mode === 'set' ? { mode, root, scaleType } : { mode, semitones }),
+    [mode, root, scaleType, semitones],
   );
+  const rows = useMemo(() => keyChangePreview(loops, target), [loops, target]);
 
   const toggleLoop = (id: string) =>
     setSelected((prev) => {

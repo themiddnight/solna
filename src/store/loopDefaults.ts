@@ -60,7 +60,7 @@ export function createDefaultLoopContent(): LoopContent {
     // was a -1.9 dB trim nobody chose; DEV-383 sets a measured one
     // (DEFAULT_BUS_TRIM_DB — see its comment in levelUnits.ts for the
     // measurement) on every source bus except padVolume, which comes through
-    // defaultPadState() below instead.
+    // defaultPadState() above instead.
     synthVolume: DEFAULT_BUS_TRIM_DB,
     synthMuted: false,
     chordVolume: DEFAULT_BUS_TRIM_DB,

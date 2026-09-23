@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { ChordItem } from '@/types';
-import type { LoopMixPatch } from '@/store/types';
+import type { Loop, LoopMixPatch } from '@/store/types';
 import { formatDb } from '@/utils/gainUnits';
 import { formatChordLabel, generateBlockChordNotes } from '@/utils/musicTheory';
 import { getTonicSpelling, spellNoteInKey, type SpellingKey } from '@/utils/noteSpelling';
@@ -9,15 +9,14 @@ import { PowerToggle, type PowerToggleTone } from '../ui/PowerToggle';
 import { MIX_LAYERS, type MixLayer } from '../mixLayers';
 import { cx } from '../ui/cx';
 import { dbToFaderPosition, VolumeFader } from '../ui/VolumeFader';
-import type { SortableLoopCardProps } from './SortableLoopCard';
 
 /** A loop card's body — the meta strip and the mixer — shared by the card
  *  (from `md` up) and its mobile detail sheet. */
 interface MixChannelProps {
   idPrefix: string;
   label: string;
-  /** DECIBELS: unity is 0, the range is -60..+12 — same as ChannelStrip's
-   *  `volumeDb`, renamed to match for the same reason. */
+  /** DECIBELS: unity is 0, the range is -60..+12 — same as the Sound
+   *  mixer's `volumeDb`, renamed to match for the same reason. */
   volumeDb: number;
   muted: boolean;
   tone: PowerToggleTone;
@@ -166,17 +165,21 @@ function LoopChordStrip({ chords, chordOctave, isPlaying, activeChordIndex, spel
 
 /** Key / scale, repeat count and the chord progression, on one strip. */
 export function LoopCardMetaRow({
-  card,
+  loop,
+  label,
+  isPlaying,
   activeChordIndex,
+  onSetRepeat,
   idScope = '',
 }: {
-  card: SortableLoopCardProps;
+  loop: Loop;
+  label: string;
+  isPlaying: boolean;
   activeChordIndex: number;
+  onSetRepeat: (id: string, repeatCount: number) => void;
   /** Prefixes every element id: the detail sheet renders a second copy. */
   idScope?: string;
 }) {
-  const { loop, label, isPlaying, onSetRepeat } = card;
-
   return (
     <div className="flex flex-wrap items-center gap-2 p-2 rounded-box bg-base-100/60 border border-base-300/40 text-xs">
       {/* Key / Scale Display */}
@@ -239,9 +242,15 @@ export function LoopCardMetaRow({
 }
 
 /** The card's five-channel mixer strip, one row per MIX_LAYERS entry. */
-export function LoopCardMixer({ card, idScope = '' }: { card: SortableLoopCardProps; idScope?: string }) {
-  const { loop, onSetMix } = card;
-
+export function LoopCardMixer({
+  loop,
+  onSetMix,
+  idScope = '',
+}: {
+  loop: Loop;
+  onSetMix: (id: string, patch: Partial<LoopMixPatch>) => void;
+  idScope?: string;
+}) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-0.5">
       {/* The card's mixer strip: one row per layer, in table order.

@@ -3,7 +3,7 @@ import { MAX_STEPS_PER_BAR } from './timeSignature';
 /**
  * How fine a lead melody cell is — the lead's second axis, on top of meter.
  *
- * This is deliberately NOT in meter.ts. That module's header states that
+ * This is deliberately NOT in timeSignature.ts. That module's header states that
  * the 16th-note grid never changes, and it imports nothing at all so that
  * audio/, store/ and components/ may all reach it. A lead-only subdivision
  * table inside it would make its own header false and would put lead

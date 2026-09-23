@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useAppStore } from '@/store/store';
 import type { KeyChangeOptions } from '@/store/keyChange';
 import type { BatchKeyTarget, LoopKeyChangeUndo } from '@/store/loopKeyChange';
-import { useTimedToast } from '@/components/ui/useTimedToast';
-import { LOOP_UNDO_MS } from './loopUndo';
+import { useLoopUndo } from './useLoopUndo';
 
 export interface UseLoopKeyChangeUndo {
   keyChangeOpen: boolean;
@@ -19,38 +18,30 @@ export function keyChangeToastMessage(undo: LoopKeyChangeUndo): string {
   return `Key changed on ${n} loop${n === 1 ? '' : 's'}`;
 }
 
+const restoreKeyChange = (undo: LoopKeyChangeUndo) => useAppStore.getState().undoLoopKeyChange(undo);
+
 /**
  * Batch key change from Arrange: the dialog's open state, the apply, and a
- * single-level timed Undo — the useLoopDeleteUndo pattern. A new batch replaces
- * a pending Undo; a project install dismisses it (loop ids collide across
- * projects, so an Undo there would write into the wrong loops).
+ * single-level timed Undo (useLoopUndo) — a new batch replaces a pending Undo.
  */
 export function useLoopKeyChangeUndo(): UseLoopKeyChangeUndo {
   const [keyChangeOpen, setKeyChangeOpen] = useState(false);
-  const { toast, show, dismiss } = useTimedToast<LoopKeyChangeUndo>();
-
-  useEffect(() => useAppStore.subscribe((s) => s.projectInstallCount, dismiss), [dismiss]);
+  const { pending, offer, undo } = useLoopUndo(restoreKeyChange);
 
   const onApplyKeyChange = useCallback(
     (ids: string[], target: BatchKeyTarget, opts: KeyChangeOptions) => {
-      const undo = useAppStore.getState().applyLoopKeyChange(ids, target, opts);
-      if (undo) show(undo, LOOP_UNDO_MS);
+      const next = useAppStore.getState().applyLoopKeyChange(ids, target, opts);
+      if (next) offer(next);
     },
-    [show],
+    [offer],
   );
-
-  const onUndoKeyChange = useCallback(() => {
-    if (!toast) return;
-    useAppStore.getState().undoLoopKeyChange(toast);
-    dismiss();
-  }, [toast, dismiss]);
 
   return {
     keyChangeOpen,
     openKeyChange: () => setKeyChangeOpen(true),
     closeKeyChange: () => setKeyChangeOpen(false),
     onApplyKeyChange,
-    keyChangeUndo: toast,
-    onUndoKeyChange,
+    keyChangeUndo: pending,
+    onUndoKeyChange: undo,
   };
 }

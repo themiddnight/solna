@@ -1,4 +1,4 @@
-import { ROOTS } from '@/musicCore';
+import { ROOTS, transposePitchClassPreservingOctave } from '@/musicCore';
 import type { LoopContent } from './loop';
 import { changeKey, type KeyChangeOptions, type KeyChangeSource } from './keyChange';
 import type { Loop } from './types';
@@ -34,24 +34,22 @@ export interface LoopKeyChangeUndo {
 
 /** `root` moved by `semitones` through `ROOTS`, ROOTS-spelled; null for a root outside `ROOTS`. */
 export function transposeRoot(root: string, semitones: number): string | null {
-  const index = (ROOTS as readonly string[]).indexOf(root);
-  if (index < 0) return null;
-  const shifted = (((index + semitones) % 12) + 12) % 12;
-  return ROOTS[shifted];
+  if (!(ROOTS as readonly string[]).includes(root)) return null;
+  return transposePitchClassPreservingOctave(root, semitones);
 }
 
-/** The key one loop lands in, or null when its root cannot be read. */
+/**
+ * The key one loop moves to under `target`, or null when it does not move:
+ * its root cannot be read, or it is already in that key.
+ */
 export function targetKeyFor(
   loop: Pick<Loop, 'scaleRoot' | 'scaleType'>,
   target: BatchKeyTarget,
 ): { root: string; scaleType: string } | null {
-  if (target.mode === 'set') return { root: target.root, scaleType: target.scaleType };
-  const root = transposeRoot(loop.scaleRoot, target.semitones);
-  return root === null ? null : { root, scaleType: loop.scaleType };
-}
-
-function snapshotOf(loop: Loop): LoopKeySnapshot {
-  return { loopId: loop.id, content: keyFieldsOf(loop) };
+  const root = target.mode === 'set' ? target.root : transposeRoot(loop.scaleRoot, target.semitones);
+  const scaleType = target.mode === 'set' ? target.scaleType : loop.scaleType;
+  if (root === null || (root === loop.scaleRoot && scaleType === loop.scaleType)) return null;
+  return { root, scaleType };
 }
 
 /**
@@ -72,9 +70,9 @@ export function changeKeyAcrossLoops(
   const next = loops.map((loop) => {
     if (!selected.has(loop.id)) return loop;
     const key = targetKeyFor(loop, target);
-    if (!key || (key.root === loop.scaleRoot && key.scaleType === loop.scaleType)) return loop;
-    changed.push(snapshotOf(loop));
-    return { ...loop, ...changeKey(loop, { root: key.root, scaleType: key.scaleType }, opts) };
+    if (!key) return loop;
+    changed.push({ loopId: loop.id, content: keyFieldsOf(loop) });
+    return { ...loop, ...changeKey(loop, key, opts) };
   });
   return { loops: next, changed };
 }

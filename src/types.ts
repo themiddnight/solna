@@ -96,9 +96,9 @@ export type PadVoicing = (typeof PAD_VOICINGS)[number];
  * interval numbers: 1 = unison, 4 = perfect fourth, 5 = perfect fifth,
  * 8 = octave, 12 = perfect twelfth (an octave plus a fifth, 19 semitones).
  *
- * A literal union, not an enum: this file must keep importing nothing but the
- * leaf `utils/meter`, and these values are persisted verbatim in `.solna`
- * bodies, so the numbers are the contract.
+ * A literal union, not an enum: this file keeps to type-only imports, and
+ * these values are persisted verbatim in `.solna` bodies, so the numbers are
+ * the contract.
  */
 export type PadInterval = 1 | 4 | 5 | 8 | 12;
 
@@ -117,7 +117,7 @@ export type InputPanelMode = 'keyboard' | 'drums';
 /**
  * Arpeggiator order and rate. Declared here rather than in audio/arpeggiator.ts
  * and audio/arpSchedule.ts because both of those modules need them and this
- * file imports only the leaf module `utils/meter`, so it must stay acyclic.
+ * file has type-only imports, so it cannot join a cycle.
  * Both audio modules re-export them, so their existing import paths keep
  * working — the point is that there is one definition instead of an inline
  * copy here and a named copy there that could drift. `ArpSettings`

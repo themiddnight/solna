@@ -19,7 +19,7 @@ const ARP_RATE_CFG: Record<ArpRate, { stepMod: number; notes: number; holdFloor:
 };
 
 /**
- * `step` must already be BAR-PHASED by `arpStepFor` (utils/meter.ts) at the
+ * `step` must already be BAR-PHASED by `arpStepFor` (utils/timeSignature.ts) at the
  * call site. Passing the raw monotonic clock step makes the arp phase drift
  * across bar lines in any meter whose bar is not a multiple of four steps.
  */

@@ -654,10 +654,16 @@ export const SortableLoopCard = React.memo(function SortableLoopCard(props: Sort
         {/* Below `md` these live in the detail sheet instead. */}
         <div className="hidden md:flex flex-col gap-3">
           {/* Key / Scale & Chord Progression Information & Repeat Setting */}
-          <LoopCardMetaRow card={props} activeChordIndex={activeChordIndex} />
+          <LoopCardMetaRow
+            loop={loop}
+            label={props.label}
+            isPlaying={isPlaying}
+            activeChordIndex={activeChordIndex}
+            onSetRepeat={props.onSetRepeat}
+          />
 
           {/* 5-Channel Mixer Strip */}
-          <LoopCardMixer card={props} />
+          <LoopCardMixer loop={loop} onSetMix={props.onSetMix} />
         </div>
       </div>
     </div>
