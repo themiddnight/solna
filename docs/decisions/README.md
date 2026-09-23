@@ -58,7 +58,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0041](0041-mobile-frame.md) | Mobile frame — bottom tabs, top bar, menu sheet | Below md, MobileShell renders a four-tab bottom dock over setActiveTab, a top bar with the field tools inline and a bottom-sheet Modal holding the other HEADER_TOOLS as rows plus the project actions; the tab bar owns the bottom inset. |
 | [0042](0042-flat-view-nav.md) | Flat view nav — no layer switch on desktop | The desktop Header shows all four views as two joins (loop tabs, song tabs) beside ProjectMenu, the tab implies the layer as on the phone, and no frame renders a Loop/Song switch. |
 | [0043](0043-hint-text-on-desktop-only.md) | Hint text on the desktop frame only | Prose that describes or teaches a surface wears `HINT_TEXT` and is hidden below `md`; state, feedback and warnings stay on every frame. |
-| [0044](0044-secondary-canvas-taxonomy.md) | Secondary-canvas taxonomy | Every overlay is one of eight kinds with one primitive each (Dock, Drawer, Bottom sheet, Modal, Popup, Quick pick, Toast/snackbar, Banner); one fixed z-scale; feedback queues and holds its timers while a dialog is open. |
+| [0044](0044-secondary-canvas-taxonomy.md) | Secondary-canvas taxonomy | Every overlay is one of five kinds with one primitive each (Dock, Drawer, Bottom sheet, Modal, Popup), plus quick pick and three feedback kinds (Toast, Snackbar, Banner); one fixed z-scale; feedback queues and holds its timers while a dialog is open. |
 
 ## Adding or changing a decision
 

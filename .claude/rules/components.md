@@ -98,7 +98,11 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - The z-scale is fixed end to end and a new layer takes one of its listed steps: 10 in-content
   overlays, 20 pinned view headers, 30 the input dock body, 40 frame bars, 50 drawer and popup
   panels plus full-screen overlays, 55 the feedback slot (above drawers, because a drawer action
-  can fire a toast), and the top layer for `Modal`/`BottomSheet`, above every z-index. <!-- R331 -->
+  can fire a toast), and the top layer for `Modal`/`BottomSheet`, above every z-index. A popup that
+  opens from inside a frame bar or the dock is capped by that parent's own stacking context, so the
+  feedback host can cover an open bar popup (the mobile Scale dropdown under a toast, say) even
+  though the popup's own step nominally outranks it — an accepted trade-off, not a bug to chase
+  with a one-off z-index. <!-- R331 -->
 
 ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 
@@ -130,6 +134,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A non-centered `Modal`, or a bottom sheet built from anything but `BottomSheet` <!-- R326 -->
 - A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
 - A popup rendered inside a bottom sheet, or positioned via the popover API or CSS anchor positioning <!-- R328 -->
-- Feedback rendered as an alert inside a modal, drawer or card body <!-- R329 -->
+- A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an
+  inline alert there instead of going through `showFeedback` <!-- R329 -->
 - A daisyUI `toast` class, a fixed alert outside `FeedbackHost`, or a toast/snackbar bypassing `showFeedback` <!-- R330 -->
 - A new z-index outside the listed scale <!-- R331 -->

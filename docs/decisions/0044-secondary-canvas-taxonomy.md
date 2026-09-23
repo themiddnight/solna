@@ -64,7 +64,8 @@ This is the only place feedback timing is paused or resumed.
 ### Rejected alternatives
 
 - The HTML popover API or CSS anchor positioning for popups and toasts: both sit above the
-  project's browser floor (Safari 16.4, and the iPhone Home-Screen PWA target).
+  project's browser floor (Tailwind v4's minimum supported browsers — see
+  `docs/dependency-upgrade-research.md` — and the iPhone Home-Screen PWA target).
 - A `fixed` popup panel positioned from `getBoundingClientRect`: needs scroll/resize listeners
   inside a scrolling `<main>` that the anchored `dropdown` avoids entirely.
 - A `ScaleMenu` `row` variant for the mobile menu sheet: no popup reaches the sheet today, so the
@@ -78,10 +79,18 @@ This is the only place feedback timing is paused or resumed.
 A new overlay or message picks a row of the taxonomy and a step of the z-scale instead of
 inventing a position, a z-index and a timer. `Modal` and `BottomSheet` share one platform-glue
 hook instead of one component carrying two shapes. Every preset library, including Beat's, looks
-and behaves the same. An error raised inside a Drive or export dialog is guaranteed to be seen,
-not silently expired behind the backdrop, at the cost of a small hold/release bookkeeping in the
-feedback slice and in `useNativeDialog`. A future surface that seems to need a new position or a
-bespoke timer is a signal that the taxonomy is missing a kind, not license to add an ad hoc one.
+and behaves the same. An error raised inside a Drive or export dialog is guaranteed to be visually
+seen, not silently expired behind the backdrop, at the cost of a small hold/release bookkeeping in
+the feedback slice and in `useNativeDialog` — while that dialog is open the entry is still inert to
+assistive tech, same as everything else behind an open `Modal`/`BottomSheet`, until it closes. A
+future surface that seems to need a new position or a bespoke timer is a signal that the taxonomy
+is missing a kind, not license to add an ad hoc one.
+
+A popup that opens from inside a frame bar or the input dock (step 40/30) is capped by that
+parent's own stacking context: even at its nominal step (50), it cannot rise above a step outside
+that parent, because painting is scoped to the ancestor's context first. The feedback host (55)
+can therefore cover an open bar popup — the mobile Scale dropdown under a toast, say. This is an
+accepted trade-off of the fixed z-scale, not a bug to chase with a higher one-off z-index.
 
 ## Rules this implies
 
