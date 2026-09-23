@@ -194,6 +194,17 @@ describe('chromatic keyboard black key geometry', () => {
   });
 });
 
+describe('SoundView markup hygiene', () => {
+  // Regression: a JSX gap between two sibling elements written as the four
+  // characters `\n\n` (backslash, n, backslash, n) is TEXT CONTENT, not
+  // whitespace — it renders as literal "\n\n" on screen rather than nothing.
+  // Pins the whole Sound section markup clean of that artefact.
+  test('renders no literal backslash-n escape-sequence text', () => {
+    const html = renderToString(<SoundView />);
+    expect(html).not.toContain('\\n');
+  });
+});
+
 /**
  * The drum-focus sound surface. It was the Drum Sound card (kit, filter,
  * level), moved here from the sequencer's Beat segment (nav restructure Task

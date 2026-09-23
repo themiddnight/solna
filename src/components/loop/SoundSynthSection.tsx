@@ -657,7 +657,9 @@ export function SoundSynthSection({
         overlays={overlays}
         soundGroups={soundGroups}
         onSwitchToPro={() => onDepth("pro")}
-      />\n\n      <SynthPresetDrawer
+      />
+
+      <SynthPresetDrawer
         overlays={overlays}
         synthTarget={synthTarget}
         showSoundBadges={depth === "pro"}
