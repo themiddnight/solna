@@ -10,6 +10,16 @@ const TONE_CLASS: Record<FeedbackTone, string> = {
   error: 'alert-error',
 };
 
+/**
+ * The React key for one feedback entry. `seq` is folded in so a replacement
+ * under the same `key` (same slot, new content) remounts rather than updates
+ * — the fade-in replays and the entry is re-announced to a screen reader,
+ * instead of the DOM node quietly swapping its text.
+ */
+export function feedbackEntryKey(entry: Pick<FeedbackEntry, 'key' | 'seq'>): string {
+  return `${entry.key}:${entry.seq}`;
+}
+
 /** Where the host hangs off its zero-height slot: above it, or below it. */
 const EDGE_CLASS = {
   // Desktop: above the input dock's toggle strip, which `pb-9` on <main> reserves.
@@ -70,7 +80,7 @@ export const FeedbackHost = React.memo(function FeedbackHost({ edge }: { edge: '
         className={`absolute inset-x-0 ${EDGE_CLASS[edge]} flex items-center gap-1.5 px-3 pointer-events-none`}
       >
         {entries.map((entry) => (
-          <FeedbackItem key={entry.key} entry={entry} onAction={runAction} />
+          <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
         ))}
       </div>
     </div>

@@ -224,6 +224,11 @@ function useArrangeDrag(loops: Loop[]) {
   return { sensors, handleDragEnd };
 }
 
+/** The loop-delete Undo snackbar's message — module-level, per useLoopUndo's stability contract. */
+function loopDeleteUndoMessage(deleted: DeletedLoop): string {
+  return `${loopLabel(deleted.loop)} deleted`;
+}
+
 /**
  * Delete with Undo. `deleteLoopLive` never stops a running transport: deleting
  * the loop it is playing loads the fallback in `deleteLoop`'s own single write,
@@ -236,7 +241,7 @@ export function useLoopDeleteUndo() {
   const { offer } = useLoopUndo<DeletedLoop>(
     undoLoopDelete,
     'btn-undo-loop-delete',
-    (deleted) => `${loopLabel(deleted.loop)} deleted`,
+    loopDeleteUndoMessage,
   );
 
   const onDelete = useCallback(

@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ACTION_CLUSTER, SECTION_HEADER } from './fieldClasses';
-import { cx } from './cx';
 import { PanelCard } from './PanelCard';
 
 export interface SectionCardProps {
@@ -72,15 +71,8 @@ export function SectionCard({
           {/* Its own cell, the way HeaderCard gives its actions one: a bare
               fragment here makes each button a direct child of a
               `justify-between` row, which spreads two buttons across the band
-              instead of grouping them opposite the title.
-
-              `relative` so an action can hang a toast off ITSELF. Anchoring
-              one to the card instead puts `top-full` at the bottom of the
-              whole section — hundreds of pixels from the button that raised
-              it, and off-screen on a tall card. */}
-          {actions !== undefined && (
-            <div className={cx(ACTION_CLUSTER, 'relative')}>{actions}</div>
-          )}
+              instead of grouping them opposite the title. */}
+          {actions !== undefined && <div className={ACTION_CLUSTER}>{actions}</div>}
         </div>
         {children}
       </div>

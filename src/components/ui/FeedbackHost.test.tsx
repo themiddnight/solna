@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import type { FeedbackEntry } from '@/store/feedback';
-import { FeedbackHost } from './FeedbackHost';
+import { FeedbackHost, feedbackEntryKey } from './FeedbackHost';
 
 afterEach(() => {
   useAppStore.setState({ feedback: [] });
@@ -87,5 +87,16 @@ describe('FeedbackHost', () => {
     const html = renderToString(<FeedbackHost edge="bottom" />);
     expect(html).not.toMatch(/class="[^"]*\btoast\b/);
     expect(html).not.toContain('fixed');
+  });
+
+  describe('feedbackEntryKey', () => {
+    test('folds seq into the key, so a replacement under the same key differs', () => {
+      expect(feedbackEntryKey({ key: 'drive', seq: 1 })).toBe('drive:1');
+      expect(feedbackEntryKey({ key: 'drive', seq: 2 })).not.toBe(feedbackEntryKey({ key: 'drive', seq: 1 }));
+    });
+
+    test('two different keys at the same seq never collide', () => {
+      expect(feedbackEntryKey({ key: 'drive', seq: 1 })).not.toBe(feedbackEntryKey({ key: 'vibe', seq: 1 }));
+    });
   });
 });

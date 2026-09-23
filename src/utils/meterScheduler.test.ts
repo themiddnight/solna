@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import {
   __observedElementCountForTests,
   __registrySizeForTests,
@@ -146,13 +146,21 @@ describe('registerMeter', () => {
   });
 
   test('one throwing onTick does not stop the others', () => {
-    let good = 0;
-    registerMeter({ id: 'bad', tier: 'master', onTick: () => { throw new Error('boom'); } });
-    registerMeter({ id: 'good', tier: 'master', onTick: () => { good += 1; } });
+    const warnings = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      let good = 0;
+      registerMeter({ id: 'bad', tier: 'master', onTick: () => { throw new Error('boom'); } });
+      registerMeter({ id: 'good', tier: 'master', onTick: () => { good += 1; } });
 
-    __tickForTests(FRAME_MS);
-    __tickForTests(2 * FRAME_MS);
-    expect(good).toBe(2);
+      __tickForTests(FRAME_MS);
+      __tickForTests(2 * FRAME_MS);
+      expect(good).toBe(2);
+      expect(warnings).toHaveBeenCalledTimes(2);
+      expect(warnings.mock.calls[0][0]).toBe('[meterScheduler] onTick failed for');
+      expect(warnings.mock.calls[0][1]).toBe('bad');
+    } finally {
+      warnings.mockRestore();
+    }
   });
 
   test('an unregistered meter stops ticking immediately', () => {

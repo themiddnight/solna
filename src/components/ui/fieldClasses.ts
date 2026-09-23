@@ -158,7 +158,7 @@ export const HEADER_FIELD_SHELL =
  * split. They were two literals that already differed by two modifiers, each
  * file's comment pointing at the other as the model, which is the tell that
  * they were meant to be one thing. Compose the per-band modifier at the call
- * site: `cx(ACTION_CLUSTER, 'empty:hidden')`, `cx(ACTION_CLUSTER, 'relative')`.
+ * site: `cx(ACTION_CLUSTER, 'empty:hidden')`.
  */
 export const ACTION_CLUSTER = 'flex items-center flex-wrap gap-1.5 min-h-8';
 

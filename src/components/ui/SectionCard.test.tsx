@@ -45,15 +45,8 @@ describe('SectionCard', () => {
       </SectionCard>,
     );
     expect(html).toContain('justify-between');
-    // Both buttons inside ONE element wearing the shared cluster token.
-    // Matched by parsing the cell out rather than by an exact class string:
-    // the class is `cx(ACTION_CLUSTER, 'relative')` and cx owns the order, so
-    // an exact literal made a class-order change a SectionCard failure.
-    const cell = /<div class="([^"]*)"><button>Save<\/button><button>Kit<\/button><\/div>/.exec(html);
-    expect(cell).not.toBeNull();
-    const classes = new Set((cell?.[1] ?? '').split(' '));
-    for (const token of ACTION_CLUSTER.split(' ')) expect(classes).toContain(token);
-    expect(classes).toContain('relative');
+    // Both buttons inside ONE element wearing the shared cluster class verbatim.
+    expect(html).toContain(`<div class="${ACTION_CLUSTER}"><button>Save</button><button>Kit</button></div>`);
   });
 
   test('no actions cell at all when a section has none', () => {

@@ -321,6 +321,7 @@ describe('saveToDrive', () => {
     useAppStore.setState({ projectSource: { kind: 'drive', fileId: 'drive-9' } });
     const result = await drive.saveToDrive();
     expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message.length > 0).toBe(true);
     expect(useAppStore.getState().projectSource).toEqual({ kind: 'drive', fileId: 'drive-9' });
     // NOT a `drive` toast: `saveToDrive`'s one caller (`saveProject`, through
     // ProjectMenu's `finishSave`) already toasts this exact result as an
@@ -332,6 +333,7 @@ describe('saveToDrive', () => {
     const { useAppStore, drive } = await freshStore();
     const result = await drive.saveToDrive();
     expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toBe(DRIVE_NOT_CONFIGURED_MESSAGE);
     expect(useAppStore.getState().projectSource).toEqual(UNTITLED_SOURCE);
   });
 });
@@ -372,6 +374,7 @@ describe('saveAsToDrive', () => {
     useAppStore.setState({ projectName: 'Sketch' });
     const result = await drive.saveAsToDrive('Remix');
     expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message.length > 0).toBe(true);
     // Same reasoning as saveToDrive: ProjectMenu's finishSave is the one
     // caller and already toasts this result.
     expect(driveFeedback(useAppStore)).toBeUndefined();

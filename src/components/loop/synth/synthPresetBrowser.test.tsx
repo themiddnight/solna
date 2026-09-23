@@ -34,10 +34,13 @@ describe('the synth preset toasts go through the feedback host (R330)', () => {
     renderToString(<BrowserProbe />);
     browser!.selectPreset(SYNTH_PRESETS[0]);
     const saved = useAppStore.getState().saveCustomPreset('Probe Patch', useAppStore.getState().synthParams, 'User');
-    browser!.adoptSavedPreset(saved);
-    const feedback = useAppStore.getState().feedback;
-    expect(feedback).toHaveLength(1);
-    expect(feedback[0].message).toBe(`Preset "Probe Patch" saved to User!`);
-    useAppStore.getState().deleteCustomPreset(saved.id);
+    try {
+      browser!.adoptSavedPreset(saved);
+      const feedback = useAppStore.getState().feedback;
+      expect(feedback).toHaveLength(1);
+      expect(feedback[0].message).toBe(`Preset "Probe Patch" saved to User!`);
+    } finally {
+      useAppStore.getState().deleteCustomPreset(saved.id);
+    }
   });
 });

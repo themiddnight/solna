@@ -30,9 +30,8 @@ export function ViewHeader({ view, badge, viewControls, actions }: ViewHeaderPro
   const { icon, title } = VIEW_META[view];
   // No `children` pass-through. It advertised a slot for absolutely-positioned
   // extras that no call site used, and the slot did not work: a child here
-  // lands in a `justify-between` flex row with no positioned ancestor, which
-  // is exactly why SoundView's save toast now hangs off SectionCard's actions
-  // cell instead. `children` stays live on HeaderCard, which SegmentHeader uses.
+  // lands in a `justify-between` flex row with no positioned ancestor. `children`
+  // stays live on HeaderCard, which SegmentHeader uses.
   return (
     <HeaderCard
       icon={icon}

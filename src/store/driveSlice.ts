@@ -44,10 +44,13 @@ export interface DriveSlice {
 }
 
 /**
- * The one place a Drive failure becomes either a toast or an outcome. The
- * transport already retried once on a 401 (withDriveToken), so anything that
- * arrives here is final: a `DriveAuthError` means the grant is gone and the
- * sign-in mirror must be corrected, and everything else is a sentence.
+ * Where most Drive failures become a toast; `saveToDrive`/`saveAsToDrive`
+ * are the exception — they return only an outcome, and their one caller
+ * (`ProjectMenu`'s `finishSave`) toasts it, so the same failure never shows
+ * twice. The transport already retried once on a 401 (withDriveToken), so
+ * anything that arrives here is final: a `DriveAuthError` means the grant is
+ * gone and the sign-in mirror must be corrected, and everything else is a
+ * sentence.
  *
  * The mirror is only ever CORRECTED here, never set to true — a token was
  * acquired explicitly by connectDrive, so only the call that asked for one may
