@@ -54,6 +54,7 @@ export function SegmentHeader({ segment, actions, children }: SegmentHeaderProps
       title={title}
       viewControls={activeSegment === segment ? <PatternSegmentRow /> : undefined}
       actions={actions}
+      sticky
     >
       {children}
     </HeaderCard>

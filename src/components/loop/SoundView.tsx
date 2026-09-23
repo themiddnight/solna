@@ -120,7 +120,7 @@ function SoundFocusChips({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap max-md:flex-nowrap items-center gap-2 min-w-0 max-w-full">
       {/* No "Focus:" GROUP_LABEL here — a decision, not an omission. The
           header's own title already says this is Sound, and the row sits
           right beside it with no room to spare for a caption that would
@@ -128,7 +128,7 @@ function SoundFocusChips({
       {/* Six chips, not five: `drum` is a focus like any other and Beat is
           where the drum kit is edited. */}
       <div
-        className={`flex items-center gap-1 flex-wrap bg-base-200 border rounded-box px-2 py-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
+        className={`flex items-center gap-1 flex-wrap max-md:flex-nowrap max-md:min-w-0 max-md:overflow-x-auto no-scrollbar max-md:*:shrink-0 bg-base-200 border rounded-box px-2 py-1 ${synthTarget ? SYNTH_TARGET_STYLES[synthTarget].border : 'border-accent'}`}
       >
         {MELODY_FOCUSES.map(renderFocusChip)}
         {/* Chord, bass and pad are one job done three ways. The frame is
@@ -185,6 +185,7 @@ export const SoundView = React.memo(function SoundView() {
           that is unmounted on a drum focus. */}
       <ViewHeader
         view="sound"
+        sticky
         viewControls={
           <SoundFocusChips
             focusTrack={focusTrack}
