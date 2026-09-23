@@ -29,7 +29,12 @@ import {
 
 /** The two header actions, and the saved-toast they fire. */
 interface ChordViewHeaderProps {
+  isQuickSaving: boolean;
   onOpenQuickSave: () => void;
+  onCloseQuickSave: () => void;
+  quickSaveName: string;
+  onQuickSaveNameChange: (name: string) => void;
+  onQuickSaveSubmit: (e: React.FormEvent) => void;
   onOpenLibrary: () => void;
   totalProgressionsCount: number;
   saveToast: string | null;
@@ -41,7 +46,12 @@ interface ChordViewHeaderProps {
  * rather than a sibling further down the tree.
  */
 function ChordViewHeader({
+  isQuickSaving,
   onOpenQuickSave,
+  onCloseQuickSave,
+  quickSaveName,
+  onQuickSaveNameChange,
+  onQuickSaveSubmit,
   onOpenLibrary,
   totalProgressionsCount,
   saveToast,
@@ -51,16 +61,26 @@ function ChordViewHeader({
       segment="accompaniment"
       actions={
         <>
-          {/* Quick Save Current Progression */}
-          <button
-            id="btn-quick-save-chord-progression"
-            onClick={onOpenQuickSave}
-            className="btn btn-sm btn-ghost gap-1"
-            title="Save chord progression"
-          >
-            <Bookmark className="w-3.5 h-3.5 text-module-chord" />
-            <span className="hidden sm:inline">Save</span>
-          </button>
+          {/* Quick Save Current Progression — the trigger and its anchored
+              panel are one component (R328). */}
+          <QuickSavePopover
+            open={isQuickSaving}
+            onOpen={onOpenQuickSave}
+            onClose={onCloseQuickSave}
+            trigger={{
+              id: 'btn-quick-save-chord-progression',
+              label: 'Save',
+              icon: <Bookmark className="w-3.5 h-3.5 text-module-chord" />,
+              className: 'btn btn-sm btn-ghost gap-1',
+              title: 'Save chord progression',
+            }}
+            heading="Save Custom Chord Progression to Browser:"
+            placeholder="Progression Name..."
+            saveLabel="Save Progression"
+            name={quickSaveName}
+            onNameChange={onQuickSaveNameChange}
+            onSubmit={onQuickSaveSubmit}
+          />
 
           {/* Open Presets Library Drawer Button */}
           <button
@@ -149,22 +169,15 @@ export const ChordView = React.memo(function ChordView() {
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
       {/* Scale & Chord Studio Header */}
       <ChordViewHeader
+        isQuickSaving={saves.isQuickSaving}
         onOpenQuickSave={saves.openQuickSave}
+        onCloseQuickSave={saves.closeQuickSave}
+        quickSaveName={saves.quickSaveName}
+        onQuickSaveNameChange={saves.setQuickSaveName}
+        onQuickSaveSubmit={saves.handleQuickSaveSubmit}
         onOpenLibrary={() => setIsLibraryOpen(true)}
         totalProgressionsCount={palette.totalProgressionsCount}
         saveToast={saves.saveToast}
-      />
-
-      {/* Quick Save Modal Popover */}
-      <QuickSavePopover
-        open={saves.isQuickSaving}
-        onClose={saves.closeQuickSave}
-        heading="Save Custom Chord Progression to Browser:"
-        placeholder="Progression Name..."
-        saveLabel="Save Progression"
-        name={saves.quickSaveName}
-        onNameChange={saves.setQuickSaveName}
-        onSubmit={saves.handleQuickSaveSubmit}
       />
 
       <ProgressionCard

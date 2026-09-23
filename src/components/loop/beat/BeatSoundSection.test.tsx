@@ -144,7 +144,11 @@ describe('the Beat voice grid', () => {
       expect(html).not.toContain(`id="beat-voice-body-${id}"`);
       expect(html).not.toContain(`id="btn-beat-more-${id}"`);
     }
-    expect(html).not.toContain('aria-expanded');
+    // Scoped to the grid itself: the band's own Quick Save trigger legitimately
+    // carries `aria-expanded` now (an anchored popup, R328), and that lives
+    // before the grid in the markup, not inside a voice card.
+    const gridHtml = html.slice(html.indexOf(`id="beat-voice-card-${BEAT_VOICE_IDS[0]}"`));
+    expect(gridHtml).not.toContain('aria-expanded');
   });
 
   /* The header is ONE LINE, the way the synth rack's is: a numbered title run

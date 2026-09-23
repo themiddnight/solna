@@ -1,10 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { QuickSavePopover, isDismissKey } from './QuickSavePopover';
+import { QuickSavePopover, isDismissKey, popupShift } from './QuickSavePopover';
+
+const trigger = {
+  id: 'btn-quick-save-test',
+  label: 'Save',
+  icon: <span data-testid="icon" />,
+  className: 'btn btn-sm btn-ghost gap-1',
+  title: 'Save preset',
+};
 
 const base = {
-  open: true,
+  onOpen: () => {},
   onClose: () => {},
+  trigger,
   heading: 'Save Custom Preset:',
   placeholder: 'Preset Name...',
   saveLabel: 'Save Patch',
@@ -14,44 +23,38 @@ const base = {
 };
 
 describe('QuickSavePopover', () => {
-  test('buttonClassName is appended with a separating space', () => {
-    const html = renderToString(
-      <QuickSavePopover {...base} buttonClassName="cursor-pointer" />,
-    );
-    // Without the space the two classes fuse into one dead class
-    // ("shrink-0cursor-pointer") and BOTH are lost.
-    expect(html).toContain('shrink-0 cursor-pointer');
-    expect(html).not.toContain('shrink-0cursor-pointer');
+  test('closed renders only the trigger button, no panel', () => {
+    const html = renderToString(<QuickSavePopover {...base} open={false} />);
+    expect(html).toContain('id="btn-quick-save-test"');
+    expect(html).not.toContain('dropdown-open');
+    expect(html).not.toContain('dropdown-content');
+    expect(html).not.toContain('<input');
   });
 
-  test('a leading-space buttonClassName does not double up', () => {
-    const html = renderToString(
-      <QuickSavePopover {...base} buttonClassName=" cursor-pointer" />,
-    );
-    expect(html).toContain('cursor-pointer');
-    expect(html).not.toContain('shrink-0  cursor-pointer');
-  });
-
-  test('defaults use daisyUI card/input/button tokens', () => {
-    const html = renderToString(<QuickSavePopover {...base} />);
-    expect(html).toContain('card bg-base-100 border border-primary/40');
+  test('open renders the anchored dropdown-content panel with the name input', () => {
+    const html = renderToString(<QuickSavePopover {...base} open={true} />);
+    expect(html).toContain('dropdown dropdown-end dropdown-open');
+    expect(html).toContain('dropdown-content');
+    expect(html).toContain('id="btn-quick-save-test"');
     expect(html).toContain('input input-sm');
+    expect(html).toContain('Save Custom Preset:');
     expect(html).toContain('btn btn-sm btn-primary');
     expect(html).toContain('btn btn-sm btn-ghost');
-    expect(html).toContain('text-base-content');
-    expect(html).toContain('text-primary');
-    expect(html).not.toContain('#0B0D19');
-    expect(html).not.toContain('#2D355A');
-    expect(html).not.toContain('#171B38');
-    expect(html).not.toContain('indigo-');
-    expect(html).not.toContain('slate-');
-    expect(html).not.toContain('text-white');
   });
 
-  test('the optional category select is a daisyUI select', () => {
+  test('the trigger carries aria-haspopup/aria-expanded reflecting open', () => {
+    const closedHtml = renderToString(<QuickSavePopover {...base} open={false} />);
+    const openHtml = renderToString(<QuickSavePopover {...base} open={true} />);
+    expect(closedHtml).toContain('aria-haspopup="dialog"');
+    expect(closedHtml).toContain('aria-expanded="false"');
+    expect(openHtml).toContain('aria-expanded="true"');
+  });
+
+  test('the optional category select renders only when open and given', () => {
     const html = renderToString(
       <QuickSavePopover
         {...base}
+        open={true}
         categories={[{ id: 'lead', label: 'Lead' }]}
         category="lead"
         onCategoryChange={() => {}}
@@ -61,18 +64,23 @@ describe('QuickSavePopover', () => {
     expect(html).toContain('Lead');
   });
 
-  test('caller class overrides still win', () => {
-    const html = renderToString(
-      <QuickSavePopover
-        {...base}
-        inputClassName="input input-sm flex-1 min-w-[140px]"
-      />,
-    );
-    expect(html).toContain('min-w-[140px]');
+  test('no daisyUI theme escape hatches (raw hex/palette classes)', () => {
+    const html = renderToString(<QuickSavePopover {...base} open={true} />);
+    expect(html).not.toContain('#0B0D19');
+    expect(html).not.toContain('indigo-');
+    expect(html).not.toContain('slate-');
+    expect(html).not.toContain('text-white');
   });
 
-  test('open=false renders nothing', () => {
-    expect(renderToString(<QuickSavePopover {...base} open={false} />)).toBe('');
+  /**
+   * autoFocus is replaced by an effect that records the trigger first, so the
+   * popover can hand focus back when it closes. The attribute must be gone
+   * from the markup or React focuses the input before the effect can look at
+   * document.activeElement.
+   */
+  test('the name input no longer carries autoFocus', () => {
+    const html = renderToString(<QuickSavePopover {...base} open={true} />);
+    expect(html).not.toContain('autofocus');
   });
 });
 
@@ -83,27 +91,24 @@ describe('QuickSavePopover dismissal', () => {
     expect(isDismissKey({ key: 'Esc' })).toBe(false);   // the IE spelling is not a browser we ship to
     expect(isDismissKey({ key: 'a' })).toBe(false);
   });
+});
 
-  /**
-   * autoFocus is replaced by an effect that records the trigger first, so the
-   * popover can hand focus back when it closes. The attribute must be gone from
-   * the markup or React focuses the input before the effect can look at
-   * document.activeElement.
-   */
-  test('the name input no longer carries autoFocus', () => {
-    const html = renderToString(
-      <QuickSavePopover
-        open
-        onClose={() => {}}
-        heading="Save"
-        placeholder="Name"
-        saveLabel="Save"
-        name=""
-        onNameChange={() => {}}
-        onSubmit={() => {}}
-      />,
-    );
-    expect(html).not.toContain('autofocus');
-    expect(html).toContain('class="input input-sm flex-1"');
+describe('popupShift', () => {
+  test('a panel that already fits needs no shift', () => {
+    expect(popupShift({ left: 100, right: 300 }, 500)).toBe(0);
+  });
+
+  test('a panel overflowing the left edge shifts right by the overhang plus margin', () => {
+    expect(popupShift({ left: -20, right: 200 }, 500, 8)).toBe(28);
+  });
+
+  test('a panel overflowing the right edge shifts left by the overhang plus margin', () => {
+    expect(popupShift({ left: 400, right: 600 }, 500, 8)).toBe(-108);
+  });
+
+  test('a panel wider than the viewport pins its left edge to the margin', () => {
+    // width (650) exceeds viewportWidth - 2*margin (484): pin left to 8,
+    // rather than try (and fail) to also satisfy the right edge.
+    expect(popupShift({ left: -50, right: 600 }, 500, 8)).toBe(58);
   });
 });

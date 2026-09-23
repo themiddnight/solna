@@ -67,7 +67,7 @@ function FocusChip({
         <span>{MIX_LAYER_LABELS[focusTrack]}</span>
       </button>
       <ul
-        className="dropdown-content menu menu-sm z-40 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
+        className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
       >
         {MIX_LAYER_IDS.map((id) => (
           <li key={id}>

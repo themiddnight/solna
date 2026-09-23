@@ -94,26 +94,44 @@ const BEAT_TINT_CLASS = 'ring-1 ring-accent/40 tint-accent';
  */
 function BeatSectionActions({
   base,
-  onQuickSave,
+  isSaving,
+  saveName,
+  onOpenQuickSave,
+  onCloseQuickSave,
+  onSaveNameChange,
+  onQuickSaveSubmit,
   onResetAll,
 }: {
   /** The resolved base preset, or undefined when the loop names none. */
   base: BeatPreset | undefined;
-  onQuickSave: () => void;
+  isSaving: boolean;
+  saveName: string;
+  onOpenQuickSave: () => void;
+  onCloseQuickSave: () => void;
+  onSaveNameChange: (name: string) => void;
+  onQuickSaveSubmit: (e: React.FormEvent) => void;
   onResetAll: () => void;
 }) {
   return (
     <>
-      <button
-        id="btn-beat-quick-save"
-        type="button"
-        className="btn btn-sm btn-ghost gap-1 border border-base-300 text-xs font-semibold"
-        title="Save Beat preset"
-        onClick={onQuickSave}
-      >
-        <Bookmark className="w-3.5 h-3.5 text-secondary" />
-        <span className="hidden sm:inline">Save</span>
-      </button>
+      <QuickSavePopover
+        open={isSaving}
+        onOpen={onOpenQuickSave}
+        onClose={onCloseQuickSave}
+        trigger={{
+          id: 'btn-beat-quick-save',
+          label: 'Save',
+          icon: <Bookmark className="w-3.5 h-3.5 text-secondary" />,
+          className: 'btn btn-sm btn-ghost gap-1 border border-base-300 text-xs font-semibold',
+          title: 'Save Beat preset',
+        }}
+        heading="Save Beat Preset:"
+        placeholder="Preset Name..."
+        saveLabel="Save Beat"
+        name={saveName}
+        onNameChange={onSaveNameChange}
+        onSubmit={onQuickSaveSubmit}
+      />
       {/* Source-dependent: a reset copies from the base preset, and there is
           nothing to copy from when the base cannot be resolved. */}
       <button
@@ -241,32 +259,23 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
       actions={
         <BeatSectionActions
           base={base}
-          onQuickSave={() => {
+          isSaving={isSaving}
+          saveName={saveName}
+          onOpenQuickSave={() => {
             setSaveName(base ? `${base.name} Edit` : 'My Beat');
             setIsSaving(true);
+          }}
+          onCloseQuickSave={() => setIsSaving(false)}
+          onSaveNameChange={setSaveName}
+          onQuickSaveSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            saveCustomBeatPreset(saveName, beatParams);
+            setIsSaving(false);
           }}
           onResetAll={resetBeatParams}
         />
       }
     >
-      {/* In the section BODY, not hung off the band's action: the popover is a
-          full-width form, and `ACTION_CLUSTER` wraps, so anchoring it to the
-          cluster would have it reflow the band it was opened from. */}
-      <QuickSavePopover
-        open={isSaving}
-        onClose={() => setIsSaving(false)}
-        heading="Save Beat Preset:"
-        placeholder="Preset Name..."
-        saveLabel="Save Beat"
-        name={saveName}
-        onNameChange={setSaveName}
-        onSubmit={(e: React.FormEvent) => {
-          e.preventDefault();
-          saveCustomBeatPreset(saveName, beatParams);
-          setIsSaving(false);
-        }}
-      />
-
       {/* The KIT ROW: everything here is bus-level — how the whole kit is
           filtered, and which kit it is. Everything below it is per-voice.
           That split is why the filter is not a card: a card in this editor

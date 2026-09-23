@@ -81,27 +81,41 @@ function SynthSectionActions({
   soundGroups,
   presetCount,
   toast,
-  onQuickSave,
+  overlays,
+  onOpenQuickSave,
   onOpenLibrary,
 }: {
   synthTarget: SynthControlTarget;
   soundGroups: Record<SynthControlTarget, LoopCopyGroupId>;
   presetCount: number;
   toast: string | null;
-  onQuickSave: () => void;
+  overlays: SynthOverlays;
+  onOpenQuickSave: () => void;
   onOpenLibrary: () => void;
 }) {
   return (
     <>
-      <button
-        id="btn-quick-save-preset"
-        onClick={onQuickSave}
-        className="btn btn-sm btn-ghost gap-1 border border-base-300 text-xs font-semibold"
-        title="Save preset"
-      >
-        <Bookmark className="w-3.5 h-3.5 text-primary" />
-        <span className="hidden sm:inline">Save</span>
-      </button>
+      <QuickSavePopover
+        open={overlays.isQuickSaving}
+        onOpen={onOpenQuickSave}
+        onClose={overlays.closeQuickSave}
+        trigger={{
+          id: 'btn-quick-save-preset',
+          label: 'Save',
+          icon: <Bookmark className="w-3.5 h-3.5 text-primary" />,
+          className: 'btn btn-sm btn-ghost gap-1 border border-base-300 text-xs font-semibold',
+          title: 'Save preset',
+        }}
+        heading="Save Custom Preset to LocalStorage:"
+        placeholder="Preset Name..."
+        saveLabel="Save Patch"
+        name={overlays.quickSaveName}
+        onNameChange={overlays.setQuickSaveName}
+        categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
+        category={overlays.quickSaveCategory}
+        onCategoryChange={(v) => overlays.setQuickSaveCategory(v as SynthPresetCategory)}
+        onSubmit={overlays.handleQuickSaveSubmit}
+      />
 
       <button
         id="btn-open-presets-library"
@@ -451,25 +465,6 @@ function SynthPanels({
  * with the section that raises it — a drum focus has no synth patch for it to
  * save.
  */
-function SynthQuickSaveOverlay({ overlays }: { overlays: SynthOverlays }) {
-  return (
-    <QuickSavePopover
-      open={overlays.isQuickSaving}
-      onClose={overlays.closeQuickSave}
-      heading="Save Custom Preset to LocalStorage:"
-      placeholder="Preset Name..."
-      saveLabel="Save Patch"
-      name={overlays.quickSaveName}
-      onNameChange={overlays.setQuickSaveName}
-      categories={SYNTH_CATEGORIES.map((c) => ({ id: c.id, label: c.label }))}
-      category={overlays.quickSaveCategory}
-      onCategoryChange={(v) => overlays.setQuickSaveCategory(v as SynthPresetCategory)}
-      onSubmit={overlays.handleQuickSaveSubmit}
-      formClassName="flex items-center gap-2 flex-1 max-w-xl flex-wrap sm:flex-nowrap"
-    />
-  );
-}
-
 /**
  * Preset Library Sidebar Drawer / Modal. Gated with the Synth section: the
  * library edits whichever synth patch `target` names, and a drum focus names
@@ -579,7 +574,8 @@ function SynthCard({
           soundGroups={soundGroups}
           presetCount={browser.allPresets.length}
           toast={browser.saveToast}
-          onQuickSave={() =>
+          overlays={overlays}
+          onOpenQuickSave={() =>
             overlays.openQuickSave(
               browser.activePresetItem?.name ?? '',
               browser.activePresetItem?.category,
@@ -661,11 +657,7 @@ export function SoundSynthSection({
         overlays={overlays}
         soundGroups={soundGroups}
         onSwitchToPro={() => onDepth("pro")}
-      />
-
-      <SynthQuickSaveOverlay overlays={overlays} />
-
-      <SynthPresetDrawer
+      />\n\n      <SynthPresetDrawer
         overlays={overlays}
         synthTarget={synthTarget}
         showSoundBadges={depth === "pro"}
