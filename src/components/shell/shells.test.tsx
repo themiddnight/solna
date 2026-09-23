@@ -88,7 +88,7 @@ describe('the shells', () => {
 
   test('no shell mounts the host, a coordinator or an app-level dialog (R316)', () => {
     for (const file of [
-      './DesktopShell.tsx', './MobileShell.tsx', './LayerPages.tsx', './MobileTabBar.tsx',
+      './DesktopShell.tsx', './MobileShell.tsx', './ShellBody.tsx', './LayerPages.tsx', './MobileTabBar.tsx',
       './MobileTopBar.tsx', './useMobileTopBar.ts',
     ]) {
       const src = read(file);
@@ -108,11 +108,10 @@ describe('Workspace keeps what survives a layout switch', () => {
     }
   });
 
-  test('the host precedes both shells, and each dialog is mounted once', () => {
+  test('the host precedes the shell, and each dialog is mounted once', () => {
     const host = app.indexOf('<PlaybackHost />');
     expect(host).toBeGreaterThan(-1);
-    expect(host).toBeLessThan(app.indexOf('<DesktopShell'));
-    expect(host).toBeLessThan(app.indexOf('<MobileShell'));
+    expect(host).toBeLessThan(app.indexOf('<Shell'));
     for (const dialog of ['<IncidentDialog />', '<MidiSettingsModal />', '<ProjectNotice />']) {
       expect(app.split(dialog).length - 1).toBe(1);
     }
@@ -120,6 +119,7 @@ describe('Workspace keeps what survives a layout switch', () => {
 
   test('the frame is picked by useLayoutMode', () => {
     expect(app).toContain('useLayoutMode()');
+    expect(app).toContain("mode === 'desktop' ? DesktopShell : MobileShell");
   });
 
   // A switch remounts the on-screen keyboard mid-press; the input deck

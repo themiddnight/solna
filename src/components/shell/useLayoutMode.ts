@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { browserMatchMedia, createMediaQuerySource, type MatchMedia } from '../ui/mediaQuerySource';
 
 /** Which frame the workspace renders. Width only: no pointer, hover or orientation query. */
 export type LayoutMode = 'desktop' | 'mobile';
@@ -10,43 +11,22 @@ export type LayoutMode = 'desktop' | 'mobile';
  */
 export const LAYOUT_MODE_QUERY = '(min-width: 46.5rem)';
 
-type MediaQuery = Pick<MediaQueryList, 'matches' | 'addEventListener' | 'removeEventListener'>;
-type MatchMedia = (query: string) => MediaQuery;
-
 /**
- * The layout mode as an external store over one MediaQueryList, created on
- * first read so importing this module touches no browser API. With no
- * `matchMedia` (bun test, a non-browser host) the mode is desktop.
+ * The layout mode over one media query. With no `matchMedia` (bun test, a
+ * non-browser host) the mode is desktop.
  */
 export function createLayoutModeSource(matchMedia: MatchMedia | undefined): {
   subscribe: (onChange: () => void) => () => void;
   getSnapshot: () => LayoutMode;
 } {
-  let list: MediaQuery | null = null;
-  const mediaQuery = (): MediaQuery | null => {
-    if (!matchMedia) return null;
-    list ??= matchMedia(LAYOUT_MODE_QUERY);
-    return list;
-  };
+  const source = createMediaQuerySource(LAYOUT_MODE_QUERY, matchMedia);
   return {
-    subscribe(onChange) {
-      const query = mediaQuery();
-      if (!query) return () => {};
-      query.addEventListener('change', onChange);
-      return () => query.removeEventListener('change', onChange);
-    },
-    getSnapshot() {
-      const query = mediaQuery();
-      return query === null || query.matches ? 'desktop' : 'mobile';
-    },
+    subscribe: source.subscribe,
+    getSnapshot: () => (source.matches() === false ? 'mobile' : 'desktop'),
   };
 }
 
-const browserSource = createLayoutModeSource(
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? (query) => window.matchMedia(query)
-    : undefined,
-);
+const browserSource = createLayoutModeSource(browserMatchMedia);
 
 const serverSnapshot = (): LayoutMode => 'desktop';
 

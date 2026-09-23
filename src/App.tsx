@@ -123,6 +123,7 @@ function Workspace() {
   // Desktop or mobile frame, by viewport width only (R315). Everything above
   // and every element outside the shell below survives a switch (R316).
   const mode = useLayoutMode();
+  const Shell = mode === 'desktop' ? DesktopShell : MobileShell;
 
   // Global input: owns the QWERTY listeners + note playing, feeds the dock.
   // Given the mode because a switch remounts the on-screen keyboard mid-press:
@@ -173,23 +174,13 @@ function Workspace() {
           hook order stays ahead of every page's clock listener. */}
       <PlaybackHost />
 
-      {mode === 'desktop' ? (
-        <DesktopShell
-          keyboardProps={keyboardProps}
-          drumProps={drumProps}
-          updateReady={updateReady}
-          onApplyUpdate={applyPendingUpdate}
-          onDismissUpdate={dismissUpdate}
-        />
-      ) : (
-        <MobileShell
-          keyboardProps={keyboardProps}
-          drumProps={drumProps}
-          updateReady={updateReady}
-          onApplyUpdate={applyPendingUpdate}
-          onDismissUpdate={dismissUpdate}
-        />
-      )}
+      <Shell
+        keyboardProps={keyboardProps}
+        drumProps={drumProps}
+        updateReady={updateReady}
+        onApplyUpdate={applyPendingUpdate}
+        onDismissUpdate={dismissUpdate}
+      />
 
       <IncidentDialog />
 

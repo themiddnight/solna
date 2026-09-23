@@ -48,7 +48,7 @@ export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) 
 /**
  * The phone's top bar: the wordmark, the layer's field tools (loop picker + key,
  * or the project name), and the menu button. Replaces the desktop Header's
- * layer switch and tab nav, which the bottom tab bar covers.
+ * tab nav, which the bottom tab bar covers.
  */
 export const MobileTopBar = React.memo(function MobileTopBar() {
   const { bar, menu, menuOpen, openMenu, closeMenu } = useMobileTopBar();

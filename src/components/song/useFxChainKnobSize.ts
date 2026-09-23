@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { KnobSize } from '@/utils/knob';
+import { browserMatchMedia, createMediaQuerySource } from '../ui/mediaQuerySource';
 
 /**
  * Tailwind v4's default `lg` breakpoint. Below it the FX chain runs four cards
@@ -11,21 +12,11 @@ import type { KnobSize } from '@/utils/knob';
  */
 const WIDE_QUERY = '(min-width: 64rem)';
 
-const mediaQuery = (): MediaQueryList | null =>
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia(WIDE_QUERY)
-    : null;
+const wide = createMediaQuerySource(WIDE_QUERY, browserMatchMedia);
 
-function subscribe(onChange: () => void): () => void {
-  const query = mediaQuery();
-  if (!query) return () => {};
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-}
-
-const getSnapshot = (): KnobSize => (mediaQuery()?.matches === false ? 'sm' : 'md');
+const getSnapshot = (): KnobSize => (wide.matches() === false ? 'sm' : 'md');
 const getServerSnapshot = (): KnobSize => 'md';
 
 export function useFxChainKnobSize(): KnobSize {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(wide.subscribe, getSnapshot, getServerSnapshot);
 }
