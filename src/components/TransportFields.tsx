@@ -50,6 +50,14 @@ export function TempoField({
 }) {
   const [bpmDraft, setBpmDraft] = React.useState<string | null>(null);
 
+  // The sheet is a phone surface whose main control is this stepper: its
+  // buttons take the 44px touch target the bar's own toggles use. The desktop
+  // bar keeps its compact 24px buttons.
+  const sheet = place === 'sheet';
+  const stepSize = sheet ? 'sm' : 'xs';
+  const stepClass = sheet ? 'min-h-11 min-w-11' : undefined;
+  const stepIcon = sheet ? 'w-4 h-4' : 'w-3 h-3';
+
   const commitBpm = () => {
     if (bpmDraft !== null) setBpm(Number(bpmDraft));
     setBpmDraft(null);
@@ -60,8 +68,9 @@ export function TempoField({
       <span className={fieldLabel(place)}>BPM</span>
       <IconButton
         label="Decrease BPM"
-        icon={<Minus className="w-3 h-3" />}
-        size="xs"
+        icon={<Minus className={stepIcon} />}
+        size={stepSize}
+        className={stepClass}
         onClick={() => setBpm(Math.max(40, bpm - 1))}
       />
       <input
@@ -79,8 +88,9 @@ export function TempoField({
       />
       <IconButton
         label="Increase BPM"
-        icon={<Plus className="w-3 h-3" />}
-        size="xs"
+        icon={<Plus className={stepIcon} />}
+        size={stepSize}
+        className={stepClass}
         onClick={() => setBpm(Math.min(240, bpm + 1))}
       />
     </div>

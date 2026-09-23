@@ -86,7 +86,18 @@ describe('BottomSheet modal={false}', () => {
   });
 
   test('boxClassName composes onto the dialog itself', () => {
-    expect(sheet({ boxClassName: 'space-y-3' })).toMatch(/<dialog class="[^"]* p-4 space-y-3"/);
+    expect(sheet({ boxClassName: 'space-y-3' })).toMatch(/<dialog class="[^"]* p-4 [^"]*space-y-3"/);
+  });
+
+  test('rises in on open and reverses on close, and stays still under reduced motion', () => {
+    const cls = /<dialog class="([^"]*)"/.exec(sheet())?.[1].split(' ') ?? [];
+    expect(cls).toEqual(expect.arrayContaining([
+      'transition-discrete',
+      'opacity-0',
+      'open:opacity-100',
+      'starting:open:opacity-0',
+      'motion-reduce:transition-none',
+    ]));
   });
 
   test('markup does not depend on the open prop', () => {

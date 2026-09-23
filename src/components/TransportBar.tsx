@@ -1,5 +1,6 @@
 import React from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronUp } from "lucide-react";
+import { cx } from "./ui/cx";
 import { IconButton } from "./ui/IconButton";
 import { PlayerTransport } from "./ui/PlayerTransport";
 import { PlayheadReadout } from "./PlayheadReadout";
@@ -132,14 +133,15 @@ export function TransportReadout({ bpm, meterId, metronomeActive, open, onToggle
 
 /**
  * The chevron that opens and closes the transport sheet. It points where the
- * sheet will move: up while closed (the sheet rises out of the bar), down while open.
+ * sheet will move: up while closed (the sheet rises out of the bar), and turns
+ * to point down while open, in step with the sheet's own transition.
  */
 function SheetToggle({ open, onToggle }: SheetToggleProps) {
   return (
     <IconButton
       id="btn-transport-sheet"
       label="Transport settings"
-      icon={open ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+      icon={<ChevronUp className={cx('w-4 h-4 transition-transform duration-200 ease-out motion-reduce:transition-none', open && 'rotate-180')} />}
       aria-expanded={open}
       aria-controls={TRANSPORT_SHEET_ID}
       className="min-h-11 min-w-11 shrink-0"

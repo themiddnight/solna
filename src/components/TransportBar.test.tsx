@@ -272,6 +272,12 @@ describe('the transport sheet', () => {
     expect(html).toContain('<span class="tabular-nums text-[10px] text-base-content/60 w-14 text-right shrink-0">0.0 dB</span>');
   });
 
+  test('the BPM stepper buttons take a 44px touch target', () => {
+    for (const label of ['Decrease BPM', 'Increase BPM']) {
+      expect(html).toMatch(new RegExp(`aria-label="${label}"[^>]*class="[^"]*btn-sm[^"]*min-h-11 min-w-11"`));
+    }
+  });
+
   test('the metronome is a labelled toggle that states its pressed state', () => {
     expect(html).toMatch(/<button id="btn-transport-metronome" type="button" aria-pressed="true" class="btn btn-sm gap-1.5 text-xs btn-primary"/);
     expect(html).toContain('Metronome</button>');

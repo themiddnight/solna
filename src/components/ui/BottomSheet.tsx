@@ -35,9 +35,17 @@ export interface BottomSheetProps {
  * one inset consumer stays below it (R321). `z-40` is the frame-bar step of
  * R331, the bar it belongs to; `max-h-[60dvh]` keeps a landscape phone's top
  * bar in view.
+ *
+ * It rises and fades in over a short distance on open and reverses on close:
+ * `starting:` (`@starting-style`) gives the first frame after `show()`, and
+ * `transition-discrete` keeps `display` from switching to `none` before the
+ * close transition has run. A browser without either (the Safari floor) opens
+ * and closes it instantly, which is the whole fallback; reduced motion does too.
  */
 const NON_MODAL_SHEET =
   'absolute bottom-full inset-x-0 z-40 m-0 w-full max-w-none max-h-[60dvh] overflow-y-auto overscroll-contain bg-base-100 text-base-content border-t border-base-300 rounded-t-box shadow-2xl p-4';
+const NON_MODAL_SHEET_MOTION =
+  'transition-[opacity,translate,display] transition-discrete duration-200 ease-out opacity-0 translate-y-2 open:opacity-100 open:translate-y-0 starting:open:opacity-0 starting:open:translate-y-2 motion-reduce:transition-none';
 
 function SheetHeader({ title, titleId, onClose }: { title: ReactNode; titleId?: string; onClose: () => void }) {
   return (
@@ -75,7 +83,7 @@ export function BottomSheet({
 
   if (!modal) {
     return (
-      <dialog ref={ref} id={id} aria-labelledby={titleId} className={cx(NON_MODAL_SHEET, boxClassName)}>
+      <dialog ref={ref} id={id} aria-labelledby={titleId} className={cx(NON_MODAL_SHEET, NON_MODAL_SHEET_MOTION, boxClassName)}>
         <SheetHeader title={title} titleId={titleId} onClose={onClose} />
         {children}
         {afterBox}
