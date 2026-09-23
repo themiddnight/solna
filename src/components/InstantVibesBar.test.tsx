@@ -8,8 +8,6 @@ import { startEngineSync, stopEngineSync } from '../store/engineSync';
 import { InstantVibesBar } from './InstantVibesBar';
 import { rerollVibe, selectVibe } from './vibeActions';
 
-const noop = { onToast: () => {} };
-
 beforeEach(() => {
   spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
   spyOn(audioEngine, 'resetClock').mockClear();
@@ -17,6 +15,7 @@ beforeEach(() => {
     sequencerPlayer: 'stopped',
     chordsPlayer: 'stopped',
     selectedVibeId: null,
+    feedback: [],
   });
 });
 
@@ -24,7 +23,7 @@ describe('selectVibe', () => {
   test('does not start playback when transport is stopped', () => {
     useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
 
-    selectVibe(VIBES[0], noop);
+    selectVibe(VIBES[0]);
 
     const state = useAppStore.getState();
     expect(state.sequencerPlayer).toBe('stopped');
@@ -35,7 +34,7 @@ describe('selectVibe', () => {
   test('does not stop playback when transport is playing', () => {
     useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
 
-    selectVibe(VIBES[0], noop);
+    selectVibe(VIBES[0]);
 
     const state = useAppStore.getState();
     expect(state.sequencerPlayer).toBe('playing');
@@ -48,9 +47,17 @@ describe('selectedVibeId', () => {
     // The id is persisted, so a reload restores the highlight of whichever
     // vibe was loaded rather than a separate, hardcoded default.
     for (const vibe of VIBES) {
-      selectVibe(vibe, noop);
+      selectVibe(vibe);
       expect(useAppStore.getState().selectedVibeId).toBe(vibe.id);
     }
+  });
+
+  test('loading confirms through the feedback host', () => {
+    selectVibe(VIBES[0]);
+    const [entry] = useAppStore.getState().feedback;
+    expect(entry.key).toBe('vibe');
+    expect(entry.tone).toBe('success');
+    expect(entry.message.startsWith(`Loaded ${VIBES[0].name} (${VIBES[0].bpm} BPM · Key `)).toBe(true);
   });
 
   test('vibe ids are unique, so at most one chip can ever match', () => {
@@ -85,8 +92,6 @@ describe('InstantVibesBar markup', () => {
   });
 });
 
-const swallow = { onToast: () => {} };
-
 describe('rerollVibe', () => {
   test('a reroll changes the music but never the genre anchor', () => {
     const vibe = VIBES[0];
@@ -98,7 +103,7 @@ describe('rerollVibe', () => {
       bassPatternId: before.bassPatternId,
     };
 
-    rerollVibe(vibe, swallow);
+    rerollVibe(vibe);
 
     const after = useAppStore.getState();
     expect(after.scaleType).toBe(vibe.scaleType);
@@ -109,12 +114,16 @@ describe('rerollVibe', () => {
     expect(after.selectedVibeId).toBe(vibe.id);
   });
 
-  test('the toast carries both lines', () => {
-    let received: { headline: string; detail: string } | null = null;
-    rerollVibe(VIBES[0], { onToast: (t) => { received = t; } });
-    expect(received).not.toBeNull();
-    expect(received!.headline.startsWith('🎲 ')).toBe(true);
-    expect(received!.detail.includes(' · drums: ')).toBe(true);
+  test('the toast carries both lines, and replaces the load toast', () => {
+    selectVibe(VIBES[0]);
+    rerollVibe(VIBES[0]);
+    const feedback = useAppStore.getState().feedback;
+    expect(feedback).toHaveLength(1);
+    const [entry] = feedback;
+    expect(entry.key).toBe('vibe');
+    expect(entry.tone).toBe('info');
+    expect(entry.message.startsWith('🎲 ')).toBe(true);
+    expect(entry.detail?.includes(' · drums: ')).toBe(true);
   });
 
   // Non-regression: the atomic-swap fix lives in applyVibeToStore and a
@@ -123,7 +132,7 @@ describe('rerollVibe', () => {
     const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {}).mockClear();
     useAppStore.setState({ sequencerPlayer: 'playing', chordsPlayer: 'playing' });
 
-    rerollVibe(VIBES[0], swallow);
+    rerollVibe(VIBES[0]);
 
     expect(stopSource).toHaveBeenCalledWith('chord', 0.02);
     expect(stopSource).toHaveBeenCalledWith('bass', 0.02);
@@ -135,7 +144,7 @@ describe('rerollVibe', () => {
 
   test('a reroll while stopped leaves both players stopped', () => {
     useAppStore.setState({ sequencerPlayer: 'stopped', chordsPlayer: 'stopped' });
-    rerollVibe(VIBES[0], swallow);
+    rerollVibe(VIBES[0]);
     const after = useAppStore.getState();
     expect(after.sequencerPlayer).toBe('stopped');
     expect(after.chordsPlayer).toBe('stopped');
@@ -158,7 +167,7 @@ describe('rerollVibe', () => {
     startEngineSync();
     const resetClock = spyOn(audioEngine, 'resetClock').mockImplementation(() => {}).mockClear();
 
-    rerollVibe(VIBES[0], swallow);
+    rerollVibe(VIBES[0]);
 
     // Tear the subscription down BEFORE asserting: a failing expect would
     // otherwise leak a live engineSync into every later test in the file.
@@ -168,7 +177,7 @@ describe('rerollVibe', () => {
   });
 
   test('the chip stays highlighted after a reroll', () => {
-    rerollVibe(VIBES[0], swallow);
+    rerollVibe(VIBES[0]);
     expect(useAppStore.getState().selectedVibeId).toBe(VIBES[0].id);
   });
 });

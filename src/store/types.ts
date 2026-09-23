@@ -32,6 +32,7 @@ import type { DriveSlice } from './driveSlice';
 import type { DriveUserProfile } from './driveClient';
 import type { ProjectSlice } from './projectSlice';
 import type { ExportSlice } from './exportSlice';
+import type { FeedbackSlice } from './feedbackSlice';
 import type { TrackSendsSlice } from './trackSendsSlice';
 import type { SoloTrack } from './trackAudibility';
 import type { MixLayerId } from './focusTrack';
@@ -816,6 +817,7 @@ export interface AppStore
     DriveSlice,
     ProjectSlice,
     ExportSlice,
+    FeedbackSlice,
     TrackSendsSlice {}
 
 // The exact allow-list shape produced by the persist `partialize` config — this

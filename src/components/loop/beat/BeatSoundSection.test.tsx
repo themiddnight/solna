@@ -6,7 +6,7 @@ import { defaultBeatState } from '@/store/beatPresets';
 import { PANEL_CARD_INSET } from '@/components/ui/PanelCard';
 import { BEAT_VOICE_META } from './beatVoices';
 import { BEAT_CONTROL_SCHEMA } from './beatControlSchema';
-import { BeatSoundSection } from './BeatSoundSection';
+import { BeatSoundSection, saveBeatPreset } from './BeatSoundSection';
 import { isBeatPatchEdited, stepBeatPreset } from './BeatPresetToolbar';
 import type { SoundDepth } from '../useSoundDepth';
 
@@ -31,6 +31,7 @@ afterEach(() => {
     beatParams: { basePresetId: DEFAULT_BEAT_PRESET_ID, ...structuredClone(BEAT_PRESETS[0].patch) },
     customBeatPresets: [],
     beatMix: defaultBeatState().beatMix,
+    feedback: [],
   });
 });
 
@@ -259,6 +260,13 @@ describe('the Beat preset toolbar', () => {
     } finally {
       useAppStore.getState().deleteCustomBeatPreset(saved.id);
     }
+  });
+
+  test('a Quick Save confirms through the feedback host (R330)', () => {
+    const saved = saveBeatPreset('  Night Kit ', baseParams());
+    expect(useAppStore.getState().customBeatPresets[0]?.id).toBe(saved.id);
+    const [entry] = useAppStore.getState().feedback;
+    expect({ key: entry.key, tone: entry.tone, message: entry.message }).toEqual({ key: 'beat-preset', tone: 'success', message: 'Saved Beat preset "Night Kit"' });
   });
 
   /**

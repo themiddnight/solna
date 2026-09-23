@@ -211,6 +211,58 @@ describe('button and dialog chrome', () => {
   });
 });
 
+/**
+ * Toasts and snackbars go only through `showFeedback` into the one
+ * `FeedbackHost` per frame (R330). daisyUI's `toast` is `position: fixed`, so a
+ * component that renders it — or a fixed alert of its own — has built a second
+ * host that ignores the frame's slot and the dialog hold.
+ */
+describe('feedback surfaces', () => {
+  /**
+   * Not yet migrated, each owned by a later commit of the secondary-canvas
+   * plan: ArrangeView's loop Undo toast becomes a host snackbar (§5.6 Undo),
+   * ProjectNotice becomes toasts plus an in-flow banner (§5.6 split). Each
+   * commit deletes its entry here.
+   */
+  const NOT_YET_MIGRATED = {
+    toast: ['src/components/song/ArrangeView.tsx'],
+    fixedAlert: ['src/components/project/ProjectNotice.tsx'],
+  };
+
+  /** Comments name the toast freely (this very describe does); only code counts. */
+  const withoutComments = (text: string): string =>
+    text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+
+  /** A literal carrying any daisyUI toast class: `toast` or a `toast-*` placement. */
+  const toastClasses = (text: string): string[] =>
+    stringLiterals(withoutComments(text)).filter((raw) =>
+      raw.slice(1, -1).trim().split(/\s+/).some((c) => /^toast(-|$)/.test(c)),
+    );
+
+  test('no component renders the daisyUI toast class', () => {
+    const hits = offenders('src', 'FeedbackHost.tsx', toastClasses).filter(
+      (hit) => !NOT_YET_MIGRATED.toast.some((path) => hit.startsWith(`${path}:`)),
+    );
+    expect(hits).toEqual([]);
+  });
+
+  test('a fixed alert appears only in FeedbackHost.tsx', () => {
+    const hits = offenders('src', 'FeedbackHost.tsx', (text) => literalsCarrying(text, ['fixed', 'alert'])).filter(
+      (hit) => !NOT_YET_MIGRATED.fixedAlert.some((path) => hit.startsWith(`${path}:`)),
+    );
+    expect(hits).toEqual([]);
+  });
+
+  test('the allow-list names only files that still need it', () => {
+    const stillHit = (paths: string[], find: (text: string) => string[]) =>
+      paths.filter((path) => find(readFileSync(path, 'utf8')).length > 0);
+    expect(stillHit(NOT_YET_MIGRATED.toast, toastClasses)).toEqual(NOT_YET_MIGRATED.toast);
+    expect(stillHit(NOT_YET_MIGRATED.fixedAlert, (text) => literalsCarrying(text, ['fixed', 'alert']))).toEqual(
+      NOT_YET_MIGRATED.fixedAlert,
+    );
+  });
+});
+
 describe('shell tokens', () => {
   /**
    * `JOIN_LANE` had five hand-written copies before it existed — the synth's

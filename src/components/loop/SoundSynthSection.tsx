@@ -3,7 +3,6 @@ import {
   Sparkles,
   Bookmark,
   Library,
-  Check,
   ChevronLeft,
   ChevronRight,
   AudioWaveform,
@@ -80,7 +79,6 @@ function SynthSectionActions({
   synthTarget,
   soundGroups,
   presetCount,
-  toast,
   overlays,
   onOpenQuickSave,
   onOpenLibrary,
@@ -88,7 +86,6 @@ function SynthSectionActions({
   synthTarget: SynthControlTarget;
   soundGroups: Record<SynthControlTarget, LoopCopyGroupId>;
   presetCount: number;
-  toast: string | null;
   overlays: SynthOverlays;
   onOpenQuickSave: () => void;
   onOpenLibrary: () => void;
@@ -133,21 +130,6 @@ function SynthSectionActions({
       </button>
 
       <ModulePasteButton groups={[soundGroups[synthTarget]]} />
-
-      {/* Inside `actions`, so it hangs off the button cluster that
-          raised it. As a child of the card it anchored to the card's own
-          `relative` root, which wraps the focus row, the preset bar AND
-          the whole Simple/Pro body — so `top-full` resolved at the
-          bottom edge of a five-panel card, over the Drum Sound card
-          below and nowhere near the Save button. */}
-      {toast && (
-        <div className="toast toast-top toast-end absolute top-full right-0 mt-2 z-20">
-          <div className="alert alert-success text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-lg">
-            <Check className="w-3.5 h-3.5" />
-            <span>{toast}</span>
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -573,7 +555,6 @@ function SynthCard({
           synthTarget={synthTarget}
           soundGroups={soundGroups}
           presetCount={browser.allPresets.length}
-          toast={browser.saveToast}
           overlays={overlays}
           onOpenQuickSave={() =>
             overlays.openQuickSave(

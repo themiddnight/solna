@@ -4,6 +4,7 @@ import { useAppStore } from '@/store/store';
 import { InstantVibesBar } from '@/components/InstantVibesBar';
 import { TransportBar } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
+import { FeedbackHost } from '@/components/ui/FeedbackHost';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
 import { LayerPages } from './LayerPages';
 import type { ShellProps } from './shellProps';
@@ -12,6 +13,8 @@ import type { ShellProps } from './shellProps';
  * The frame both shells share, between each one's own top bar and (on mobile)
  * its bottom navigation. `bottomInset` passes through to `TransportBar`: the
  * mobile frame hands the bottom safe-area inset to its tab bar (R321).
+ * `feedbackSlot` puts the frame's one feedback host (R330) above the input
+ * dock; the mobile frame passes `false` and hangs its own under the top bar.
  */
 export function ShellBody({
   keyboardProps,
@@ -20,7 +23,8 @@ export function ShellBody({
   onApplyUpdate,
   onDismissUpdate,
   bottomInset,
-}: ShellProps & { bottomInset?: boolean }) {
+  feedbackSlot,
+}: ShellProps & { bottomInset?: boolean; feedbackSlot: boolean }) {
   const activeTab = useAppStore((s) => s.activeTab);
   return (
     <>
@@ -42,6 +46,10 @@ export function ShellBody({
       <main className="flex-1 min-h-0 relative overflow-y-auto pb-9">
         <LayerPages />
       </main>
+
+      {/* Toasts and snackbars: a zero-height slot, so the host floats over
+          the bottom of <main> just above the dock's toggle strip. */}
+      {feedbackSlot && <FeedbackHost edge="bottom" />}
 
       {/* Bottom Input Dock — Keyboard | Drums, reachable from any page */}
       <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />

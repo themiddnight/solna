@@ -45,6 +45,18 @@ function useBeatPresetLibrary(
   return { presets, base };
 }
 
+/**
+ * Saves the live Beat patch to the user library and confirms it through the
+ * feedback host (key `beat-preset`, R330) — the save had no confirmation of
+ * its own before.
+ */
+export function saveBeatPreset(name: string, params: BeatParams): BeatPreset {
+  const { saveCustomBeatPreset, showFeedback } = useAppStore.getState();
+  const saved = saveCustomBeatPreset(name, params);
+  showFeedback({ key: 'beat-preset', message: `Saved Beat preset "${saved.name}"`, tone: 'success' });
+  return saved;
+}
+
 /** One voice parameter written into a draft patch, rebuilding only that voice.
  *
  *  The cast is the one `readBeatParam` documents from the other direction:
@@ -198,7 +210,6 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
   const mutedVoices = useLiveStore((s) => s.beatMix.voices);
   const setBeatParams = useAppStore((s) => s.setBeatParams);
   const setBeatPreset = useAppStore((s) => s.setBeatPreset);
-  const saveCustomBeatPreset = useAppStore((s) => s.saveCustomBeatPreset);
   const resetBeatParams = useAppStore((s) => s.resetBeatParams);
   const resetBeatVoice = useAppStore((s) => s.resetBeatVoice);
 
@@ -269,7 +280,7 @@ export const BeatSoundSection = React.memo(function BeatSoundSection({ depth, ac
           onSaveNameChange={setSaveName}
           onQuickSaveSubmit={(e: React.FormEvent) => {
             e.preventDefault();
-            saveCustomBeatPreset(saveName, beatParams);
+            saveBeatPreset(saveName, beatParams);
             setIsSaving(false);
           }}
           onResetAll={resetBeatParams}

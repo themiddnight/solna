@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles, Check, Dices } from 'lucide-react';
+import { Sparkles, Dices } from 'lucide-react';
 import { VIBES, type VibeSpec } from '../data/vibes';
 import { useAppStore } from '../store/store';
 import { formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
-import { scheduleTimeout, useTimedToast } from './ui/useTimedToast';
+import { scheduleTimeout } from './ui/useTimedToast';
 
 /**
  * The two vibe actions, loaded on demand.
@@ -25,14 +25,6 @@ function loadVibeActions() {
   return vibeActionsPromise;
 }
 
-type VibeToast =
-  | { kind: 'load'; text: string }
-  | { kind: 'reroll'; headline: string; detail: string };
-
-/** How long the load toast stays; the reroll's holds longer, its second line
- *  having more to read than the load toast's one. */
-const LOAD_TOAST_MS = 3000;
-const REROLL_TOAST_MS = 4000;
 /** 400 ms of spin, then the dice icon settles. */
 const ROLLING_MS = 400;
 
@@ -60,15 +52,12 @@ function useVibePrefetch(): () => void {
 }
 
 /**
- * The bar's one toast and the dice spin, each with its own dismissal timer.
- *
- * Only one toast and one spin can be pending at a time. Without tracking both,
- * clicking a chip and then its dice within the chip's 3s toast window lets the
- * chip's older timer fire and dismiss the reroll toast early; and a timer left
- * running past unmount would call setState on an unmounted component.
+ * The dice spin and its one stop timer. Only one spin can be pending at a
+ * time, and a timer left running past unmount would call setState on an
+ * unmounted component. (The load/reroll confirmation is the feedback host's —
+ * see vibeActions.ts.)
  */
-function useVibeFeedback() {
-  const { toast, show: showToast } = useTimedToast<VibeToast>();
+function useDiceSpin() {
   const [rollingVibeId, setRollingVibeId] = useState<string | null>(null);
   const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -76,7 +65,6 @@ function useVibeFeedback() {
     return () => {
       // A pending timer id is written by a later click, never by this effect,
       // so only the ref read at cleanup time can name the timer still armed.
-      // (The toast's own timer is cleared by useTimedToast.)
       // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
       if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
     };
@@ -88,7 +76,7 @@ function useVibeFeedback() {
     scheduleTimeout(spinTimerRef, () => setRollingVibeId(null), ms);
   }, []);
 
-  return { toast, rollingVibeId, showToast, setSpin, scheduleSpinStop };
+  return { rollingVibeId, setSpin, scheduleSpinStop };
 }
 
 interface VibeChipProps {
@@ -156,31 +144,6 @@ function VibeChip({
   );
 }
 
-/** The bar's feedback banner: a load confirmation or a reroll summary. */
-function VibeToastBanner({ toast }: { toast: VibeToast }) {
-  return (
-    <div className="toast toast-top toast-end animate-fade-in">
-      {toast.kind === 'load' ? (
-        <div className="alert alert-success alert-soft py-1 px-2 text-[10px] gap-1">
-          <Check className="w-3 h-3" />
-          <span className="hidden md:inline">{toast.text}</span>
-          <span className="md:hidden">Loaded</span>
-        </div>
-      ) : (
-        // A different colour role from the load toast, so a reroll and
-        // a load are visually distinct at a glance.
-        <div className="alert alert-info alert-soft py-1 px-2 text-[10px] gap-1">
-          <div className="hidden md:flex flex-col items-start gap-0.5">
-            <span className="font-semibold">{toast.headline}</span>
-            <span className="opacity-80">{toast.detail}</span>
-          </div>
-          <span className="md:hidden">🎲 Rerolled</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export const InstantVibesBar = React.memo(function InstantVibesBar() {
   const selectedVibeId = useAppStore((s) => s.selectedVibeId);
   const bpm = useAppStore((s) => s.bpm);
@@ -188,20 +151,18 @@ export const InstantVibesBar = React.memo(function InstantVibesBar() {
   const scaleType = useAppStore((s) => s.scaleType);
 
   const prefetch = useVibePrefetch();
-  const { toast, rollingVibeId, showToast, setSpin, scheduleSpinStop } = useVibeFeedback();
+  const { rollingVibeId, setSpin, scheduleSpinStop } = useDiceSpin();
 
   const handleSelectVibe = async (vibe: VibeSpec) => {
     const { selectVibe } = await loadVibeActions();
-    selectVibe(vibe, { onToast: (text) => showToast({ kind: 'load', text }, LOAD_TOAST_MS) });
+    selectVibe(vibe);
   };
 
   const handleReroll = async (vibe: VibeSpec) => {
     const { rerollVibe } = await loadVibeActions();
     setSpin(vibe.id);
     try {
-      rerollVibe(vibe, {
-        onToast: (t) => showToast({ kind: 'reroll', ...t }, REROLL_TOAST_MS),
-      });
+      rerollVibe(vibe);
     } finally {
       // Robust to rerollVibe throwing: the spin must stop either way, or the
       // dice would spin forever.
@@ -244,11 +205,6 @@ export const InstantVibesBar = React.memo(function InstantVibesBar() {
               />
             );
           })}
-        </div>
-
-        {/* Collapse toggle & Feedback banner */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {toast && <VibeToastBanner toast={toast} />}
         </div>
       </div>
     </div>

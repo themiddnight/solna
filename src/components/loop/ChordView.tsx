@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { Bookmark, Check, Library } from 'lucide-react';
+import { Bookmark, Library } from 'lucide-react';
 
 // The drawer is never needed on first paint — PresetLibrary early-returns
 // null when closed — so it is code-split out of the main chunk.
@@ -27,7 +27,7 @@ import {
   type PatternPreviews,
 } from './chord/useChordView';
 
-/** The two header actions, and the saved-toast they fire. */
+/** The two header actions. */
 interface ChordViewHeaderProps {
   isQuickSaving: boolean;
   onOpenQuickSave: () => void;
@@ -37,14 +37,9 @@ interface ChordViewHeaderProps {
   onQuickSaveSubmit: (e: React.FormEvent) => void;
   onOpenLibrary: () => void;
   totalProgressionsCount: number;
-  saveToast: string | null;
 }
 
-/**
- * The segment header, with the toast that hangs off it. `absolute top-full` is
- * relative to the header's own positioning, so the toast has to be a child here
- * rather than a sibling further down the tree.
- */
+/** The segment header; a save confirms through the feedback host (R330). */
 function ChordViewHeader({
   isQuickSaving,
   onOpenQuickSave,
@@ -54,7 +49,6 @@ function ChordViewHeader({
   onQuickSaveSubmit,
   onOpenLibrary,
   totalProgressionsCount,
-  saveToast,
 }: ChordViewHeaderProps) {
   return (
     <SegmentHeader
@@ -96,14 +90,7 @@ function ChordViewHeader({
           </button>
         </>
       }
-    >
-      {saveToast && (
-        <div className="alert alert-success absolute top-full right-4 mt-2 z-20 w-auto py-1.5 px-3 text-xs shadow-lg animate-fade-in">
-          <Check className="w-3.5 h-3.5" />
-          <span>{saveToast}</span>
-        </div>
-      )}
-    </SegmentHeader>
+    />
   );
 }
 
@@ -150,7 +137,7 @@ export const ChordView = React.memo(function ChordView() {
   // the ~34 props it used to receive from App.tsx.
   const state = useChordViewState();
   const saves = useProgressionSaves(state);
-  const harmonize = useProgressionHarmonize(state, saves);
+  const harmonize = useProgressionHarmonize(state);
   const editor = useProgressionEditor(state, harmonize.clearReharmonizeBadge);
   const palette = useChordPalette(
     state.scaleRoot,
@@ -177,7 +164,6 @@ export const ChordView = React.memo(function ChordView() {
         onQuickSaveSubmit={saves.handleQuickSaveSubmit}
         onOpenLibrary={() => setIsLibraryOpen(true)}
         totalProgressionsCount={palette.totalProgressionsCount}
-        saveToast={saves.saveToast}
       />
 
       <ProgressionCard

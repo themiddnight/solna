@@ -13,7 +13,7 @@ export const DesktopShell = React.memo(function DesktopShell(props: ShellProps) 
     <>
       {/* Navigation Header */}
       <Header />
-      <ShellBody {...props} />
+      <ShellBody {...props} feedbackSlot />
     </>
   );
 });

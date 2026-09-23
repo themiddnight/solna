@@ -2,9 +2,10 @@
  * The two vibe actions, in their own module so InstantVibesBar can defer the
  * whole dependency tree behind a dynamic import().
  *
- * Both stay SYNCHRONOUS and keep their exact signatures: the async boundary is
- * the module load in the click handler, not these functions, so
- * InstantVibesBar.test.tsx exercises them the same way it always did.
+ * Both stay SYNCHRONOUS: the async boundary is the module load in the click
+ * handler, not these functions, so InstantVibesBar.test.tsx calls them directly.
+ * Each confirms itself through `showFeedback` under the one key `vibe`, so a
+ * reroll replaces the load toast it follows (R330).
  */
 import type { VibeSpec } from '../data/vibes';
 import { applyVibeToStore, resolveVibe } from '../store/vibes';
@@ -14,15 +15,18 @@ import {
   createDraw,
   formatVariationSummary,
   resolveVibeVariation,
-  type RerollToast,
 } from '../store/vibeVariation';
 
-export function selectVibe(
-  vibe: VibeSpec,
-  deps: { onToast: (text: string) => void }
-): void {
+/** A reroll's summary has more to read than a load's one line, so it stays longer. */
+const REROLL_TOAST_MS = 4000;
+
+export function selectVibe(vibe: VibeSpec): void {
   applyVibeToStore(resolveVibe(vibe));
-  deps.onToast(`Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${formatKeyLabel(vibe.scaleRoot, vibe.scaleType)})`);
+  useAppStore.getState().showFeedback({
+    key: 'vibe',
+    message: `Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${formatKeyLabel(vibe.scaleRoot, vibe.scaleType)})`,
+    tone: 'success',
+  });
 }
 
 /**
@@ -40,10 +44,7 @@ export function selectVibe(
  * the bar-grid rewind all live in applyVibeToStore, which a second apply path
  * would have to keep in sync. This function makes no engine call of its own.
  */
-export function rerollVibe(
-  vibe: VibeSpec,
-  deps: { onToast: (toast: RerollToast) => void }
-): void {
+export function rerollVibe(vibe: VibeSpec): void {
   const { scaleRoot, chordRhythmId, bassPatternId } = useAppStore.getState();
   const { spec, summary } = resolveVibeVariation(
     vibe,
@@ -51,5 +52,13 @@ export function rerollVibe(
     createDraw(Math.random),
   );
   applyVibeToStore(resolveVibe(spec));
-  deps.onToast(formatVariationSummary(summary));
+  const { headline, detail } = formatVariationSummary(summary);
+  // A different tone from the load toast, so a reroll and a load read apart.
+  useAppStore.getState().showFeedback({
+    key: 'vibe',
+    message: headline,
+    detail,
+    tone: 'info',
+    durationMs: REROLL_TOAST_MS,
+  });
 }

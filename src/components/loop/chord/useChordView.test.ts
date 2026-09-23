@@ -1,6 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
+import { useAppStore } from '@/store/store';
 import { formatChordLabel } from '@/utils/musicTheory';
-import type { ChordViewState } from './useChordView';
+import {
+  saveProgression,
+  useChordViewState,
+  useProgressionHarmonize,
+  type ChordViewState,
+} from './useChordView';
 
 /**
  * Pins the Chord View quick-save fix (DEV-398 final review, Finding 1):
@@ -42,5 +50,39 @@ describe('Chord View state no longer carries synthParams', () => {
       : true;
     const guard: AssertNoSynthParams = true;
     expect(guard).toBe(true);
+  });
+});
+
+describe('the chord segment confirms through the feedback host (R330)', () => {
+  const initialChords = useAppStore.getState().chords;
+
+  afterEach(() => {
+    useAppStore.setState({ feedback: [], chords: initialChords, reharmonizedIndicator: false });
+  });
+
+  test('a save confirms under the chord-progression key, its summary spelled in the key', () => {
+    const chords = [{ ...initialChords[0], root: 'D#', quality: 'maj' as const }];
+    const saved = saveProgression('Probe', chords, { scaleRoot: 'A#', scaleType: 'Major' });
+    try {
+      expect(saved.roman.startsWith('Eb')).toBe(true);
+      const [entry] = useAppStore.getState().feedback;
+      expect({ key: entry.key, tone: entry.tone, message: entry.message }).toEqual({ key: 'chord-progression', tone: 'success', message: 'Saved progression "Probe"!' });
+    } finally {
+      useAppStore.getState().deleteCustomChordProgression(saved.id);
+    }
+  });
+
+  test('a re-harmonize confirms under the same key, replacing a save toast', () => {
+    let harmonize: ReturnType<typeof useProgressionHarmonize> | null = null;
+    function Probe() {
+      harmonize = useProgressionHarmonize(useChordViewState());
+      return null;
+    }
+    renderToString(createElement(Probe));
+    useAppStore.getState().showFeedback({ key: 'chord-progression', message: 'Saved', tone: 'success' });
+    harmonize!.reharmonizeNow();
+    const feedback = useAppStore.getState().feedback;
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0].message.startsWith('Re-harmonized progression to ')).toBe(true);
   });
 });

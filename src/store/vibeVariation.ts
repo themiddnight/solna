@@ -145,8 +145,8 @@ export function resolveVibeVariation(
   };
 }
 
-/** The two lines of the reroll toast, kept apart so the UI can hide one. */
-export interface RerollToast {
+/** The two lines of the reroll toast: its message and its detail line. */
+interface RerollToast {
   headline: string;
   detail: string;
 }

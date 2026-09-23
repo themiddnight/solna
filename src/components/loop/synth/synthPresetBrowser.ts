@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAppStore } from '@/store/store';
-import { useTimedToast } from '@/components/ui/useTimedToast';
 import type { SynthPreset, SynthPresetCategory } from '@/data/synthPresets';
 import {
   findPresetByName,
@@ -42,17 +41,23 @@ const presetsInCategory = (
 export const categoryPresetCount = (allPresets: SynthPreset[], categoryId: string): number =>
   presetsInCategory(allPresets, categoryId).length;
 
+/** A load's confirmation is briefer than a save's (the host's 3 s default). */
+const SYNTH_LOAD_TOAST_MS = 2500;
+
+/** The synth's one feedback key: a load replaces the previous load's toast. */
+const showSynthPresetFeedback = (message: string, durationMs?: number) =>
+  useAppStore.getState().showFeedback({ key: 'synth-preset', message, tone: 'success', durationMs });
+
 /**
  * The preset the patch is on, the list it can be stepped through, and the four
- * ways to change it — chips, dropdown, steppers, and the toast that confirms a
- * load. One hook because all of them answer the same question about the same
+ * ways to change it — chips, dropdown, steppers — each confirmed by a toast
+ * (key `synth-preset`, R330). One hook because all of them answer the same question about the same
  * list, and `customPresets` is a local mirror of the store's list, refreshed by
  * `reloadPresets` whenever the drawer opens.
  */
 export function useSynthPresetBrowser(target: SynthControlTarget) {
   const [customPresets, setCustomPresets] = useState<SynthPreset[]>([]);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
-  const { toast: saveToast, show: showSaveToast } = useTimedToast<string>();
 
   // The browser follows the FOCUSED track, so it reads and writes its patch
   // through the shared target tables rather than being handed a value and a
@@ -95,14 +100,14 @@ export function useSynthPresetBrowser(target: SynthControlTarget) {
 
   const handleSelectPreset = (preset: SynthPreset) => {
     loadSynthPreset(target, preset);
-    showSaveToast(`Loaded [${preset.category}] "${preset.name}"`, 2500);
+    showSynthPresetFeedback(`Loaded [${preset.category}] "${preset.name}"`, SYNTH_LOAD_TOAST_MS);
   };
 
   // Adopting a just-saved preset never stops the bus — see
   // `store/synthPresetInstall.ts` for why that is the caller's call to make.
   const adoptSavedPreset = (preset: SynthPreset) => {
     adoptSavedSynthPreset(target, preset);
-    showSaveToast(`Preset "${preset.name}" saved to ${preset.category}!`, 3000);
+    showSynthPresetFeedback(`Preset "${preset.name}" saved to ${preset.category}!`);
   };
 
   const handleStepPreset = (direction: -1 | 1) => {
@@ -137,7 +142,6 @@ export function useSynthPresetBrowser(target: SynthControlTarget) {
     activePresetItem,
     activeCategoryMeta,
     selectedCategoryFilter,
-    saveToast,
     reloadPresets,
     selectPreset: handleSelectPreset,
     adoptSavedPreset,

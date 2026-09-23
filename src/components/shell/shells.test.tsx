@@ -80,6 +80,22 @@ describe('the shells', () => {
     }
   });
 
+  test('each frame carries exactly one feedback host (R330)', () => {
+    for (const html of [desktop, mobile]) {
+      expect(html.split('id="feedback-host"').length - 1).toBe(1);
+    }
+  });
+
+  test('the desktop host hangs above the dock, the mobile host under the top bar', () => {
+    expect(desktop).toContain('bottom-10 flex-col ');
+    expect(mobile).toContain('top-2 flex-col-reverse ');
+    // Under the top bar: before the vibe bar, the first thing ShellBody renders.
+    expect(mobile.indexOf('id="feedback-host"')).toBeLessThan(mobile.indexOf('id="btn-vibe-'));
+    // Above the dock: after the pages, before the dock's focus chip.
+    expect(desktop.indexOf('id="feedback-host"')).toBeGreaterThan(desktop.indexOf('id="slider-reverb-wet"'));
+    expect(desktop.indexOf('id="feedback-host"')).toBeLessThan(desktop.indexOf('id="btn-focus-chip"'));
+  });
+
   test('the desktop frame carries none of the mobile chrome', () => {
     for (const marker of ['class="dock', 'id="btn-mobile-menu"', 'modal-bottom']) {
       expect(desktop).not.toContain(marker);

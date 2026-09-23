@@ -9,7 +9,6 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useAppStore } from '@/store/store';
 import { usePlayheadBeat } from '@/components/playheadBeat';
-import { useTimedToast } from '@/components/ui/useTimedToast';
 import { useChordAudition } from './useChordAudition';
 import { playingChord } from '@/components/playingChord';
 import {
@@ -147,30 +146,42 @@ export function useChordViewState() {
 
 export type ChordViewState = ReturnType<typeof useChordViewState>;
 
-/** The quick-save popover, its toast, and the browser's saved progressions. */
+/** The chord segment's one feedback key: a save and a re-harmonize replace each other (R330). */
+const showProgressionFeedback = (message: string) =>
+  useAppStore.getState().showFeedback({ key: 'chord-progression', message, tone: 'success' });
+
+/** Saves `chords` to the user library under `name`, and confirms it. */
+export function saveProgression(
+  name: string,
+  chords: ChordItem[],
+  spellingKey: ChordViewState['spellingKey'],
+): CustomChordProgressionItem {
+  const saved = useAppStore.getState().saveCustomChordProgression(
+    name,
+    chords,
+    'User',
+    'Saved from Chord View',
+    chords.map((c) => formatChordLabel(c.root, c.quality, spellingKey)).join(' → '),
+  );
+  showProgressionFeedback(`Saved progression "${saved.name}"!`);
+  return saved;
+}
+
+/** The quick-save popover and the browser's saved progressions. */
 export function useProgressionSaves(state: ChordViewState) {
   const chords = state.chords;
   const [customProgressions, setCustomProgressions] = useState<CustomChordProgressionItem[]>([]);
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [quickSaveName, setQuickSaveName] = useState<string>('');
-  const { toast: saveToast, show: showSaveToast } = useTimedToast<string>();
 
   const handleQuickSaveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickSaveName.trim() || chords.length === 0) return;
 
-    const saved = useAppStore.getState().saveCustomChordProgression(
-      quickSaveName.trim(),
-      chords,
-      'User',
-      'Saved from Chord View',
-      chords.map((c) => formatChordLabel(c.root, c.quality, state.spellingKey)).join(' → '),
-    );
-
+    saveProgression(quickSaveName.trim(), chords, state.spellingKey);
     setCustomProgressions(useAppStore.getState().customChordProgressions);
     setIsQuickSaving(false);
     setQuickSaveName('');
-    showSaveToast(`Saved progression "${saved.name}"!`, 3000);
   };
 
   const openQuickSave = () => {
@@ -179,14 +190,12 @@ export function useProgressionSaves(state: ChordViewState) {
   };
 
   return {
-    customProgressions, isQuickSaving, quickSaveName, saveToast,
-    showSaveToast, setQuickSaveName, openQuickSave,
+    customProgressions, isQuickSaving, quickSaveName,
+    setQuickSaveName, openQuickSave,
     closeQuickSave: () => setIsQuickSaving(false),
     handleQuickSaveSubmit,
   };
 }
-
-export type ProgressionSaves = ReturnType<typeof useProgressionSaves>;
 
 /** A new one-bar chord of the given root/quality, appended to the progression. */
 function appendChord(
@@ -307,7 +316,7 @@ export type ProgressionEditor = ReturnType<typeof useProgressionEditor>;
  * chords — is one store write (`changeKey`, store/keyChange.ts); this hook only
  * reads the session toggle and badge and offers the two buttons.
  */
-export function useProgressionHarmonize(state: ChordViewState, saves: ProgressionSaves) {
+export function useProgressionHarmonize(state: ChordViewState) {
   const { chords, setChords, scaleRoot, scaleType } = state;
   const autoReharmonize = useAppStore((s) => s.autoReharmonize);
   const isAutoReharmonizedIndicator = useAppStore((s) => s.reharmonizedIndicator);
@@ -323,10 +332,7 @@ export function useProgressionHarmonize(state: ChordViewState, saves: Progressio
     const updated = snapProgressionToScale(chords, scaleRoot, scaleType);
     setChords(updated);
     setReharmonizedIndicator(true);
-    saves.showSaveToast(
-      `Re-harmonized progression to ${formatKeyLabel(scaleRoot, scaleType)} (Option B)!`,
-      3000,
-    );
+    showProgressionFeedback(`Re-harmonized progression to ${formatKeyLabel(scaleRoot, scaleType)} (Option B)!`);
   };
 
   return {
