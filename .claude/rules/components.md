@@ -80,7 +80,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   closes on its toggles, its close button and Escape, and stays open while playing. The desktop
   bar keeps every control inline and does not change for the phone. <!-- R332 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 - Vibes are reached only through the `vibes` `HEADER_TOOLS` row (`components/vibes/VibesButton.tsx`); no frame renders an always-visible vibe strip. <!-- R333 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
-- The vibe picker is a centred `Modal` on both frames: the card grid scrolls between Modal's pinned header and a pinned footer; **Use** (and Play) stay disabled until a vibe has been previewed. <!-- R334 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
+- The vibe picker is a centred `Modal` on both frames: the card grid scrolls between Modal's pinned header and a pinned footer; **Use** (and Play) stay disabled until a vibe has been previewed; the card of the vibe the active loop was loaded from (`selectedVibeId`, as captured at open) carries a "Current" label, never the pressed state, which belongs to the previewed card. <!-- R334 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 
 ([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md), [ADR-0043](../../docs/decisions/0043-hint-text-on-desktop-only.md))
 

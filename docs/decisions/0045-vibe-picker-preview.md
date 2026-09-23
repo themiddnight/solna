@@ -21,6 +21,12 @@ undo after it, so a curious click overwrote a loop the user had built.
   Modal's own header, a card grid that scrolls, and a pinned footer holding the preview summary,
   Play/Stop, Cancel and Use. The layout comes from `boxClassName` making the box a flex column;
   no footer prop is added to `Modal`. Use and Play stay disabled until a vibe has been previewed.
+- **The card of the vibe the loop was loaded from is marked Current.** The picker labels the card
+  whose id is `selectedVibeId` "Current", restoring the readout the strip's selected chip gave.
+  The label is separate from the pressed state, which marks the previewed card, so a card can show
+  both. While a session is open the store's `selectedVibeId` holds the vibe being previewed, so the
+  picker uses the value captured at open. The hook reads it through `useLiveStore`, one value per
+  selector.
 - **Preview commands live in `store/vibePreview.ts`**, one per picker action:
   `beginVibePreview` (hold persisted writes, suspend note input, stop and cut, return the
   snapshot), `previewVibe` (resolve first, then stop, cut, one write, play), `rerollPreview` (the
@@ -77,7 +83,9 @@ The snapshot covers exactly what a vibe writes, so a vibe that starts writing a 
 add it to `captureVibeTargets` — the invariant test in `store/vibePreview.test.ts`, which checks
 every vibe and a sample of rerolls, fails before such a key can escape Cancel. The persistence
 hold is the only one in the app; a second feature that wants to hold writes needs its own
-decision.
+decision. `selectedVibeId` and its clear on any `activeLoopId` change (`store/vibeNav.ts`) keep a
+reader: the Current mark. Removing the field was the alternative. That would be a persisted-shape
+change and would drop the cue the strip gave, so it was not done here.
 
 ## Rules this implies
 
@@ -85,7 +93,9 @@ decision.
   (`components/vibes/VibesButton.tsx`); no frame renders an always-visible vibe strip.
 - **R334** — The vibe picker is a centred `Modal` on both frames: the card grid scrolls between
   Modal's pinned header and a pinned footer; **Use** (and Play) stay disabled until a vibe has
-  been previewed.
+  been previewed; the card of the vibe the active loop was loaded from (`selectedVibeId`, as
+  captured at open) carries a "Current" label, never the pressed state, which belongs to the
+  previewed card.
 - **R335** — Only the vibe preview holds persisted writes
   (`holdPersistedWrites`/`releasePersistedWrites`); the hold flushes first; nothing is written
   while held, `pagehide`/hidden included; release writes once.
