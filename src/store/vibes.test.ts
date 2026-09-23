@@ -1,7 +1,7 @@
-import { describe, test, expect, spyOn, afterEach, beforeEach } from 'bun:test';
-import { audioEngine } from '../audio/engine';
+import { describe, test, expect, afterEach, beforeEach } from 'bun:test';
 import { VIBES } from '../data/vibes';
-import { applyVibeToStore, resolveVibe, resolveVibeSynthParams, VIBE_IDS } from './vibes';
+import { resolveVibe, resolveVibeSynthParams, VIBE_IDS } from './vibes';
+import { writeVibe } from './vibeWriteFixture';
 import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
 import type { LeadNote } from '../audio/playback/leadMelody';
 import { CHORD_RHYTHMS } from '../data/chordRhythms';
@@ -26,12 +26,10 @@ import type { ChordItem } from '../types';
  */
 const RESOLVED_VIBES = VIBES.map(resolveVibe);
 
-// applyVibeToStore rewrites bpm, meter, effects and the loop content wholesale,
-// and the 'audible cut' block leaves them behind (its tests restore their own
-// spy and hardStopAll the players, but not the content). Restore the default
-// baseline before AND after each test there so the suite stays
-// order-independent — a sibling file, or a future test after that block, that
-// reads the store must not see a leftover vibe's chords, key or bpm.
+// A vibe write rewrites bpm, meter, effects and the loop content wholesale.
+// Restore the default baseline before AND after each test that writes one, so
+// the suite stays order-independent — a sibling file, or a later test in this
+// one, that reads the store must not see a leftover vibe's chords, key or bpm.
 const resetStore = () => {
   const loop = createDefaultLoop();
   useAppStore.setState({
@@ -125,9 +123,9 @@ describe('Instant Vibes Mode', () => {
     }
   });
 
-  test('applyVibeToStore sets drum pattern, Beat sound, chords, bass, feel, synth presets, and master effects', () => {
+  test('a vibe write sets drum pattern, Beat sound, chords, bass, feel, synth presets, and master effects', () => {
     const lofiVibe = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
-    applyVibeToStore(lofiVibe);
+    writeVibe(lofiVibe);
 
     const state = useAppStore.getState();
     expect(state.bpm).toBe(lofiVibe.bpm);
@@ -146,7 +144,7 @@ describe('Instant Vibes Mode', () => {
     expect(state.synthParams.sourcePresetId).toBe(presetById(lofiVibe.synthPresetId)!.id);
   });
 
-  test('applyVibeToStore actually rewrites the Beat pattern to match the vibe drum grid', () => {
+  test('a vibe write actually rewrites the Beat pattern to match the vibe drum grid', () => {
     const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
 
     // Seed TWO distinguishing `true`s before applying the vibe: one in the
@@ -155,7 +153,7 @@ describe('Instant Vibes Mode', () => {
     // The padding one proves preservation: asserting padding is `false` both
     // before and after cannot distinguish "genuinely preserved" from "reset to
     // false", so a seeded `true` that must survive is an independent proof, at
-    // the applyVibeToStore entry point rather than only in writeStepWindow's
+    // the vibe-write entry point rather than only in writeStepWindow's
     // own unit tests.
     //
     // The in-window one is what makes the omitted-row branch below able to
@@ -169,7 +167,7 @@ describe('Instant Vibes Mode', () => {
     }
     useAppStore.setState({ beatPattern: { rows: seeded } });
 
-    applyVibeToStore(synthwave);
+    writeVibe(synthwave);
 
     const rows = useAppStore.getState().beatPattern.rows;
     // Every row this grid's pattern defines shares one meter width; borrow it
@@ -209,7 +207,7 @@ describe('Instant Vibes Mode', () => {
 
   test('applies synthwave vibe with tight feel and its own arp setting', () => {
     const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
-    applyVibeToStore(synthwave);
+    writeVibe(synthwave);
 
     const state = useAppStore.getState();
     expect(state.bpm).toBe(118);
@@ -231,7 +229,7 @@ describe("a vibe's Beat sound and Beat pattern", () => {
     // sound. Applying the vibe must therefore write the VIBE's preset, never
     // the grid's, and must write the grid's rows either way.
     const vibe = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     const state = useAppStore.getState();
     expect(state.beatParams.basePresetId).toBe(vibe.beatPresetId);
     expect(state.beatPattern.rows.kick.slice(0, vibe.drumPattern.kick!.length)).toEqual(
@@ -302,7 +300,7 @@ describe('vibe preset id resolution', () => {
 
   test('applying a vibe installs exactly the Arp settings it declares', () => {
     for (const vibe of RESOLVED_VIBES) {
-      applyVibeToStore(vibe);
+      writeVibe(vibe);
       const s = useAppStore.getState();
       expect(s.synthArpSettings, vibe.id).toEqual(vibe.arp.synth);
       expect(s.chordArpSettings, vibe.id).toEqual(vibe.arp.chord);
@@ -328,7 +326,7 @@ describe('vibe preset id resolution', () => {
 
   test('applying a vibe installs each named preset’s own patch on its own bus', () => {
     for (const vibe of RESOLVED_VIBES) {
-      applyVibeToStore(vibe);
+      writeVibe(vibe);
       const s = useAppStore.getState();
       expect(s.synthParams.patch, vibe.id).toEqual(presetById(vibe.synthPresetId)!.patch);
       expect(s.chordSynthParams.patch, vibe.id).toEqual(presetById(vibe.chordPresetId)!.patch);
@@ -343,7 +341,7 @@ describe('vibe preset id resolution', () => {
 
   test('loading a vibe leaves every preset select pointing at the preset that produced the sound', () => {
     const synthwave = RESOLVED_VIBES.find((v) => v.id === 'synthwave-80s')!;
-    applyVibeToStore(synthwave);
+    writeVibe(synthwave);
     const state = useAppStore.getState();
     expect(state.synthParams.sourcePresetId).toBe(presetById(synthwave.synthPresetId)!.id);
     expect(state.chordSynthParams.sourcePresetId).toBe(presetById(synthwave.chordPresetId)!.id);
@@ -360,7 +358,7 @@ describe('vibe preset id resolution', () => {
  * the new bar count and the arrays are left at their stored width, exactly as
  * Lead/FX leave the bars a shorter cycle can no longer reach.
  */
-describe('applyVibeToStore re-clamps the custom pattern lanes', () => {
+describe('a vibe write re-clamps the custom pattern lanes', () => {
   beforeEach(resetStore);
   afterEach(resetStore);
 
@@ -378,7 +376,7 @@ describe('applyVibeToStore re-clamps the custom pattern lanes', () => {
     useAppStore.getState().setCustomChordEvent(32, true); // bar three, offset 0
     useAppStore.getState().setCustomBassEvent(0, 'root');
 
-    applyVibeToStore(RESOLVED_VIBES[0]); // four one-bar chords
+    writeVibe(RESOLVED_VIBES[0]); // four one-bar chords
 
     const s = useAppStore.getState();
     expect(s.chordRhythmMode).toBe('preset');
@@ -400,154 +398,12 @@ describe('applyVibeToStore re-clamps the custom pattern lanes', () => {
     useAppStore.getState().setCustomChordEvent(16, true); // bar two, offset 0
     useAppStore.getState().setCustomBassLoopLength(4);
 
-    applyVibeToStore(RESOLVED_VIBES[0]); // four bars, so 2 and 4 both still divide
+    writeVibe(RESOLVED_VIBES[0]); // four bars, so 2 and 4 both still divide
 
     const s = useAppStore.getState();
     expect(s.customChordLoopLength).toBe(2);
     expect(s.customBassLoopLength).toBe(4);
     expect(s.customChordRhythm[MAX_STEPS_PER_BAR]).toBe(true);
-  });
-});
-
-describe('applyVibeToStore transport handling', () => {
-  // The restart is no longer unconditional: restartAfterStop reads activeTab
-  // and playbackScope, so both are INPUTS to every test below. bun shares one
-  // process across test files, and siblings leave activeTab on a song-layer
-  // tab (projectSlice.test.ts sets 'master', ArrangeView.test.tsx sets
-  // 'arrange') without restoring it — under which the ambient `none` scope
-  // falls through to the "no restart" row and these tests would fail on file
-  // order alone. Pin the baseline instead of relying on some other file's
-  // afterEach happening to run in between.
-  beforeEach(() => {
-    useAppStore.setState({ activeTab: 'sound', playbackScope: SCOPE_NONE });
-  });
-
-  // Wrap the store's own action functions in place (via `setState`, not a
-  // fresh mock store) so applyVibeToStore's internal
-  // `useAppStore.getState()` resolves to these wrapped references. Every
-  // wrapper calls through to the real implementation captured just before
-  // wrapping, so state still mutates normally; each wrapper just pushes a
-  // label into `order` first so the *sequence* of calls — not just the end
-  // state — is observable. That sequence is exactly what would break if
-  // hardStopAll were removed or moved after the vibe-state writes.
-  //
-  // `setState` (rather than mutating the snapshot object returned by
-  // `getState()` directly) is required here: zustand rebuilds the state
-  // object on every `set()` call inside the transport actions, so a
-  // property replaced in place on one snapshot would be silently dropped
-  // the moment any action fires. Routing both the install and the restore
-  // through `setState` keeps every generation of the state object wrapped
-  // until we explicitly restore, and the restore always lands on the
-  // current (not a stale) object.
-  //
-  // Since Phase 3 the restart is no longer a play(module) call at all — it is
-  // one setState carrying the player fields and the scope together — so the
-  // `play` wrapper below no longer sees it. It stays, because `playCalls`
-  // staying EMPTY is now the assertion that the restart went through
-  // restartPlayersPatch; the restart itself is observed by subscribing to the
-  // store and recording the stopped->playing transition, which is the same
-  // ordering fact the old `play:chords` entry stood for.
-  function withOrderTracking<T>(order: string[], playCalls: string[], run: () => T): T {
-    const originals = {
-      hardStopAll: useAppStore.getState().hardStopAll,
-      play: useAppStore.getState().play,
-    };
-
-    useAppStore.setState({
-      hardStopAll: () => {
-        order.push('hardStopAll');
-        originals.hardStopAll();
-      },
-      play: (module) => {
-        order.push(`play:${module}`);
-        playCalls.push(module);
-        originals.play(module);
-      },
-    });
-
-    // The vibe's content is ONE write now (vibeContentPatch), so it is
-    // observed as the notification that changes the chords or the effects.
-    const unsubscribe = useAppStore.subscribe((state, prev) => {
-      if (state.chords !== prev.chords || state.effects !== prev.effects) order.push('content');
-      for (const module of ['sequencer', 'chords', 'lead'] as const) {
-        const field = `${module}Player` as const;
-        if (state[field] === 'playing' && prev[field] !== 'playing') {
-          order.push(`restart:${module}`);
-        }
-      }
-    });
-
-    try {
-      return run();
-    } finally {
-      unsubscribe();
-      useAppStore.setState({
-        hardStopAll: originals.hardStopAll,
-        play: originals.play,
-      });
-    }
-  }
-
-  test('cuts everything before writing new vibe state, and restarts only the players that were active', () => {
-    // Real (unwrapped) call: get chords running before we start recording order.
-    useAppStore.getState().play('chords');
-    expect(useAppStore.getState().chordsPlayer).toBe('playing');
-    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
-
-    const order: string[] = [];
-    const playCalls: string[] = [];
-
-    withOrderTracking(order, playCalls, () => applyVibeToStore(RESOLVED_VIBES[1]));
-
-    // The hard stop must be the very first thing that happens — before any
-    // vibe-state write — and every restart must come after the last write.
-    // This is the assertion that would fail if the swap applied the new
-    // vibe first and cut audio afterward (or not at all).
-    expect(order[0]).toBe('hardStopAll');
-    const hardStopIndex = order.indexOf('hardStopAll');
-    const contentIndex = order.indexOf('content');
-    const restartIndex = order.indexOf('restart:chords');
-    expect(hardStopIndex).toBeLessThan(contentIndex);
-    expect(restartIndex).toBeGreaterThan(-1);
-    expect(contentIndex).toBeLessThan(restartIndex);
-    expect(order.filter((e) => e === 'content')).toEqual(['content']);
-
-    // Chords was active, so it comes back; the Beat was not, so it stays put
-    // — and nothing restarted it.
-    expect(useAppStore.getState().chordsPlayer).toBe('playing');
-    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
-    expect(order).not.toContain('restart:sequencer');
-    // The restart is one scope-carrying setState, not a play(module) call.
-    expect(playCalls).toEqual([]);
-  });
-
-  test('a player that was stopping restarts rather than staying half-stopped', () => {
-    useAppStore.getState().play('chords');
-    useAppStore.getState().softStop('chords');
-    expect(useAppStore.getState().chordsPlayer).toBe('stopping');
-
-    applyVibeToStore(RESOLVED_VIBES[0]);
-
-    expect(useAppStore.getState().chordsPlayer).toBe('playing');
-  });
-
-  test('a swap while nothing plays leaves both players stopped and never calls play', () => {
-    useAppStore.getState().hardStopAll();
-
-    const order: string[] = [];
-    const playCalls: string[] = [];
-
-    withOrderTracking(order, playCalls, () => applyVibeToStore(RESOLVED_VIBES[0]));
-
-    // The weak form (end state reads 'stopped') would also pass an
-    // implementation that started and immediately re-stopped the players.
-    // Asserting nothing ever went to 'playing' rules that out.
-    expect(playCalls).toEqual([]);
-    expect(order.filter((e) => e.startsWith('restart:'))).toEqual([]);
-    expect(order[0]).toBe('hardStopAll');
-
-    expect(useAppStore.getState().chordsPlayer).toBe('stopped');
-    expect(useAppStore.getState().sequencerPlayer).toBe('stopped');
   });
 });
 
@@ -558,59 +414,6 @@ test('ResolvedVibe presets carry no presentational fields', () => {
       expect(Object.prototype.hasOwnProperty.call(vibe, key)).toBe(false);
     }
   }
-});
-
-describe('applyVibeToStore audible cut', () => {
-  beforeEach(resetStore);
-  afterEach(resetStore);
-
-  // The regression this pins: the swap used to delegate the actual silencing
-  // to a React effect keyed on the rendered player state. The whole swap runs
-  // inside one onClick, React 18 batches it, and that state goes
-  // 'playing' -> 'playing' — so the effect never re-ran and the old vibe's
-  // queued chord and bass voices kept sounding over the new one. Asserting
-  // the ORDER of store actions (the suite above) cannot see that: only an
-  // assertion that the sources were actually silenced can.
-  test('silences the chord, bass and pad buses, at the hard-stop release', () => {
-    const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {});
-    stopSource.mockClear();
-
-    useAppStore.getState().play('chords');
-    applyVibeToStore(RESOLVED_VIBES[1]);
-
-    const silenced = stopSource.mock.calls.map((c) => c[0]);
-    expect(silenced).toContain('chord');
-    expect(silenced).toContain('bass');
-    expect(silenced).toContain('pad');
-    for (const call of stopSource.mock.calls) expect(call[1]).toBe(0.02);
-
-    useAppStore.getState().hardStopAll();
-    stopSource.mockRestore();
-  });
-
-  test('cuts BEFORE the new vibe state is written, so nothing of the old vibe is left queued', () => {
-    // Load a vibe so the store holds a known progression, then record what
-    // `chords` looked like at the moment each cut happened. A cut that
-    // landed after `setChords` would see the NEW ids — i.e. the old vibe's
-    // voices were still queued while the new progression was already live.
-    applyVibeToStore(RESOLVED_VIBES[0]);
-    const oldIds = useAppStore.getState().chords.map((c) => c.id);
-
-    const chordIdsAtCut: string[][] = [];
-    const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {
-      chordIdsAtCut.push(useAppStore.getState().chords.map((c) => c.id));
-    });
-    stopSource.mockClear();
-
-    useAppStore.getState().play('chords');
-    applyVibeToStore(RESOLVED_VIBES[1]);
-
-    expect(chordIdsAtCut.length > 0).toBe(true);
-    for (const ids of chordIdsAtCut) expect(ids).toEqual(oldIds);
-
-    useAppStore.getState().hardStopAll();
-    stopSource.mockRestore();
-  });
 });
 
 import { generateBlockChordNotes, isNoteInScale } from '../utils/musicTheory';
@@ -684,7 +487,7 @@ describe('vibe meters', () => {
 
   test('applying a vibe writes its meter into the transport', () => {
     useAppStore.getState().setMeter('7/8');
-    applyVibeToStore(RESOLVED_VIBES[0]);
+    writeVibe(RESOLVED_VIBES[0]);
     expect(useAppStore.getState().meterId).toBe('4/4');
   });
 
@@ -699,7 +502,7 @@ describe('vibe meters', () => {
     // calls: this assertion still passed). The real ordering pin is the
     // wider-meter padding test in vibes.atomic.test.ts.
     useAppStore.getState().setMeter('7/8');
-    applyVibeToStore(RESOLVED_VIBES[1]);
+    writeVibe(RESOLVED_VIBES[1]);
     expect(useAppStore.getState().meterId).toBe('4/4');
     expect(useAppStore.getState().beatPattern.rows.kick[12]).toBe(true);
   });
@@ -759,12 +562,12 @@ describe('applying a vibe writes its pad', () => {
 
   test('a vibe with a pad unmutes and configures the layer', () => {
     const vibe = RESOLVED_VIBES.find((v) => v.pad)!;
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     const s = useAppStore.getState();
     expect(s.padMuted).toBe(false);
     expect(s.padMode).toBe(vibe.pad!.mode);
     // `pad.volume` is authored linear (DEV-383 divergence 4); `padVolume` is a
-    // dB fader (DEV-386), so applyVibeToStore must convert at the boundary.
+    // dB fader (DEV-386), so a vibe write must convert at the boundary.
     expect(s.padVolume).toBe(gainToDb(toLinearGain(vibe.pad!.volume)));
     expect(s.padOctave).toBe(vibe.pad!.octave);
     expect(s.padVoicing).toBe(vibe.pad!.voicing);
@@ -778,9 +581,9 @@ describe('applying a vibe writes its pad', () => {
   test('a vibe without a pad mutes the layer and leaves its settings alone', () => {
     const withPad = RESOLVED_VIBES.find((v) => v.pad)!;
     const withoutPad = RESOLVED_VIBES.find((v) => !v.pad)!;
-    applyVibeToStore(withPad);
+    writeVibe(withPad);
     const octaveBefore = useAppStore.getState().padOctave;
-    applyVibeToStore(withoutPad);
+    writeVibe(withoutPad);
     const s = useAppStore.getState();
     expect(s.padMuted).toBe(true);
     expect(s.padOctave).toBe(octaveBefore);
@@ -839,60 +642,6 @@ describe('the vibe table', () => {
   });
 });
 
-describe('applyVibeToStore leaves a scope that matches what is sounding', () => {
-  afterEach(() => {
-    useAppStore.getState().hardStopAll();
-    useAppStore.setState({ activeTab: 'sound' });
-  });
-
-  test('a vibe clicked mid-playback keeps the loop scope it started under', () => {
-    useAppStore.setState({
-      loops: [createDefaultLoop()],
-      activeLoopId: 'loop-default-1',
-      activeTab: 'sound',
-    });
-    useAppStore.getState().soloLoop('loop-default-1');
-
-    applyVibeToStore(RESOLVED_VIBES[0]);
-
-    const s = useAppStore.getState();
-    expect(s.sequencerPlayer).toBe('playing');
-    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
-  });
-
-  test('a vibe clicked on the song layer during an audition also keeps playing', () => {
-    useAppStore.setState({
-      loops: [createDefaultLoop()],
-      activeLoopId: 'loop-default-1',
-      activeTab: 'arrange',
-    });
-    useAppStore.getState().soloLoop('loop-default-1');
-
-    applyVibeToStore(RESOLVED_VIBES[0]);
-
-    const s = useAppStore.getState();
-    // A vibe never moves activeLoopId, so it is always the "same loop" row —
-    // the song-layer stop rule cannot be triggered by clicking a vibe.
-    expect(s.sequencerPlayer).toBe('playing');
-    expect(s.playbackScope).toEqual({ kind: 'loop', loopId: 'loop-default-1' });
-  });
-
-  test('a vibe clicked with the transport stopped starts nothing and claims no scope', () => {
-    useAppStore.setState({
-      loops: [createDefaultLoop()],
-      activeLoopId: 'loop-default-1',
-      activeTab: 'sound',
-    });
-    useAppStore.getState().hardStopAll();
-
-    applyVibeToStore(RESOLVED_VIBES[0]);
-
-    const s = useAppStore.getState();
-    expect(s.sequencerPlayer).toBe('stopped');
-    expect(s.playbackScope).toBe(SCOPE_NONE);
-  });
-});
-
 describe('a vibe stamps the active loop with its display name', () => {
   beforeEach(() => {
     useAppStore.setState({ activeTab: 'sound', playbackScope: SCOPE_NONE });
@@ -904,7 +653,7 @@ describe('a vibe stamps the active loop with its display name', () => {
     const b = { ...createDefaultLoop(), id: 'loop-b', name: '', tempName: 'untitled-2' };
     useAppStore.setState({ loops: [a, b], activeLoopId: 'loop-a' });
 
-    applyVibeToStore(synthwave);
+    writeVibe(synthwave);
 
     const loops = useAppStore.getState().loops;
     // A copied NAME, not a stored vibeId: an id is a reference that claims
@@ -919,7 +668,7 @@ describe('a vibe stamps the active loop with its display name', () => {
     const named = { ...createDefaultLoop(), id: 'loop-a', name: 'Drop', tempName: 'untitled-1' };
     useAppStore.setState({ loops: [named], activeLoopId: 'loop-a' });
 
-    applyVibeToStore(lofi);
+    writeVibe(lofi);
 
     const loop = useAppStore.getState().loops[0];
     // tempName always means "the last vibe applied here"; it simply stays
@@ -932,10 +681,10 @@ describe('a vibe stamps the active loop with its display name', () => {
   });
 });
 
-describe('applyVibeToStore — the FX track', () => {
+describe('a vibe write — the FX track', () => {
   test('writes fxSynthParams from the vibe fx preset', () => {
     const vibe = resolveVibe(VIBES.find((v) => v.id === 'synthwave-80s')!);
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     expect(useAppStore.getState().fxSynthParams).toEqual(
       resolveVibeSynthParams(vibe.fxPresetId, 'fx'),
     );
@@ -952,7 +701,7 @@ describe('applyVibeToStore — the FX track', () => {
     // Already in the vibe's key, so no key change moves the notes: this pins
     // that the vibe writes no notes of its own, not what a key change does.
     useAppStore.setState({ fxMelodySteps: steps, scaleRoot: vibe.scaleRoot, scaleType: vibe.scaleType });
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     expect(useAppStore.getState().fxMelodySteps[0]).toEqual([{ note: 'C4', len: 6 }]);
   });
 
@@ -961,7 +710,7 @@ describe('applyVibeToStore — the FX track', () => {
     steps[0] = [{ note: 'E4', len: 6 }];
     const vibe = resolveVibe(VIBES.find((v) => v.id === 'lofi-chill')!);
     useAppStore.setState({ leadMelodySteps: steps, scaleRoot: vibe.scaleRoot, scaleType: vibe.scaleType });
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     expect(useAppStore.getState().leadMelodySteps[0]).toEqual([{ note: 'E4', len: 6 }]);
   });
 
@@ -975,7 +724,7 @@ describe('applyVibeToStore — the FX track', () => {
       scaleRoot: 'A',
       scaleType: 'Natural Minor',
     });
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     const s = useAppStore.getState();
     expect(s.fxMelodySteps[0]).toEqual(s.leadMelodySteps[0]);
     expect(s.leadMelodySteps[0]).not.toEqual([{ note: 'E4', len: 6 }]);
@@ -993,10 +742,10 @@ describe("a vibe's Beat filter override", () => {
    * the OVERRIDE's values and explicitly not the preset's, so an apply that
    * quietly drops it fails here rather than agreeing with the preset.
    */
-  test('applyVibeToStore lays the vibe\'s Beat filter over the preset it installed', () => {
+  test('a vibe write lays the vibe\'s Beat filter over the preset it installed', () => {
     const lofiVibe = RESOLVED_VIBES.find((v) => v.id === 'lofi-chill')!;
     expect(lofiVibe.beatFilterCutoff).toBeDefined();
-    applyVibeToStore(lofiVibe);
+    writeVibe(lofiVibe);
     const { beatParams } = useAppStore.getState();
     expect(beatParams.filter).toEqual({
       type: lofiVibe.beatFilterType!,
@@ -1010,15 +759,15 @@ describe("a vibe's Beat filter override", () => {
 });
 
 describe('a vibe apply and the reharmonize badge', () => {
-  // Same hygiene as the 'audible cut' block above: applyVibeToStore rewrites
-  // the key and chords wholesale, so a sibling file reading the store after
-  // this one must not see this test's vibe left behind.
+  // A vibe write rewrites the key and chords wholesale, so a sibling file
+  // reading the store after this one must not see this test's vibe left
+  // behind.
   afterEach(resetStore);
 
   test('a vibe installs its own chords unharmonized and clears the reharmonized badge', () => {
     const vibe = RESOLVED_VIBES.find((v) => v.scaleRoot !== useAppStore.getState().scaleRoot)!;
     useAppStore.setState({ autoReharmonize: true, reharmonizedIndicator: true });
-    applyVibeToStore(vibe);
+    writeVibe(vibe);
     const s = useAppStore.getState();
     expect(s.chords.map((c) => `${c.root}${c.quality}`)).toEqual(vibe.chords.map((c) => `${c.root}${c.quality}`));
     expect(s.reharmonizedIndicator).toBe(false);

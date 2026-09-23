@@ -9,12 +9,13 @@ import { createDefaultLoop } from './loopSlice';
 import { SCOPE_NONE } from './playbackScope';
 import { useAppStore } from './store';
 import { DEFAULT_BPM } from './transportSlice';
-import { applyVibeToStore, resolveVibe, resolveVibeSynthParams, vibeContentPatch } from './vibes';
+import { previewVibe } from './vibePreview';
+import { resolveVibe, resolveVibeVoices, vibeContentPatch } from './vibes';
 
 /**
  * Split out of vibes.test.ts to stay under the file's own line-count gate
  * (eslint.config.js's max-lines: "Split the file, never raise the cap"). Pins
- * that applying a vibe is ONE content write: one notification, the loops[]
+ * that previewing a vibe is ONE content write: one notification, the loops[]
  * mirror carried in it, and the meter-before-grid ordering kept inside it.
  */
 const RESOLVED_VIBES = VIBES.map(resolveVibe);
@@ -38,7 +39,7 @@ const resetStore = () => {
   });
 };
 
-describe('applyVibeToStore writes the vibe in one atomic patch', () => {
+describe('previewVibe writes the vibe in one atomic patch', () => {
   beforeEach(resetStore);
   afterEach(() => {
     useAppStore.getState().hardStopAll();
@@ -55,7 +56,7 @@ describe('applyVibeToStore writes the vibe in one atomic patch', () => {
     let notified = 0;
     const off = useAppStore.subscribe((s) => s.chords, () => { notified++; });
     const offKey = useAppStore.subscribe((s) => s.scaleRoot, () => { notified += 100; });
-    applyVibeToStore(vibe);
+    previewVibe(VIBES[0]);
     off(); offKey();
     expect(notified).toBe(101); // one chords change + one key change, each in the single write
   });
@@ -72,13 +73,13 @@ describe('applyVibeToStore writes the vibe in one atomic patch', () => {
       () => { writes++; },
       { equalityFn: shallow },
     );
-    applyVibeToStore(RESOLVED_VIBES[0]);
+    previewVibe(VIBES[0]);
     off();
     expect(writes).toBe(1);
   });
 
   test('the one write keeps loops[] mirrored', () => {
-    applyVibeToStore(RESOLVED_VIBES[0]);
+    previewVibe(VIBES[0]);
     const s = useAppStore.getState();
     const active = s.loops.find((l) => l.id === s.activeLoopId)!;
     expect(active.chords).toEqual(s.chords);
@@ -97,7 +98,7 @@ describe('applyVibeToStore writes the vibe in one atomic patch', () => {
       BEAT_VOICE_IDS.map((voice) => [voice, new Array<boolean>(MAX_STEPS_PER_BAR).fill(true)]),
     ) as ReturnType<typeof useAppStore.getState>['beatPattern']['rows'];
     useAppStore.setState({ meterId: '4/4', beatPattern: { rows: lit } });
-    applyVibeToStore(waltz);
+    previewVibe(VIBES.find((v) => v.id === 'lofi-waltz')!);
     const kick = useAppStore.getState().beatPattern.rows.kick;
     expect(kick.slice(12, 16)).toEqual([true, true, true, true]);
   });
@@ -105,17 +106,11 @@ describe('applyVibeToStore writes the vibe in one atomic patch', () => {
   test('vibeContentPatch is pure: it builds the patch and writes nothing', () => {
     const vibe = RESOLVED_VIBES[0];
     const before = useAppStore.getState();
-    const patch = vibeContentPatch(before, vibe, {
-      chord: resolveVibeSynthParams(vibe.chordPresetId, 'chord'),
-      bass: resolveVibeSynthParams(vibe.bassPresetId, 'bass'),
-      synth: resolveVibeSynthParams(vibe.synthPresetId, 'synth'),
-      fx: resolveVibeSynthParams(vibe.fxPresetId, 'fx'),
-      pad: null,
-    });
+    const patch = vibeContentPatch(before, vibe, resolveVibeVoices(vibe));
     expect(useAppStore.getState()).toBe(before);
     expect(patch.meterId).toBe(vibe.meter);
     expect(patch.scaleRoot).toBe(vibe.scaleRoot);
-    expect(patch.padMuted).toBe(true);
+    expect(patch.padMuted).toBe(false); // lofi-chill (RESOLVED_VIBES[0]) carries a pad
     expect(patch.selectedVibeId).toBe(vibe.id);
   });
 });

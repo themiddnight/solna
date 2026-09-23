@@ -10,14 +10,12 @@ import type { WasActivePlayers } from './transportSlice';
  * caller captured come back, and commit them together with the scope they
  * belong under, in one set().
  *
- * Two callers run this protocol — `loadLoop` (switching the loop being edited,
- * or picking a different one from Arrange) and `applyVibeToStore` (rewriting
- * the current loop in place) — and both used to spell the whole tail out:
- * the same `restartAfterStop` call, the same no-op guard, and the same ten
- * lines of comment explaining the guard. The middle of the protocol
- * (`restartAfterStop`, `restartPlayersPatch`) was already shared; the head is
- * `captureActivePlayers` and this is the tail, so the rule now has one home
- * and a change to it is one edit rather than two that must agree.
+ * `loadLoop` (switching the loop being edited, or picking a different one
+ * from Arrange) is the only caller of this protocol — a vibe preview never
+ * restarts what was playing (R337), so `previewVibe` has no tail to share
+ * here. The middle of the protocol (`restartAfterStop`, `restartPlayersPatch`)
+ * and the head (`captureActivePlayers`) live alongside this tail, so the rule
+ * has one home rather than being spelled out at each call site.
  *
  * ONE set(), not three `play(module)` calls: `play(module)` sets no scope, so
  * the old form left players 'playing' under the `none` scope `hardStopAll`

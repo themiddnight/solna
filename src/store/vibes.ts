@@ -3,25 +3,21 @@
  *
  * `resolveVibe` is the ONLY place a vibe's library ids become values, and it
  * resolves all of them before it returns anything. That ordering is the same
- * rule applyVibeToStore follows for the three synth presets, and for the same
- * reason: a throw part-way through a swap leaves the store holding half of one
- * vibe and half of another, with the transport stopped.
+ * rule `previewVibe` (`store/vibePreview.ts`) follows: resolve the vibe and
+ * its voices before any state is touched, for the same reason — a throw
+ * part-way through a swap leaves the store holding half of one vibe and half
+ * of another.
  */
 import type { ChordItem, MasterEffects } from '../types';
 import type { ActiveSynth } from '../types/synth';
 import type { SynthControlTarget } from '../utils/synthControl';
 import type { VibeSpec } from '../data/vibes';
 import { VIBES } from '../data/vibes';
-import { audioEngine } from '../audio/engine';
-import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
 import { presetById } from '../utils/synthPresets';
 import { progressionById, resolveProgression } from '../audio/chordProgressions';
 import { drumGridById } from '../audio/drumGrids';
 import { requireEffectChain } from '../audio/effectChains';
 import { gainToDb, toLinearGain } from '../utils/gainUnits';
-import { useAppStore } from './store';
-import { commitRestartAfterStop } from './stopAndRestart';
-import { captureActivePlayers } from './transportSlice';
 import { defaultTrackSynth } from './initialState';
 import { beatFilterPatch, beatPresetPatch, replaceBeatPatternPatch } from './beatSlice';
 import { chordsPatch } from './chordsSlice';
@@ -97,9 +93,6 @@ export function resolveVibeSynthParams(
   if (!preset) return defaultTrackSynth(target);
   return { engine: preset.engine, patch: structuredClone(preset.patch), sourcePresetId: preset.id };
 }
-
-/** Same instant-but-clickless release the hard-stop button uses. */
-const VIBE_SWAP_RELEASE = 0.02;
 
 /** Every voice a vibe installs, resolved before any state is touched. */
 interface VibeVoices {
@@ -330,58 +323,7 @@ export function captureVibeTargets(state: AppStore): Partial<AppStore> {
   return Object.fromEntries(VIBE_TARGET_KEYS.map((key) => [key, state[key]])) as Partial<AppStore>;
 }
 
-export function applyVibeToStore(vibe: ResolvedVibe) {
-  const store = useAppStore.getState();
 
-  // Resolve every preset id first — see resolveVibeVoices.
-  const voices = resolveVibeVoices(vibe);
-
-  // 0. Atomic swap: cut everything still scheduled BEFORE writing the new
-  //    chords and patterns, otherwise the old progression's queued voices
-  //    ring on top of the new one. A player that was mid-soft-stop counts as
-  //    active and comes back — the user changed vibe, they did not cancel.
-  // Captured BEFORE hardStopAll below, which resets it to 'none'.
-  const scopeBefore = store.playbackScope;
-  const wasActive = captureActivePlayers(store);
-  store.hardStopAll();
-  // The transport transition alone does NOT silence anything: the whole swap
-  // runs inside one onClick, React 18 batches it, and the rendered player
-  // state goes 'playing' -> 'playing' — so a React effect keyed on it never
-  // runs and the queued chord/bass voices sing on over the new vibe.
-  // (Measured: React logged a single 'playing' render while the zustand
-  // subscription saw 'stopped' then 'playing'.) So cut the sources here,
-  // synchronously, where the swap actually happens. store/ -> audio/ is the
-  // allowed direction; engineSync.ts reaches the engine the same way.
-  // Unconditional: a mid-soft-stop player still has a release pending on the
-  // audio clock, and a stopped player may still be ringing out a preview.
-  // Drums are fire-and-forget one-shots with no tracked voices — one already
-  // scheduled hit can still land, which the spec accepts.
-  for (const source of ACCOMPANIMENT_SOURCES) {
-    audioEngine.stopSource(source, VIBE_SWAP_RELEASE);
-  }
-
-  // 1–6. The vibe's content, in ONE write — after the cut above, so nothing
-  // of the old vibe is left queued when the new progression lands. engineSync
-  // therefore sees the final state once: the meter reaches the engine with
-  // the new grid, and both are read on the next bar.
-  useAppStore.setState((s) => withMirror(s, vibeContentPatch(s, vibe, voices)));
-
-  // Restart what was running, in ONE set() that also puts the scope back —
-  // see commitRestartAfterStop for the rule and its no-op guard. Both playback
-  // hooks arm on `step % stepsPerBar === 0` for the ACTIVE meter, which was
-  // just written above, so the restart lands on the next bar by construction — no
-  // alignment code needed here.
-  //
-  // A vibe rewrites the CURRENT loop and never moves activeLoopId, so it
-  // always lands on restartAfterStop's "same loop" row: it keeps playing,
-  // under the scope it already had. The three play(module) calls this
-  // replaces set no scope at all, which is why clicking a vibe mid-playback
-  // used to leave every player 'playing' under `none`.
-  //
-  // activeLoopId is read live rather than captured because the write above
-  // does not touch it — the value is the same either way.
-  commitRestartAfterStop(scopeBefore, useAppStore.getState().activeLoopId, wasActive);
-}
 
 /** Every vibe's id, in table order — the identity set the invariant tests pin against. */
 export const VIBE_IDS: string[] = VIBES.map((v) => v.id);

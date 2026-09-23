@@ -18,9 +18,10 @@ function keyChangeWrite(state: AppStore, target: KeyChangeTarget): Partial<AppSt
 
 /**
  * Music context slice: the global key/scale plus the id of the Instant Vibe
- * that was last loaded. `selectedVibeId` is persisted so the vibe bar's
- * highlight survives a reload; it is written by applyVibeToStore, not
- * by the key/scale setters, so editing the key by hand does not clear it.
+ * that was last loaded. `selectedVibeId` is persisted so its
+ * highlight survives a reload; it is written by a vibe preview
+ * (`previewVibe`), not by the key/scale setters, so editing the key by hand
+ * does not clear it.
  * Every melody track in `MELODY_TRACKS` follows a key change (changeKey);
  * the loop-copy `key` group deliberately transposes none (see `impliesKeyCopy`).
  */

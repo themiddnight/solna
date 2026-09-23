@@ -68,11 +68,12 @@ export function eligibleFor<T>(items: T[], current: T): T[] {
  * Rerolls a vibe into a different piece of music from its own pools.
  *
  * Takes a VibeSpec and returns a VibeSpec: a reroll is an ID-LEVEL operation,
- * so the caller resolves the result through `resolveVibe` exactly as a chip
- * click does, and applies it through the same `applyVibeToStore`. There is
- * deliberately no second resolve path and no second apply path — the first
- * kept a drawn `progressionId` able to disagree with the `chords` beside it,
- * the second is what keeps the hard-stop-on-swap fix from regressing.
+ * so `resolveVibeVariation` resolves the result through `resolveVibe` exactly
+ * as a chip pick does, and `rerollPreview` (`store/vibePreview.ts`) previews
+ * it through the same `previewVibe`. There is deliberately no second resolve
+ * path and no second apply path — the first kept a drawn `progressionId` able
+ * to disagree with the `chords` beside it, the second is what keeps the
+ * hard-stop-on-swap fix from regressing.
  *
  * Starts from the AUTHORED spec every time — never from the current store — so
  * rerolls never compound, and overwrites exactly six fields: scaleRoot, bpm,
@@ -103,7 +104,7 @@ export function resolveVibeVariation(
   // PLAIN pick, following progressions one line above — not pickDistinct like
   // keys/chordRhythms/bassPatterns. Those three have a `current` to exclude;
   // the playing grid id is not in the store at all (SequencerView holds it in a
-  // useState and applyVibeToStore never writes it). Manufacturing one would
+  // useState and no vibe write touches it). Manufacturing one would
   // mean a second source of truth that two callers must remember to write, and
   // the failure is SILENT: miss a writer and pickDistinct excludes the wrong
   // id, leaving "the dice can land back on the vibe as authored" true in the

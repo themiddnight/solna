@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useAppStore } from './store';
 import { VIBES } from '../data/vibes';
-import { applyVibeToStore, resolveVibe } from './vibes';
+import { resolveVibe } from './vibes';
+import { writeVibe } from './vibeWriteFixture';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
@@ -430,11 +431,11 @@ describe('custom step sequencer — non-destructive across meter change', () => 
 describe('custom step sequencer — instant vibes reset the mode', () => {
   beforeEach(resetCustomFields);
 
-  test('applyVibeToStore returns both modes to preset', () => {
+  test('a vibe write returns both modes to preset', () => {
     const s = useAppStore.getState();
     s.setChordRhythmMode('custom');
     s.setBassPatternMode('custom');
-    applyVibeToStore(resolveVibe(VIBES[0]));
+    writeVibe(resolveVibe(VIBES[0]));
     expect(useAppStore.getState().chordRhythmMode).toBe('preset');
     expect(useAppStore.getState().bassPatternMode).toBe('preset');
     expect(useAppStore.getState().customChordLoopLength).toBe(1);

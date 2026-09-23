@@ -9,7 +9,8 @@ import { DRUM_GRIDS, type DrumGrid } from '@/data/drumGrids';
  * Returns a grid whose `rows` are a FRESH deep copy on every call — never the
  * module's own arrays. This ensures DRUM_GRIDS stays authoritative and
  * immutable: callers cannot mutate the library through a grid reference, and
- * `applyVibeToStore` writes the resolved rows straight into store state.
+ * a vibe write (`vibeContentPatch`) writes the resolved rows straight into
+ * store state.
  * `resolveProgression` follows the same rule and also returns freshly built
  * objects every call.
  */

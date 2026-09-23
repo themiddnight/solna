@@ -7,8 +7,9 @@
 // not the id, so these ids are safe to rename (unlike Instant Vibe preset ids).
 //
 // Every chain is a Partial<MasterEffects> by design, not oversight: only
-// synthwave-neon-hall and edm-club-drive carry distortionWet. applyVibeToStore
-// (src/store/vibes.ts) spreads a resolved chain over the current store.effects
+// synthwave-neon-hall and edm-club-drive carry distortionWet. A vibe write
+// (`vibeContentPatch`, src/store/vibes.ts) spreads a resolved chain over the
+// current store.effects
 // (`{ ...store.effects, ...vibe.effects }`), so an omitted key means "inherit
 // the current value" — adding distortionWet to a chain that omits it today would be
 // a sound change, which this refactor forbids.

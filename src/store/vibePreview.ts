@@ -8,10 +8,9 @@
  *
  * Every command starts with the same stop + cut: hardStopAll alone does not
  * silence voices already queued on the audio clock, so the accompaniment
- * sources are cut synchronously, BEFORE any write — the fix that used to live
- * in applyVibeToStore. The picker never restarts what was playing: opening and
- * closing both leave the transport stopped, and a preview plays the active
- * loop alone (soloLoop), never the song.
+ * sources are cut synchronously, BEFORE any write. The picker never restarts
+ * what was playing: opening and closing both leave the transport stopped, and
+ * a preview plays the active loop alone (soloLoop), never the song.
  */
 import type { VibeSpec } from '../data/vibes';
 import { audioEngine } from '../audio/engine';

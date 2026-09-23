@@ -33,12 +33,12 @@ const LOOP_VOICE_SOURCES = [...ACCOMPANIMENT_SOURCES, 'synth'] as const;
  * Two paths, and the difference between them is the difference between a
  * switch the user asked for and a seam the arrangement crosses on its own.
  *
- * **Default — the user picked a different loop.** Reuses the
- * applyVibeToStore swap verbatim: capture who was active -> hardStopAll
- * -> cut the chord/bass sources -> load the loop's per-loop fields -> restart
- * whoever was playing. A state-only swap would leave the OLD loop's queued
- * chord/bass voices ringing over the new one — the exact React-18-batching
- * reason documented in vibes.ts (the rendered player state goes
+ * **Default — the user picked a different loop.** Its own atomic swap —
+ * `loadLoop` is `commitRestartAfterStop`'s one caller: capture who was active
+ * -> hardStopAll -> cut the chord/bass sources -> load the loop's per-loop
+ * fields -> restart whoever was playing. A state-only swap would leave the
+ * OLD loop's queued chord/bass voices ringing over the new one — the exact
+ * React-18-batching reason (the rendered player state goes
  * 'playing' -> 'playing', so a React effect keyed on it never runs and the cut
  * must happen here, synchronously). Drums are fire-and-forget one-shots; one
  * already-scheduled hit can still land, which the spec accepts.

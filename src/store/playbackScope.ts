@@ -31,12 +31,11 @@ import type { Layer } from '../types';
  * rule reads the scope alone to decide what survives a navigation, which is
  * only sound while that holds.
  *
- * It holds across the two internal stop-and-restart paths as well, since
- * DEV Phase 3: loadLoop.ts's non-boundary branch and vibes.ts's
- * applyVibeToStore both hard-stop and restart, and both now go through
- * restartAfterStop + restartPlayersPatch, which decide whether the players
- * come back at all and write the scope with them in one set() instead of
- * leaving the `none` that hardStopAll wrote. songMode reads the scope alone
+ * It holds across the internal stop-and-restart path as well, since
+ * DEV Phase 3: loadLoop.ts's non-boundary branch hard-stops and restarts,
+ * going through restartAfterStop + restartPlayersPatch, which decide whether
+ * the players come back at all and write the scope with them in one set()
+ * instead of leaving the `none` that hardStopAll wrote. songMode reads the scope alone
  * to decide what survives a navigation, so a restart that sets no scope
  * would make that decision act on a lie — silence where music should
  * continue, or a hard stop the user did not ask for.
@@ -149,8 +148,8 @@ export interface RestartDecision {
 
 /**
  * The decision an INTERNAL stop-and-restart has to make — the shape
- * loadLoop's non-boundary branch and applyVibeToStore both have: capture who
- * was active, hardStopAll (which resets the scope to `none`), rewrite the
+ * loadLoop's non-boundary branch has: capture who was active, hardStopAll
+ * (which resets the scope to `none`), rewrite the
  * content, and then decide. Before this existed the "decide" step was three
  * unconditional play(module) calls, which set no scope and left playback
  * running under `none`.
