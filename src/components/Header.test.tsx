@@ -371,6 +371,14 @@ describe('key picker', () => {
     expect(html).toContain('id="select-master-scale-compact-root"');
   });
 
+  // The dropdown trigger stands beside the loop picker / project name, which
+  // wear the field box around a `select-sm`; it wears the same box around a
+  // content-box `h-8`, so both come out the same height on every frame.
+  test('the dropdown trigger wears the field box at the select height', () => {
+    const html = renderToString(<ScaleMenu />);
+    expect(html).toMatch(new RegExp(`<summary id="btn-scale-dropdown" class="${HEADER_FIELD_SHELL} box-content h-8 `));
+  });
+
   // The header pair is FIXED width, and the scale name ellipsises inside it.
   // Both halves are one mechanism, which is why they are one test: daisyUI's
   // `.select` sizes itself (`clamp(3rem, 20rem, 100%)`, `flex-shrink: 1`), so

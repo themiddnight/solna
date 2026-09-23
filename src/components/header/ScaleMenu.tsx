@@ -4,6 +4,14 @@ import { SCALES } from '@/data/scales';
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
 import { HEADER_FIELD_SHELL, HEADER_SELECT } from '@/components/ui/fieldClasses';
 
+/**
+ * The dropdown trigger inside its field box: a content-box `h-8`, the
+ * `select-sm` height of the selects in the boxes beside it, so the padding and
+ * border land on top exactly as theirs do.
+ */
+const SCALE_TRIGGER =
+  'box-content h-8 cursor-pointer list-none select-none text-xs font-bold hover:bg-base-300 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+
 interface ScaleSelectsProps {
   idPrefix: string;
   stacked?: boolean;
@@ -78,9 +86,12 @@ export function ScaleMenu() {
           ~31px off a 375px phone; from `md` up the trigger sits far enough
           right in the desktop header for the same alignment to clear. */}
       <details className="dropdown dropdown-end xl:hidden">
+        {/* The trigger wears the navbar's field box (`HEADER_FIELD_SHELL`) around
+            a select-height row, so it stands the same height as the loop picker
+            or project name beside it, at every width it shows. */}
         <summary
           id="btn-scale-dropdown"
-          className="btn btn-sm btn-ghost gap-1 px-2 text-xs font-bold list-none bg-base-200/70 border border-base-300"
+          className={`${HEADER_FIELD_SHELL} ${SCALE_TRIGGER}`}
           title={`Key & Scale — ${formatKeyLabel(scaleRoot, scaleType, { long: true })}`}
         >
           <span className="text-primary">{getTonicSpelling(scaleRoot, scaleType)}</span>

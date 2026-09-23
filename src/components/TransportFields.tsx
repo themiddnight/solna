@@ -108,13 +108,17 @@ export function MeterField({
   place?: TransportPlace;
 }) {
   return (
+    // In the sheet the select takes the 44px target the BPM stepper beside it
+    // has, so the two fields stand the same height.
     <div className={TRANSPORT_FIELD_SHELL}>
       <span className={fieldLabel(place)}>Meter</span>
       <select
         id="select-transport-meter"
         value={meterId}
         onChange={(e) => setMeter(coerceMeterChoice(e.target.value, meterId))}
-        className="select select-xs select-ghost focus:outline-none font-bold text-primary w-16 ps-1 pe-6"
+        className={`select select-xs select-ghost focus:outline-none font-bold text-primary w-16 ps-1 pe-6${
+          place === 'sheet' ? ' min-h-11' : ''
+        }`}
         title="Time signature"
       >
         {METER_OPTIONS.map((option) => (

@@ -278,6 +278,10 @@ describe('the transport sheet', () => {
     }
   });
 
+  test('the meter select takes the same 44px target, so the two fields stand level', () => {
+    expect(html).toMatch(/<select id="select-transport-meter"[^>]*class="[^"]*min-h-11"/);
+  });
+
   test('the metronome is a labelled toggle that states its pressed state', () => {
     expect(html).toMatch(/<button id="btn-transport-metronome" type="button" aria-pressed="true" class="btn btn-sm gap-1.5 text-xs btn-primary"/);
     expect(html).toContain('Metronome</button>');
