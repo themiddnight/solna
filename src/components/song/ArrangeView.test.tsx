@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { loopStatePatch } from '@/store/loop';
-import { createDefaultLoop } from '@/store/loopSlice';
+import { loopLabel, loopStatePatch } from '@/store/loop';
+import { createDefaultLoop, DEFAULT_LOOP_ID } from '@/store/loopSlice';
 import { useAppStore } from '@/store/store';
-import { ArrangeView, buildEditRoute, editLoop } from './ArrangeView';
+import { ArrangeView, buildEditRoute, editLoop, useLoopDeleteUndo } from './ArrangeView';
 import { loopIdKeyOf } from './loopIdKey';
 import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
-import { keyChangeToastMessage } from './useLoopKeyChangeUndo';
+import { keyChangeToastMessage, useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
+import { subscribeLoopUndoDismissOnInstall } from './useLoopUndo';
 
 // editLoop -> loadLoop mutates the shared singleton store (flat slices,
 // activeLoopId, player states). bun runs every test file in one process
@@ -24,6 +25,12 @@ const resetStore = () => {
     leadPlayer: 'stopped',
     songLoopIndex: null,
     playbackScope: { kind: 'none' },
+    // The feedback wiring tests below raise real snackbars with real timers
+    // (showFeedback); clearing the list every reset keeps a leftover entry —
+    // or its still-armed timer clearing an unrelated key later — from ever
+    // reaching another test in this shared-process file.
+    feedback: [],
+    feedbackHolds: 0,
   });
 };
 
@@ -171,6 +178,95 @@ describe('ArrangeView key change', () => {
         snapshots: [1, 2, 3].map((i) => ({ loopId: `l${i}`, content: {} as never })),
       })
     ).toBe('Key changed on 3 loops');
+  });
+});
+
+/**
+ * §5.6 Undo: proves the actual production wiring — `deleteLoopLive` through
+ * `useLoopDeleteUndo` through `useLoopUndo` — lands a real snackbar in the
+ * shared `feedback` list, not just that `buildLoopUndoRequest` (unit-tested
+ * in `useLoopUndo.test.ts`) shapes a request correctly in isolation.
+ *
+ * `useLoopDeleteUndo`'s `onDelete` is a `useCallback`, so it is captured once
+ * through one `renderToString` pass (the `Probe` idiom already used by
+ * `useEffectsDraft.test.tsx`/`ChordView.test.tsx`) and then called directly —
+ * no interaction/DOM needed, and it does not depend on an effect (unlike the
+ * install-dismiss subscription below, which `renderToString` never runs:
+ * effects are client-only, so that one is exercised through
+ * `subscribeLoopUndoDismissOnInstall` directly instead).
+ */
+describe('ArrangeView loop-delete Undo (feedback wiring)', () => {
+  const secondLoop = () => ({ ...createDefaultLoop(), id: 'loop-b' });
+
+  const captureOnDelete = (): ((id: string) => void) => {
+    let captured: ReturnType<typeof useLoopDeleteUndo> | null = null;
+    function Probe() {
+      captured = useLoopDeleteUndo();
+      return null;
+    }
+    renderToString(<Probe />);
+    return captured!.onDelete;
+  };
+
+  test('deleting a loop offers a snackbar keyed btn-undo-loop-delete, whose Undo restores it', () => {
+    const b = secondLoop();
+    useAppStore.setState({ loops: [createDefaultLoop(), b], activeLoopId: DEFAULT_LOOP_ID });
+
+    captureOnDelete()(b.id);
+
+    const entry = useAppStore.getState().feedback.find((e) => e.key === 'btn-undo-loop-delete');
+    expect(entry).toBeDefined();
+    expect(entry!.message).toBe(`${loopLabel(b)} deleted`);
+    expect(entry!.action?.id).toBe('btn-undo-loop-delete');
+    expect(useAppStore.getState().loops.some((l) => l.id === b.id)).toBe(false);
+
+    useAppStore.getState().runFeedbackAction('btn-undo-loop-delete');
+
+    expect(useAppStore.getState().loops.some((l) => l.id === b.id)).toBe(true);
+    expect(useAppStore.getState().feedback.some((e) => e.key === 'btn-undo-loop-delete')).toBe(false);
+  });
+
+  test('a project install dismisses the pending delete Undo', () => {
+    const b = secondLoop();
+    useAppStore.setState({ loops: [createDefaultLoop(), b], activeLoopId: DEFAULT_LOOP_ID });
+    captureOnDelete()(b.id);
+    expect(useAppStore.getState().feedback.some((e) => e.key === 'btn-undo-loop-delete')).toBe(true);
+
+    const unsubscribe = subscribeLoopUndoDismissOnInstall('btn-undo-loop-delete');
+    useAppStore.setState({ projectInstallCount: useAppStore.getState().projectInstallCount + 1 });
+    unsubscribe();
+
+    expect(useAppStore.getState().feedback.some((e) => e.key === 'btn-undo-loop-delete')).toBe(false);
+  });
+});
+
+/** Same wiring, the batch key-change path — §5.6 Undo, `keyChangeUndo` is now a snackbar only. */
+describe('ArrangeView key-change Undo (feedback wiring)', () => {
+  const captureOnApply = (): ((...args: Parameters<ReturnType<typeof useLoopKeyChangeUndo>['onApplyKeyChange']>) => void) => {
+    let captured: ReturnType<typeof useLoopKeyChangeUndo> | null = null;
+    function Probe() {
+      captured = useLoopKeyChangeUndo();
+      return null;
+    }
+    renderToString(<Probe />);
+    return captured!.onApplyKeyChange;
+  };
+
+  test('applying a key change offers a snackbar keyed btn-undo-key-change, whose Undo restores the scale', () => {
+    const before = useAppStore.getState().scaleRoot;
+
+    captureOnApply()([DEFAULT_LOOP_ID], { mode: 'transpose', semitones: 2 }, { harmonizeChords: true });
+
+    expect(useAppStore.getState().scaleRoot).not.toBe(before);
+    const entry = useAppStore.getState().feedback.find((e) => e.key === 'btn-undo-key-change');
+    expect(entry).toBeDefined();
+    expect(entry!.message).toBe('Key changed on 1 loop');
+    expect(entry!.action?.id).toBe('btn-undo-key-change');
+
+    useAppStore.getState().runFeedbackAction('btn-undo-key-change');
+
+    expect(useAppStore.getState().scaleRoot).toBe(before);
+    expect(useAppStore.getState().feedback.some((e) => e.key === 'btn-undo-key-change')).toBe(false);
   });
 });
 

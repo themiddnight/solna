@@ -232,7 +232,7 @@ function useArrangeDrag(loops: Loop[]) {
  * was the active loop, switches back the same way — or through `loadLoop` when
  * nothing plays. A project install dismisses a pending Undo (useLoopUndo).
  */
-function useLoopDeleteUndo() {
+export function useLoopDeleteUndo() {
   const { offer } = useLoopUndo<DeletedLoop>(
     undoLoopDelete,
     'btn-undo-loop-delete',

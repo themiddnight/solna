@@ -28,6 +28,19 @@ export function buildLoopUndoRequest<T>(
 }
 
 /**
+ * Dismisses `key`'s pending Undo on the next project install (loop ids
+ * collide across projects) — a plain store subscription, not a hook, so it is
+ * callable and testable outside React; `useLoopUndo` only ties its lifetime to
+ * the component via `useEffect`. Returns the unsubscribe.
+ */
+export function subscribeLoopUndoDismissOnInstall(key: string): () => void {
+  return useAppStore.subscribe(
+    (s) => s.projectInstallCount,
+    () => useAppStore.getState().dismissFeedback(key),
+  );
+}
+
+/**
  * One single-level, timed Arrange Undo snackbar (loop delete, batch key
  * change), raised through the shared feedback host (§5.6). ArrangeView stays
  * mounted across a project install, and loop ids collide across projects, so
@@ -40,14 +53,7 @@ export function useLoopUndo<T>(
   key: string,
   messageOf: (payload: T) => string,
 ): UseLoopUndo<T> {
-  useEffect(
-    () =>
-      useAppStore.subscribe(
-        (s) => s.projectInstallCount,
-        () => useAppStore.getState().dismissFeedback(key),
-      ),
-    [key],
-  );
+  useEffect(() => subscribeLoopUndoDismissOnInstall(key), [key]);
 
   const offer = useCallback(
     (payload: T) =>
