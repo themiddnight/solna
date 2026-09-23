@@ -70,6 +70,20 @@ describe('ChordView preview UI', () => {
   });
 });
 
+describe('the chord catalog chips', () => {
+  test('the chip auditions and a separate + button appends', () => {
+    const html = renderToString(<ChordView />);
+
+    expect(html).toContain('Hold to preview, + to add:');
+    expect(html).toContain('title="Hold to preview ');
+    expect(html).toContain('aria-label="Add ');
+    // The append no longer rides a click on the chip, and nothing interactive
+    // is nested inside it.
+    expect(html).not.toContain('title="Click to add ');
+    expect(html).not.toContain('Hold to Preview Chord Audio');
+  });
+});
+
 describe('ChordView progression drawer button', () => {
   // See the matching test in SoundView.test.tsx for why neither button says
   // "Library" any more.

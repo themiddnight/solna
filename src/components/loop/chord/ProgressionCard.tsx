@@ -1,6 +1,6 @@
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
-import { Music, Plus, Sparkles, Volume2 } from 'lucide-react';
+import { Music, Plus, Sparkles } from 'lucide-react';
 import { HEADER_BADGE, SECTION_HEADER } from '@/components/ui/fieldClasses';
 import { ModuleHeader } from '@/components/ui/ModuleHeader';
 import { SortableChordCard } from './SortableChordCard';
@@ -31,51 +31,70 @@ type PreviewEvent = React.MouseEvent | React.TouchEvent | React.KeyboardEvent;
 
 type SpellingKey = ChordViewState['spellingKey'];
 
-/** The two chip rows' accent, as a table so the literals stay scannable. */
-const HOLD_TONE: Record<'chord' | 'secondary', string> = {
-  chord: 'hover:text-module-chord',
-  secondary: 'hover:text-secondary',
+/** The two chip rows' colour, as a table so the literals stay scannable. */
+const CHIP_TONE: Record<'chord' | 'secondary', { button: string; badge: string }> = {
+  chord: { button: 'btn-soft', badge: 'text-module-chord' },
+  secondary: { button: 'btn-soft btn-secondary', badge: 'text-secondary' },
 };
 
-interface HoldToPreviewButtonProps {
+interface PaletteChipProps {
   tone: 'chord' | 'secondary';
+  /** The degree or borrowed-chord badge, e.g. "ii" or "IV (Major IV)". */
+  badge: string;
+  /** The spelled chord, e.g. "Dm". */
+  chordLabel: string;
   onDown: (e: PreviewEvent) => void;
   onUp: (e: PreviewEvent) => void;
+  onAdd: () => void;
 }
 
 /**
- * The speaker inside a quick-add chip: hold it to hear the chord, release to
- * stop. A nested `role="button"` span rather than a real button, because a
- * button inside a button is invalid — the rest of the chip appends, this part
- * auditions.
+ * One palette chord as a `join` of two real buttons: the chip itself
+ * auditions while held (mouse, touch, or Enter/Space), and the `+` beside it
+ * appends. Listening comes first, so it takes the large target; appending is
+ * the deliberate second step. Two sibling buttons rather than a control nested
+ * inside a button, which is invalid markup.
  */
-function HoldToPreviewButton({ tone, onDown, onUp }: HoldToPreviewButtonProps) {
+function PaletteChip({ tone, badge, chordLabel, onDown, onUp, onAdd }: PaletteChipProps) {
+  const { button, badge: badgeText } = CHIP_TONE[tone];
   return (
-    <span
-      role="button"
-      tabIndex={0}
-      onMouseDown={onDown}
-      onMouseUp={onUp}
-      onMouseLeave={onUp}
-      onTouchStart={onDown}
-      onTouchEnd={onUp}
-      onKeyDown={(e) => {
-        // Press-and-hold audition: the key repeat would retrigger
-        // the chord every few milliseconds.
-        if (e.repeat) return;
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        onDown(e);
-      }}
-      onKeyUp={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        onUp(e);
-      }}
-      onClick={(e) => e.stopPropagation()}
-      className={`p-1 text-base-content/60 ${HOLD_TONE[tone]} transition-colors ml-0.5 rounded-selector hover:bg-base-300 cursor-pointer select-none`}
-      title="Hold to Preview Chord Audio"
-    >
-      <Volume2 className="w-2.5 h-2.5" />
-    </span>
+    <div className="join">
+      <button
+        type="button"
+        onMouseDown={onDown}
+        onMouseUp={onUp}
+        onMouseLeave={onUp}
+        onTouchStart={onDown}
+        onTouchEnd={onUp}
+        onKeyDown={(e) => {
+          // Press-and-hold audition: the key repeat would retrigger the chord
+          // every few milliseconds.
+          if (e.repeat) return;
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          onDown(e);
+        }}
+        onKeyUp={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          onUp(e);
+        }}
+        className={`btn btn-xs ${button} join-item gap-1.5 h-auto py-1 normal-case select-none`}
+        title={`Hold to preview ${chordLabel} (${badge})`}
+      >
+        <span className={`text-[10px] ${badgeText} font-bold bg-base-300 px-1.5 py-0.5 rounded-selector`}>
+          {badge}
+        </span>
+        <span className="font-semibold">{chordLabel}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onAdd}
+        className={`btn btn-xs ${button} join-item h-auto px-1.5 border-l border-l-base-300`}
+        aria-label={`Add ${chordLabel}`}
+        title={`Add ${chordLabel} (${badge})`}
+      >
+        <Plus className="w-3 h-3" />
+      </button>
+    </div>
   );
 }
 
@@ -91,8 +110,8 @@ interface QuickAddPaletteProps {
 
 /**
  * The two rows of one-click chords: the key's own degrees, and the borrowed
- * ones that color outside it. Each chip appends on click and auditions on the
- * speaker — the appending is the primary action, the audition the second.
+ * ones that color outside it. Each chip auditions while held and appends from
+ * its `+`.
  */
 function QuickAddPalette({
   palette,
@@ -120,7 +139,7 @@ function QuickAddPalette({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-base-content/60">
-            Click to append, 🔊 to preview:
+            Hold to preview, + to add:
           </span>
           <button
             type="button"
@@ -138,21 +157,14 @@ function QuickAddPalette({
 
       <div className="flex items-center gap-1.5 flex-wrap">
         {palette.diatonicChords.map((diatonic, i) => (
-          <button
+          <PaletteChip
             key={i}
-            type="button"
-            onClick={() => onAddDiatonic(i)}
-            className="btn btn-xs btn-soft group gap-1.5 h-auto py-1 normal-case"
-            title={`Click to add ${formatChordLabel(diatonic.root, diatonic.quality, spellingKey)} (${diatonic.degreeName})`}
-          >
-            <span className="text-[10px] text-module-chord font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
-              {diatonic.degreeName}
-            </span>
-            <span className="font-semibold">
-              {formatChordLabel(diatonic.root, diatonic.quality, spellingKey)}
-            </span>
-            <HoldToPreviewButton tone="chord" {...hold(diatonic.root, diatonic.quality)} />
-          </button>
+            tone="chord"
+            badge={diatonic.degreeName}
+            chordLabel={formatChordLabel(diatonic.root, diatonic.quality, spellingKey)}
+            {...hold(diatonic.root, diatonic.quality)}
+            onAdd={() => onAddDiatonic(i)}
+          />
         ))}
       </div>
 
@@ -169,21 +181,14 @@ function QuickAddPalette({
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {palette.borrowedChords.map((borrowed, i) => (
-            <button
+            <PaletteChip
               key={i}
-              type="button"
-              onClick={() => onAddBorrowed(borrowed.root, borrowed.quality)}
-              className="btn btn-xs btn-soft btn-secondary group gap-1.5 h-auto py-1 normal-case"
-              title={`Click to add ${borrowed.label}: ${formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}`}
-            >
-              <span className="text-[10px] text-secondary font-bold bg-base-300 px-1.5 py-0.5 rounded-selector">
-                {borrowed.label}
-              </span>
-              <span className="font-semibold">
-                {formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}
-              </span>
-              <HoldToPreviewButton tone="secondary" {...hold(borrowed.root, borrowed.quality)} />
-            </button>
+              tone="secondary"
+              badge={borrowed.label}
+              chordLabel={formatChordLabel(borrowed.root, borrowed.quality, spellingKey)}
+              {...hold(borrowed.root, borrowed.quality)}
+              onAdd={() => onAddBorrowed(borrowed.root, borrowed.quality)}
+            />
           ))}
         </div>
       </div>
