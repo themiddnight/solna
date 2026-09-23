@@ -363,3 +363,12 @@ describe('loop clipboard buffer', () => {
     expect([...PROJECT_CONTENT_KEYS]).not.toContain('loopClipboard');
   });
 });
+
+describe('noteInputSuspended (R336)', () => {
+  afterEach(() => { useAppStore.setState({ noteInputSuspended: false }); });
+  test('starts false and is set by its one setter', () => {
+    expect(useAppStore.getState().noteInputSuspended).toBe(false);
+    useAppStore.getState().setNoteInputSuspended(true);
+    expect(useAppStore.getState().noteInputSuspended).toBe(true);
+  });
+});

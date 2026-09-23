@@ -231,6 +231,7 @@ export function startMidiInputBridge(): void {
     .then((access) => {
       if (!access) return;
 
+      // eslint-disable-next-line complexity -- one MIDI message dispatcher: status-byte branches for note/CC/learn, now plus the R336 suspension gate; splitting would scatter one message's decode
       const handleMessage = (event: MIDIMessageEvent) => {
         const data = event.data;
         if (!data || data.length < 3) return;
@@ -245,6 +246,11 @@ export function startMidiInputBridge(): void {
         const command = status & 0xF0;
         const data1 = data[1];
         const data2 = data[2];
+
+        // R336: while the vibe picker previews, a note-on would play over the
+        // audition and a CC would edit state Cancel is about to wipe. A
+        // note-off still passes, so a key held across the open releases.
+        if (s.noteInputSuspended && (command === 0xB0 || (command === 0x90 && data2 > 0))) return;
 
         // Check if MIDI Learn is active for CC
         const learnId = s.midiLearnTargetId;

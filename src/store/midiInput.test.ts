@@ -411,6 +411,42 @@ describe('MIDI joins the note-input funnel', () => {
   });
 });
 
+describe('suspended note input drops MIDI note-on and CC (R336)', () => {
+  afterEach(() => { useAppStore.setState({ noteInputSuspended: false }); });
+
+  test('a note-on is dropped: no voice, no bus event', () => {
+    const spy = spyNotePair();
+    const events: NoteInputEvent[] = [];
+    subscribeNoteInput((e) => events.push(e));
+    const input = connect('dev-suspend-on');
+    useAppStore.getState().setNoteInputSuspended(true);
+    noteOn(input, 60);
+    expect(spy.on).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+    resetNoteInputListeners();
+    spy.restore();
+  });
+
+  test('a note-off still passes, so a key held across the open releases', () => {
+    const spy = spyNotePair();
+    const input = connect('dev-suspend-off');
+    noteOn(input, 60);
+    useAppStore.getState().setNoteInputSuspended(true);
+    input.onmidimessage?.({ data: [0x80, 60, 0], target: input });
+    expect(spy.releasedFrequencies()).toEqual([noteFrequency('C4')]);
+    spy.restore();
+  });
+
+  test('a CC is dropped: the mapped parameter does not move', () => {
+    useAppStore.setState({ masterVolume: 0 });
+    const input = connect('dev-suspend-cc');
+    useAppStore.getState().setNoteInputSuspended(true);
+    input.onmidimessage?.({ data: [0xb0, 7, 127], target: input }); // would be +12 dB
+    __flushCcFramesForTests();
+    expect(useAppStore.getState().masterVolume).toBe(0);
+  });
+});
+
 describe('MIDI CC drives masterVolume on the fader taper, not a linear dB ramp', () => {
   // No test previously exercised the default 'm-vol' mapping (CC 7) at all —
   // this is new coverage, not a replacement.

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import {
   useInputDeck,
@@ -10,6 +11,8 @@ import {
   selectSynthRelease,
   performNoteOff,
   performNoteOn,
+  ignoresNoteKey,
+  subscribeNoteInputSuspended,
 } from './useInputDeck';
 import type { InputDeckDrumProps, InputDeckKeyboardProps } from './useInputDeck';
 import { synthTargetForFocus } from '@/store/focusTrack';
@@ -572,5 +575,30 @@ describe('performNoteOn', () => {
     const rec = recordingActions();
     performNoteOn('C4', 'synth', held, 0.5, false, rec.actions);
     expect(held.get('C4')?.voiceId).toBe('voice-1' as VoiceId);
+  });
+});
+
+describe('note input suspension (R336)', () => {
+  afterEach(() => { useAppStore.setState({ noteInputSuspended: false }); });
+
+  test('a suspended deck ignores every key before any DOM check', () => {
+    useAppStore.getState().setNoteInputSuspended(true);
+    // No DOM in bun: the flag must short-circuit before isTypingTarget reads HTMLInputElement.
+    expect(ignoresNoteKey({} as KeyboardEvent)).toBe(true);
+  });
+
+  test('the rising edge fires the release once; repeats and the falling edge do not', () => {
+    let fired = 0;
+    const off = subscribeNoteInputSuspended(() => { fired++; });
+    useAppStore.getState().setNoteInputSuspended(true);
+    useAppStore.getState().setNoteInputSuspended(true);
+    useAppStore.getState().setNoteInputSuspended(false);
+    off();
+    expect(fired).toBe(1);
+  });
+
+  test('both keydown listeners — notes and drum pads — go through the gate; keyup does not', () => {
+    const src = readFileSync(new URL('./useInputDeck.ts', import.meta.url), 'utf8');
+    expect(src.match(/if \(ignoresNoteKey\(e\)\) return;/g)?.length).toBe(2);
   });
 });

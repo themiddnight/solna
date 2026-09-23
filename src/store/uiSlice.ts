@@ -95,6 +95,7 @@ export function createUiSlice(set: Set): UiSlice {
     isMidiSettingsOpen: false,
     isInputPanelOpen: false,
     inputPanelMode: 'keyboard',
+    noteInputSuspended: false,
     midiLearnTargetId: null,
     selectedMidiInputId: 'all',
 
@@ -148,6 +149,7 @@ export function createUiSlice(set: Set): UiSlice {
       })),
     resetMidiMappings: () => set({ midiMappings: DEFAULT_MIDI_MAPPINGS }),
     setIsMidiSettingsOpen: (isMidiSettingsOpen) => set({ isMidiSettingsOpen }),
+    setNoteInputSuspended: (noteInputSuspended) => set({ noteInputSuspended }),
     setMidiLearnTargetId: (midiLearnTargetId) => set({ midiLearnTargetId }),
     setIsInputPanelOpen: (isInputPanelOpen) => set({ isInputPanelOpen }),
     setInputPanelMode: (inputPanelMode: InputPanelMode) => set({ inputPanelMode }),

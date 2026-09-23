@@ -102,6 +102,25 @@ export function releaseAllHeldNotes(
 }
 
 /**
+ * R336: a keydown the note and drum-pad listeners drop — every key while the
+ * vibe picker previews, and a key typed into a text field. The flag is read
+ * first. Keyup is not gated, so a note held across the open still releases.
+ */
+export function ignoresNoteKey(e: KeyboardEvent): boolean {
+  return useAppStore.getState().noteInputSuspended || isTypingTarget(e);
+}
+
+/** Calls `onSuspend` each time note input becomes suspended — the rising edge only. */
+export function subscribeNoteInputSuspended(onSuspend: () => void): () => void {
+  return useAppStore.subscribe(
+    (s) => s.noteInputSuspended,
+    (suspended, was) => {
+      if (suspended && !was) onSuspend();
+    },
+  );
+}
+
+/**
  * The note-off decision, extracted so it is testable without rendering: given
  * the note and the map it was captured into at note-on, releases the bus the
  * note actually PLAYED on — unconditionally, on every branch — then performs
@@ -440,7 +459,7 @@ interface HeldNoteRelease {
  * visibilitychange (tab hidden) are the only two signals a page gets for "the
  * user is no longer interacting with this tab" — so both release everything
  * held. Both read the refs at cleanup time, because that is when the live set
- * is the one to release.
+ * is the one to release, and on the rising edge of `noteInputSuspended` (R336).
  */
 function useHeldNoteRelease({
   arpStateRef,
@@ -484,9 +503,11 @@ function useHeldNoteRelease({
     const handleVisibilityChange = () => {
       if (document.hidden) releaseHeld();
     };
+    const offSuspend = subscribeNoteInputSuspended(releaseHeld);
     window.addEventListener('blur', releaseHeld);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
+      offSuspend();
       window.removeEventListener('blur', releaseHeld);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -546,7 +567,7 @@ function useQwertyNoteListeners({
 }: QwertyNoteListeners): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isTypingTarget(e)) return;
+      if (ignoresNoteKey(e)) return;
       if (e.repeat) return;
       if (e.code === 'Minus') {
         setKeyboardOctave((o) => clampKeyboardOctave(o - 1));
@@ -647,7 +668,7 @@ function useDrumPads(): InputDeckDrumProps {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isTypingTarget(e)) return;
+      if (ignoresNoteKey(e)) return;
       if (e.repeat) return;
       const pad = pads.find((p) => p.shortcut === e.code);
       if (pad) {

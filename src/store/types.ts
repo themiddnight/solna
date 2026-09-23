@@ -562,6 +562,13 @@ export interface UiSlice {
   // an input-surface preference, not composition data (see partializeAppState).
   isInputPanelOpen: boolean;
   inputPanelMode: InputPanelMode;
+  /**
+   * Session-only (never in partializeAppState): true while the vibe picker
+   * previews. Gates QWERTY notes, QWERTY drum pads and MIDI note-on/CC at
+   * their entry (R336). Written only on open and close (R016).
+   */
+  noteInputSuspended: boolean;
+  setNoteInputSuspended: (suspended: boolean) => void;
   midiLearnTargetId: string | null;
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
