@@ -35,6 +35,27 @@ export function popupShift(
   return 0;
 }
 
+/**
+ * The panel's viewport-relative position **before** any shift is applied to
+ * it. `offsetLeft`/`offsetWidth` are box-model properties: unlike
+ * `getBoundingClientRect()` they ignore `transform` entirely, so they read
+ * the same natural position whether or not our own `translateX(shift)` is
+ * currently applied, and whether or not daisyUI's `@starting-style`
+ * `scale(.95)` open transition is still mid-flight. That makes measurement
+ * idempotent — measuring twice in a row (or once before and once after
+ * `shift` is applied) always yields the same natural rect, so `popupShift`
+ * never flip-flops. This assumes `panel`'s offset parent is `wrapperLeft`'s
+ * element (true here: daisyUI's `.dropdown` is `position: relative` and
+ * `.dropdown-content` is `position: absolute`).
+ */
+export function panelNaturalRect(
+  wrapperLeft: number,
+  panel: { offsetLeft: number; offsetWidth: number },
+): { left: number; right: number } {
+  const left = wrapperLeft + panel.offsetLeft;
+  return { left, right: left + panel.offsetWidth };
+}
+
 export interface UseQuickSavePopover {
   wrapperRef: RefObject<HTMLDivElement | null>;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -96,11 +117,23 @@ export function useQuickSavePopover(open: boolean, onClose: () => void): UseQuic
   }, [open, onClose]);
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // The panel unmounts with it (`{open && <QuickSavePanel />}`); reset so
+      // a reopen never paints one frame at a stale shift before `measure()`
+      // below re-runs (harmless given `panelNaturalRect`'s immunity to the
+      // previously applied transform, but keeps `shift` truthful at rest).
+      setShift(0);
+      return;
+    }
     const measure = () => {
-      const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setShift(popupShift(rect, window.innerWidth));
+      const wrapperRect = wrapperRef.current?.getBoundingClientRect();
+      const panel = panelRef.current;
+      if (!wrapperRect || !panel) return;
+      const natural = panelNaturalRect(wrapperRect.left, {
+        offsetLeft: panel.offsetLeft,
+        offsetWidth: panel.offsetWidth,
+      });
+      setShift(popupShift(natural, window.innerWidth));
     };
     measure();
     window.addEventListener('resize', measure);

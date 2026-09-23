@@ -2,7 +2,7 @@ import React from "react";
 import { Bookmark } from "lucide-react";
 import { useQuickSavePopover } from "./useQuickSavePopover";
 
-export { isDismissKey, popupShift } from "./useQuickSavePopover";
+export { isDismissKey, popupShift, panelNaturalRect } from "./useQuickSavePopover";
 
 /** The trigger button a call site hands the popover; it renders it, so the
  * `dropdown` wrapper and the panel share one anchor point (R328). */
@@ -91,6 +91,8 @@ function QuickSavePanel({
   return (
     <div
       ref={panelRef}
+      role="dialog"
+      aria-label={heading}
       style={shift ? { transform: `translateX(${shift}px)` } : undefined}
       className="dropdown-content z-50 mt-2 w-80 max-w-[calc(100vw-1rem)] card bg-base-100 border border-primary/40 p-3.5 shadow-xl animate-fade-in"
     >
