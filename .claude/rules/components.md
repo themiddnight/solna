@@ -65,12 +65,42 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A Header tool is a `HEADER_TOOLS` row (`components/header/headerTools.ts`) whose `layers` is its only availability gate; a new tool is a row, never JSX in `Header.tsx`, and never gates itself on the layer. <!-- R317 -->
 - Mobile navigation is `MobileTabBar` (`components/shell/MobileTabBar.tsx`): the `VIEW_ORDER` tabs, each calling `setActiveTab`; the tab implies the layer (`layerForTab`); the mobile frame has no layer switch, no second navigation state and no route logic of its own. <!-- R318 -->
 - The mobile top bar splits `HEADER_TOOLS` by id (`MOBILE_BAR_TOOL_IDS`, `components/shell/useMobileTopBar.ts`): field tools inline, every other available tool in the menu sheet as `variant="row"`; a tool that can reach the menu renders a `MenuRowButton` for `row`; the descriptor gains no placement or label field. <!-- R319 -->
-- The mobile menu sheet is a `Modal` with `placement="bottom"`, always rendered and closed only by dismissal; what a row opens renders inside the sheet's dialog — a nested dialog, or `afterBox` for a fixed overlay — never inside a daisyUI `menu` item. <!-- R320 -->
+- The mobile menu sheet is a `BottomSheet`, always rendered and closed only by dismissal; what a row opens renders inside the sheet's dialog — a nested dialog, or `afterBox` for a fixed overlay — never inside a daisyUI `menu` item. <!-- R320 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 - Desktop navigation is `ViewNav` in the Header's left group, beside `ProjectMenu`: every view as a `LOOP_TABS` join and a `SONG_TABS` join, each tab calling `setActiveTab`; the tab implies the layer, as on the phone. No frame renders a layer switch, and the tab nav never sits after a layer-gated tool run, where it would shift as the layer changes. <!-- R322 -->
 - Descriptive prose (a card's subtitle or description, a how-to line) wears `HINT_TEXT` (`ui/fieldClasses.ts`) and so shows on the desktop frame only; empty states, loading, errors, warnings and confirmations never wear it. A phone surface must read from its headings and controls alone. <!-- R323 -->
 - Exactly one element per frame consumes `env(safe-area-inset-bottom)`: `TransportBar` on desktop, `MobileTabBar` on mobile (`TransportBar bottomInset={false}`). <!-- R321 -->
 
 ([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md), [ADR-0043](../../docs/decisions/0043-hint-text-on-desktop-only.md))
+
+## Secondary surfaces and feedback
+
+- Every overlay is exactly one kind: Dock (`BottomInputDock` only; daisyUI's `dock` class on
+  `MobileTabBar` is navigation, not this kind), Drawer, Bottom sheet, Modal or Popup; a new
+  overlay picks one of these kinds and its named primitive rather than inventing a position. <!-- R325 -->
+- `Modal` is always centered; `BottomSheet` is the only bottom-sheet primitive, used only by the
+  mobile frame for what sits inline on desktop. <!-- R326 -->
+- A preset library is a `PresetLibrary` side drawer on both frames, never a sheet; a quick
+  in-place pick is a native `<select>`; a surface with a user library that can be deleted from
+  gets a drawer, even where a quick pick also exists. <!-- R327 -->
+- A popup is a daisyUI `dropdown` anchored to its trigger (`dropdown-open` when controlled), kept
+  inside the viewport horizontally by a pure helper; no popover API or CSS anchor positioning
+  while the browser floor lacks them; a popup never renders inside a bottom sheet — a tool that
+  reaches the sheet renders inline controls for its `row` variant instead. <!-- R328 -->
+- Feedback is a toast, a snackbar (at most one action) or a banner (in flow, persistent until
+  handled); an alert rendered inside a modal, drawer or card body is content, not feedback. While
+  any `Modal` or `BottomSheet` is open, entries queue in the host with their timers held, so a
+  message raised inside a dialog is seen rather than expiring unseen; every held timer restarts at
+  full duration once the last dialog closes. <!-- R329 -->
+- Toasts and snackbars go only through `showFeedback` (the session-only feedback slice, read via
+  `useLiveStore`) into the one `FeedbackHost` per frame; no component renders the daisyUI `toast`
+  class or a fixed alert of its own. `useNativeDialog` is the only place that takes and releases a
+  feedback hold — while its dialog is open and until close or unmount. <!-- R330 -->
+- The z-scale is fixed end to end and a new layer takes one of its listed steps: 10 in-content
+  overlays, 20 pinned view headers, 30 the input dock body, 40 frame bars, 50 drawer and popup
+  panels plus full-screen overlays, 55 the feedback slot (above drawers, because a drawer action
+  can fire a toast), and the top layer for `Modal`/`BottomSheet`, above every z-index. <!-- R331 -->
+
+([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 
 ## Prohibited
 
@@ -96,3 +126,10 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - Two elements of one frame both consuming the bottom safe-area inset <!-- R321 -->
 - A Loop/Song layer switch in either frame, or the desktop tab nav placed after a layer-gated tool run <!-- R322 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
+- A new overlay built without picking one of the five kinds and its named primitive <!-- R325 -->
+- A non-centered `Modal`, or a bottom sheet built from anything but `BottomSheet` <!-- R326 -->
+- A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
+- A popup rendered inside a bottom sheet, or positioned via the popover API or CSS anchor positioning <!-- R328 -->
+- Feedback rendered as an alert inside a modal, drawer or card body <!-- R329 -->
+- A daisyUI `toast` class, a fixed alert outside `FeedbackHost`, or a toast/snackbar bypassing `showFeedback` <!-- R330 -->
+- A new z-index outside the listed scale <!-- R331 -->

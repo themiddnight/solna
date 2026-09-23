@@ -111,6 +111,8 @@ Enforced by eslint `no-restricted-imports` (plus `no-restricted-globals` and
 - Effective track audibility is computed only in `engineSync.ts`. <!-- R160 --> → `loops-and-solo.md`, [0015](docs/decisions/0015-session-only-track-solo.md)
 - **Placement, for every new file:** code used by one feature or area stays with it; code used by
   two or more lifts to its layer's shared location. <!-- R276 --> → `components.md`, `utils.md`, [0031](docs/decisions/0031-component-hook-store-selector-and-placement-conventions.md)
+- Every overlay is one kind (dock, drawer, bottom sheet, modal, popup) and every transient message
+  goes through the one feedback host. <!-- R325 --> <!-- R330 --> → `components.md`, [0044](docs/decisions/0044-secondary-canvas-taxonomy.md)
 
 ## Traps — don't "fix" these
 

@@ -1,6 +1,6 @@
 # ADR-0041: Mobile frame — bottom tabs, top bar, menu sheet
 
-**Status:** Accepted — 2026-09-23. DEV-431
+**Status:** Accepted — 2026-09-23. DEV-431. R320 amended by [0044](0044-secondary-canvas-taxonomy.md).
 
 ## Context
 
