@@ -201,6 +201,14 @@ describe('button and dialog chrome', () => {
   test('no component hand-writes the modal box chrome', () => {
     expect(offenders('src', 'Modal.tsx', containing(MODAL_BOX))).toEqual([]);
   });
+
+  /**
+   * ui/BottomSheet is the only bottom-sheet primitive (R326) — `modal-bottom`
+   * appearing anywhere else is a hand-rolled sheet reappearing.
+   */
+  test('modal-bottom appears only in BottomSheet.tsx', () => {
+    expect(offenders('src', 'BottomSheet.tsx', containing('modal-bottom'))).toEqual([]);
+  });
 });
 
 describe('shell tokens', () => {

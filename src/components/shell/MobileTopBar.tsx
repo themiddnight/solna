@@ -2,8 +2,8 @@ import React from 'react';
 import { Menu as MenuIcon } from 'lucide-react';
 import type { HeaderTool } from '@/components/header/headerTools';
 import { ProjectMenuEffects, ProjectMenuSections, useProjectMenu } from '@/components/project/ProjectMenu';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { IconButton } from '@/components/ui/IconButton';
-import { Modal } from '@/components/ui/Modal';
 import { Wordmark } from '@/components/ui/Wordmark';
 import { useMobileTopBar } from './useMobileTopBar';
 
@@ -24,11 +24,10 @@ interface MobileMenuSheetProps {
 export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) {
   const project = useProjectMenu();
   return (
-    <Modal
+    <BottomSheet
       open={open}
       onClose={onClose}
       title="Menu"
-      placement="bottom"
       boxClassName="space-y-3"
       afterBox={<ProjectMenuEffects menu={project} />}
     >
@@ -41,7 +40,7 @@ export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) 
         <li className="menu-title">Project</li>
         <ProjectMenuSections sections={project.sections} onChoose={project.choose} rowClassName="min-h-11" />
       </ul>
-    </Modal>
+    </BottomSheet>
   );
 }
 

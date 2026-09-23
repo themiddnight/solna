@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ArrowDown, ArrowUp, ClipboardPaste, Copy, Music, Trash2 } from 'lucide-react';
+import { BottomSheet } from '../ui/BottomSheet';
 import { MenuRowButton } from '../ui/MenuRowButton';
-import { Modal } from '../ui/Modal';
 import { LoopCardMetaRow, LoopCardMixer } from './loopCardBody';
 import type { SortableLoopCardProps } from './SortableLoopCard';
 
@@ -21,7 +21,7 @@ export function useLoopDetailSheet(): UseLoopDetailSheet {
     setMounted(true);
     setOpen(true);
   }, []);
-  // Stable: `Modal` re-binds its `close` listener whenever this changes, and
+  // Stable: `BottomSheet` re-binds its `close` listener whenever this changes, and
   // the card re-renders on every step while its loop plays.
   const close = useCallback(() => setOpen(false), []);
   return { open, mounted, show, close };
@@ -67,7 +67,7 @@ export function LoopDetailSheet({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={label} placement="bottom" boxClassName="flex flex-col gap-3">
+    <BottomSheet open={open} onClose={onClose} title={label} boxClassName="flex flex-col gap-3">
       <LoopCardMetaRow
         loop={loop}
         label={label}
@@ -120,6 +120,6 @@ export function LoopDetailSheet({
           onClick={closeThen(onDelete)}
         />
       </div>
-    </Modal>
+    </BottomSheet>
   );
 }

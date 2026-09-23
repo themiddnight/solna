@@ -34,7 +34,7 @@ export function useMobileTopBar(): UseMobileTopBar {
   const activeTab = useAppStore((s) => s.activeTab);
   const [menuOpen, setMenuOpen] = useState(false);
   const openMenu = useCallback(() => setMenuOpen(true), []);
-  // Stable: Modal re-binds its native `close` listener whenever onClose changes.
+  // Stable: BottomSheet re-binds its native `close` listener whenever onClose changes.
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const tools = useMemo(() => mobileHeaderTools(layerForTab(activeTab)), [activeTab]);
   return { ...tools, menuOpen, openMenu, closeMenu };

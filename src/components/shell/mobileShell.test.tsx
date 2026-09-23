@@ -98,6 +98,20 @@ describe('the menu sheet', () => {
     // `<li>` or `<li class=…>`, never the SVG `<line>` an icon draws.
     expect(html).not.toMatch(/<li(?:\s[^>]*)?>(?:(?!<\/li>)[\s\S])*<dialog/);
   });
+
+  /**
+   * R328: a popup never renders inside a bottom sheet — every tool that
+   * reaches the sheet renders inline `row` controls instead. Pinned as a guard
+   * rather than a `ScaleMenu` rewrite, since `scale` stays a bar tool (Q1) and
+   * no menu row renders one today (§5.2).
+   */
+  test('no tool routed into the menu renders a popup: no dropdown class, no <details', () => {
+    for (const layer of ['loop', 'song'] as const) {
+      const html = sheet(layer);
+      expect(html).not.toMatch(/\bdropdown\b/);
+      expect(html).not.toContain('<details');
+    }
+  });
 });
 
 describe('the mobile frame', () => {
