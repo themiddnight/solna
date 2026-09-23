@@ -20,7 +20,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | 3 | **Arrange** view | Song layer | Order loops into a song, copy loops, song-mode playback, delete a loop with a timed Undo toast, change the key of several loops (Set/Transpose) with Undo |
 | 4 | **Master** view | Song layer | Master effects rack: reverb, delay, distortion, 3-band EQ, compressor, limiter (with gain-reduction meters), Monitor visualizer. Every track, the Beat bus included, has its own reverb, delay and distortion send levels per loop (Mixer Rev/Dly/Dist knobs). Beat drums reach reverb through their per-voice reverb sends scaled by the Beat track's reverb send, and reach delay and distortion through the Beat track's delay and distortion sends |
 | 5 | Loops | Loop selector | Multiple loops per project, copy/paste loops and modules |
-| 6 | Instant Vibes | Top bar | 8 genre presets (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) + dice reroll |
+| 6 | Instant Vibes | Header tool → picker modal | 8 genre presets (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) + dice reroll |
 | 7 | Transport & music context | TransportBar (bottom) + Header (desktop) / MobileTopBar (mobile) | Play/stop, BPM, meter, metronome, playhead in TransportBar (on mobile: one row, the rest in its transport sheet); key & scale in the frame's top bar |
 | 8 | Performance input | Bottom dock + Sound view | Dock: focus chip, QWERTY / on-screen keyboard, drum pads (per-pad velocity persisted). Arpeggiator is a per-track Sound panel; Web MIDI is a background bridge; solo/mute live on the mixer |
 | 9 | Project management | Project menu | IndexedDB autosave, `.solna` file open/save, Google Drive open/save |
@@ -42,7 +42,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 | `audio/export/` | Offline mixdown, MIDI and stems export | `renderMixdown`, `renderMidi`, `renderStems` |
 | `audio/runtime/` | AudioContext session & health | `audioSession`, `healthMonitor`, `policy` |
 | `store/` | Zustand store (slices) + bridges | `store`, `*Slice`, `engineSync`, `sanitize`, `projectStore`, `projectAutosave`, `drive*`, `midiInput`, `vibes` |
-| `components/` | React views **and**, in `components/playback/`, the transport controller hooks mounted by `PlaybackHost` (`useChordClockPlayback`, `useLeadPlayback`, `useSequencerPlayback`) plus `useInputDeck` | `loop/*`, `song/*`, `project/*`, `ui/*`, `shell/*` (`DesktopShell`, `MobileShell`, `MobileTopBar`, `MobileTabBar`, `useLayoutMode`), `header/*`, `Header`, `TransportBar`, `InstantVibesBar` |
+| `components/` | React views **and**, in `components/playback/`, the transport controller hooks mounted by `PlaybackHost` (`useChordClockPlayback`, `useLeadPlayback`, `useSequencerPlayback`) plus `useInputDeck` | `loop/*`, `song/*`, `project/*`, `ui/*`, `shell/*` (`DesktopShell`, `MobileShell`, `MobileTopBar`, `MobileTabBar`, `useLayoutMode`), `header/*`, `vibes/*`, `Header`, `TransportBar` |
 | `routing/` | URL ↔ layer/tab/loop | `tabRouting`, `useRouteSync` |
 | `incidents/` | Bug-report privacy boundary | `recorder`, `sanitize`, `githubReport` |
 | `diagnostics/` | Dev diagnostics recorder (imports store, engine and UI directly) | `recorder`, `DiagnosticPanel` |
@@ -55,7 +55,7 @@ Solna has **2 layers → 4 views**, plus **4 Pattern segments**, plus cross-cutt
 flowchart TB
   subgraph UI["components/ (React views — all mounted, gated hidden/block)"]
     direction TB
-    Header["Layout shell (DesktopShell / MobileShell)<br/>Header or MobileTopBar + MobileTabBar · TransportBar · InstantVibesBar"]
+    Header["Layout shell (DesktopShell / MobileShell)<br/>Header or MobileTopBar + MobileTabBar · TransportBar"]
     subgraph LoopL["Loop layer"]
       Sound["Sound view<br/>synth · Beat kit · mixer"]
       Pattern["Pattern view<br/>Lead · FX · Accompaniment · Beat"]

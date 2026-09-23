@@ -30,7 +30,7 @@ playback controllers live there (see finding U1).
 ```mermaid
 flowchart TB
   subgraph Views["components/ — views AND playback controllers"]
-    Shell["App · layout shell (useLayoutMode → DesktopShell / MobileShell)<br/>Header or MobileTopBar (HEADER_TOOLS, menu sheet) · MobileTabBar<br/>InstantVibesBar · TransportBar (play, BPM, meter, metronome)"]
+    Shell["App · layout shell (useLayoutMode → DesktopShell / MobileShell)<br/>Header or MobileTopBar (HEADER_TOOLS, menu sheet) · MobileTabBar<br/>TransportBar (play, BPM, meter, metronome)"]
     LoopViews["Loop layer: SoundView · PatternView<br/>(Lead · FX · Accompaniment · Beat)"]
     SongViews["Song layer: ArrangeView · EffectsRackView"]
     Dock["BottomInputDock<br/>focus chip · keyboard · drum pads"]
@@ -90,7 +90,7 @@ Codes point to the detail page: U = 01-ui, S = 02-store, A = 03-audio, D = 04-de
 | S4 | A key/scale change transposes Lead but not FX. | `musicContextSlice.ts` | **Fixed.** `keyChangePatch` moves every `MELODY_TRACKS` row; vibes reuse it. **Fixed on `refactor/dev-424-loop-content`:** renamed to `changeKey` (`store/keyChange.ts`). |
 | S5 | MIDI-recorded notes were stored flat-spelled (`Db4`), breaking the ROOTS-spelled identity rule. | `midiInput.ts` → `leadSlice.ts` | **Fixed.** Incoming MIDI notes are spelled sharp. |
 | S6 | `deleteLoop` changed `activeLoopId` without loading that loop, so the caller had to call `loadLoop`. `setActiveLoop` had the same hazard. | `loopSlice.ts` | **Fixed.** `deleteLoop` writes the fallback's fields in the same `set()`; `setActiveLoop` is gone. While the transport runs, `deleteLoopLive` wraps that write in `crossLoopSeam`: the deleted loop's voices are cut and the clock reset, and nothing stops. |
-| S8 | `applyVibeToStore` made about 40 separate `set()` calls, so subscribers saw intermediate states. | `vibes.ts` | **Fixed.** One atomic patch (`vibes.atomic.test.ts`). |
+| S8 | `applyVibeToStore` made about 40 separate `set()` calls, so subscribers saw intermediate states. | `vibes.ts` | **Fixed.** One atomic patch (`vibes.atomic.test.ts`); the one write now lives in `vibeContentPatch`, applied by `previewVibe` (`vibePreview.ts`, ADR-0045). |
 | U6 | Drum-pad velocity was `useState`, but a comment called it "persisted". | `useInputDeck.ts`, `DrumPadGrid.tsx` | **Fixed.** Persisted as `drumPadVelocities` in the ui slice, committed on slider release. |
 | U8 | Deleting a loop had no confirm and no undo. | `SortableLoopCard.tsx`, `ArrangeView.tsx` | **Fixed (Undo, no confirm).** `useLoopUndo` raises the Undo as a `FeedbackHost` snackbar, backed by `undoLoopDelete` (`restoreLoop`, then re-activation through the same seam when the loop was active, so Undo never stops the transport). A project install dismisses a pending Undo. A confirm dialog is deferred by choice. |
 | D1 | `FilterType` was declared twice with different members (3 vs 4, including notch). | `types.ts`, `types/synth.ts` | **Fixed.** One `FilterType` (synth); Beat bus uses `BeatFilterType = Exclude<FilterType, 'notch'>`. |

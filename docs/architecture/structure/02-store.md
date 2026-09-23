@@ -97,7 +97,8 @@ actually implements either interface.
 | Module | Role | Touches the engine directly? |
 |---|---|---|
 | `loadLoop.ts` | Atomic loop switch: hard-stop + cut + load the flat patch + restart, or the seamless `atBoundary` path (`:65-150`) | **yes**: `dropVoicesScheduledFrom`, `stopSource`, `resetClock` |
-| `vibes.ts` `applyVibeToStore` | Installs a resolved vibe in **one atomic `set()`** (**Fixed on `fix/structure-audit-bugs`:** it made about 40 sequential setter calls), with the key change from `changeKey` (**Fixed on `refactor/dev-424-loop-content`:** `store/keyChange.ts`, `harmonizeChords: false`) | **yes**: `stopSource` |
+| `vibePreview.ts` | The vibe picker's commands (R337): stop + cut, then one `set()` of the vibe's patch, then `soloLoop(activeLoopId)`; Cancel writes the snapshot back in one `set()`; holds persisted writes and suspends note input while open. Replaced `applyVibeToStore` (ADR-0045) | **yes**: `stopSource` |
+| `vibes.ts` | `vibeContentPatch` builds a resolved vibe's one atomic patch (**Fixed on `fix/structure-audit-bugs`:** the old apply made about 40 sequential setter calls), with the key change from `changeKey` (**Fixed on `refactor/dev-424-loop-content`:** `store/keyChange.ts`, `harmonizeChords: false`); `captureVibeTargets` snapshots every key it writes, for Cancel (R338) | no |
 | `synthPresetInstall.ts` | Cuts the bus, then installs a preset (`:77-92`) | **yes**: `stopSource` (`:56`) |
 | `synthPatchPreview.ts`, `effectsPreview.ts`, `beatPreview.ts`, `trackSendsPreview.ts` | Draft previews that bypass the store | **yes**: `updateSynthPatch` / `updateEffects` / `applyBeatParams` / `setSourceSends` |
 | `stopAndRestart.ts` | `commitRestartAfterStop` — the restart decision after a stop (`:47-64`) | no (direct `useAppStore.setState`, `:60`) |
@@ -356,6 +357,8 @@ sequenceDiagram
    and engineSync sees intermediate states. The pairs `setScaleRoot` then `setScaleType` also
    transform the lead melody twice. The `deleteLoop` + `loadLoop` two-step contract (§4) is the
    same pattern. **Fixed on `fix/structure-audit-bugs`:** both are single atomic writes now (§2.2, §4).
+   `applyVibeToStore` itself was later removed by ADR-0045; `previewVibe` (`vibePreview.ts`)
+   writes the same one-write patch.
 4. **Misplaced lifecycles.** `useEngineSync` also starts the melody record bridges
    (`engineSync.ts:462`), and `startEngineSync` starts the MIDI bridge (`:266`), which is never
    torn down by `stopEngineSync` (`:435-449`). MIDI access is therefore requested at Workspace
