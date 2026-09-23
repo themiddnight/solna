@@ -103,8 +103,9 @@ const BEAT_BUS_SOURCE = 'sequencer';
  * sends, whose gating is otherwise identical bar the tail computation.
  *
  * The reverb send does NOT use this: it coordinates a second feed (the Beat
- * track's reverb send node, `beatReverbFeed()`) under one shared timer, a shape this single-feed class
- * doesn't fit — see `updateReverbSend`, which stays bespoke.
+ * track's reverb send node, `beatReverbFeed()`) under one shared timer, a
+ * shape this single-feed class doesn't fit — see `updateReverbSend`, which
+ * stays bespoke.
  */
 class DebouncedSendGate {
   private connected = false;
@@ -825,7 +826,8 @@ export class MasterRack {
    * "drum reverb send" master toggle — so this method gates both feeds under
    * the one shared tail timer rather than inventing a second one: the
    * convolver only truly goes idle once NEITHER feed is connected, and
-   * reconnecting either feed cancels the pending disconnect for both. A per-voice send still only wires up when that voice's own
+   * reconnecting either feed cancels the pending disconnect for both. A
+   * per-voice send still only wires up when that voice's own
    * `reverbSend` level is > 0 (see `wireDrumVoice` in drumSynth.ts); this
    * gate is the structural on/off for the shared path downstream of that.
    */

@@ -1,5 +1,4 @@
 import { type BeatVoices, MasterEffects, BeatFilterType, type TrackSendLevels } from '../types';
-import { STEPS_PER_BAR } from '../utils/tempo';
 import { DEFAULT_METER_ID, getMeter as resolveMeter, type Meter } from '../utils/timeSignature';
 import { DEFAULT_VELOCITY } from './constants';
 import type { ActiveSynth } from '@/types/synth';
@@ -724,10 +723,6 @@ export class AudioEngine {
   }
 
 }
-
-// Re-exported from utils/tempo so the grid constant has one definition
-// while every `import { STEPS_PER_BAR } from '../engine'` keeps resolving.
-export { STEPS_PER_BAR };
 
 // Re-exported from drumSynth so the drum tables keep one definition while every
 // `import { DRUM_ALIASES } from '../engine'` keeps resolving.

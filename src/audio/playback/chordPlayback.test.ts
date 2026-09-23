@@ -6,6 +6,7 @@ import { SUBTRACTIVE_INIT } from '@/utils/synthPresets';
 import type { VoiceId } from '../synth/voiceId';
 import { equalPowerVelocityScale } from '@/audio/chordRhythms';
 import { noteFrequency } from '@/utils/musicTheory';
+import { barDurationSec } from '@/utils/tempo';
 import {
   emitStepEvents,
   playChordLegato,
@@ -13,7 +14,6 @@ import {
   scheduleWholeChord,
   startPatternLoop,
   previewChordForScale,
-  previewBarSeconds,
   previewCycleSeconds,
 } from './chordPlayback';
 
@@ -258,30 +258,13 @@ describe('pattern preview chord & timing', () => {
     expect('notes' in preview).toBe(false);
   });
 
-  test('one bar lasts 16 sixteenth steps at the given bpm', () => {
-    // 120 bpm → sixteenth = 0.125 s → one 16-step bar = 2 s.
-    expect(previewBarSeconds(120)).toBe(2);
-  });
-
-  test('default stepsPerBar still equals the 16-step value', () => {
-    expect(previewBarSeconds(120, 16)).toBe(previewBarSeconds(120));
-  });
-
-  test('a 3/4 bar (12 steps) previews as three quarters of a 4/4 bar at the same bpm', () => {
-    expect(previewBarSeconds(120, 12)).toBeCloseTo(previewBarSeconds(120) * 0.75, 12);
-  });
-
-  test('a 12/8 bar (24 steps) previews as 1.5x a 4/4 bar at the same bpm', () => {
-    expect(previewBarSeconds(120, 24)).toBeCloseTo(previewBarSeconds(120) * 1.5, 12);
-  });
-
   test('a cycle of N steps lasts N sixteenths at the given bpm', () => {
     // 32 sixteenths at 120 bpm = two 4/4 bars = 4 s. This is the exact value
     // both preview buttons hand their loop timer, so a custom two-bar preview
     // loops at the cycle seam rather than at a bar.
     expect(previewCycleSeconds(32, 120)).toBe(4);
-    expect(previewCycleSeconds(32, 120)).toBe(2 * previewBarSeconds(120));
-    expect(previewCycleSeconds(16, 120)).toBe(previewBarSeconds(120));
+    expect(previewCycleSeconds(32, 120)).toBe(2 * barDurationSec(120));
+    expect(previewCycleSeconds(16, 120)).toBe(barDurationSec(120));
   });
 });
 

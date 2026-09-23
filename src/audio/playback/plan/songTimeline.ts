@@ -79,7 +79,7 @@ export function planArrangement(snapshot: MixdownSnapshot): ArrangementPlan {
  * `ArmedChordPlan` the live scheduler arms, one per chord, built once per pass
  * instead of on a clock tick.
  */
-export interface LoopVoices {
+interface LoopVoices {
   /** Pass bar -> the index of the chord covering it. */
   chordsByBar: number[];
   /** Per chord: the pass-relative step it starts on. */

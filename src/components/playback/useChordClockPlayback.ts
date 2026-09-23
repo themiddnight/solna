@@ -250,24 +250,6 @@ function useChordScheduler() {
   return { armingRef, planRef, softStopPendingRef };
 }
 
-/**
- * The current release times of the two layers this player emits, mirrored into
- * a ref the clock callback reads.
- *
- * Via ref because the clock
- * effect's dep array must not gain chordSynthParams/bassSynthParams (that
- * would resubscribe on every param slide), but the soft-stop path must
- * still use whatever release is currently configured, not a stale one
- * captured when the clock subscription was created.
- */
-function useChordReleases(chordRelease: number, bassRelease: number) {
-  const releasesRef = useRef({ chord: chordRelease, bass: bassRelease });
-  useEffect(() => {
-    releasesRef.current = { chord: chordRelease, bass: bassRelease };
-  });
-  return releasesRef;
-}
-
 /** Everything that reads or resets the scheduler's shared refs. */
 interface ChordSchedulerRefs {
   armingRef: { current: ChordArming };
@@ -353,14 +335,12 @@ function useChordStopHandler(
  */
 function useChordClock({
   scheduler,
-  releasesRef,
   isPlaying,
   chords,
   clearChordUi,
   showChord,
 }: {
   scheduler: ChordSchedulerRefs;
-  releasesRef: { current: { chord: number; bass: number } };
   isPlaying: boolean;
   chords: ChordItem[];
   clearChordUi: () => void;
@@ -399,15 +379,14 @@ function useChordClock({
       // (not a timer) is what makes the cut land on the beat.
       if (action === 'soft-stop') {
         planRef.current = null;
-        // The pad's release is read LIVE, the way armPad reads the rest of
-        // the pad state: this hook does not subscribe to padSynthParams, so a
-        // value mirrored into releasesRef on render would go stale the moment
-        // a pad knob moved without re-rendering the hook. chord/bass stay on
-        // the ref because they are already subscribed for other reads —
-        // an inconsistency kept deliberately rather than widening either.
+        // The releases are read LIVE, the way armPad reads the pad state: this
+        // hook subscribes to no synth patch, so a knob drag never re-renders
+        // PlaybackHost for a value only this branch reads.
+        const live = useAppStore.getState();
         const releases: Record<AccompanimentSource, number> = {
-          ...releasesRef.current,
-          pad: synthReleaseSeconds(useAppStore.getState().padSynthParams),
+          chord: synthReleaseSeconds(live.chordSynthParams),
+          bass: synthReleaseSeconds(live.bassSynthParams),
+          pad: synthReleaseSeconds(live.padSynthParams),
         };
         for (const source of ACCOMPANIMENT_SOURCES) {
           playbackStopOwnedVoices(source, releases[source], time);
@@ -453,12 +432,11 @@ function useChordClock({
       }
       emitChordPlanStep(plan, progressionStep, pos, step, time);
     });
-    // Deliberately these two and no more. The scheduler refs and `releasesRef`
-    // are stable, and `clearChordUi`/`showChord` are stable useCallbacks — a
-    // clock subscription that rebuilt when any of them changed identity would
-    // re-arm mid-bar. `chordSynthParams`/`bassSynthParams` are read live
-    // through `releasesRef` for the same reason (see its docblock), and the
-    // progression is read live inside the callback.
+    // Deliberately these two and no more. The scheduler refs are stable, and
+    // `clearChordUi`/`showChord` are stable useCallbacks — a clock
+    // subscription that rebuilt when any of them changed identity would re-arm
+    // mid-bar. The synth releases and the progression are read live inside
+    // the callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, chords]);
 }
@@ -472,20 +450,14 @@ function useChordClock({
  */
 export function useChordClockPlayback(): void {
   const chords = useAppStore((s) => s.chords);
-  const chordSynthParams = useAppStore((s) => s.chordSynthParams);
-  const bassSynthParams = useAppStore((s) => s.bassSynthParams);
-  // padSynthParams is deliberately NOT subscribed here: only `.release` is
-  // ever read, and only at the soft-stop, which reads it live from getState()
-  // exactly as armPad does. Subscribing would re-render this hook on every
-  // frame of a pad knob drag for a value nothing renders.
+  // No synth patch is subscribed here: only `.release` is ever read, and only
+  // at the soft-stop, which reads it live from getState() exactly as armPad
+  // does. Subscribing would re-render the host on every frame of a knob drag
+  // for a value nothing renders.
   const playerState = useAppStore((s) => s.chordsPlayer);
   const isPlaying = playerState !== 'stopped';
 
   const scheduler = useChordScheduler();
-  const releasesRef = useChordReleases(
-    synthReleaseSeconds(chordSynthParams),
-    synthReleaseSeconds(bassSynthParams),
-  );
 
   // Both subscriptions clear the same three pieces of chord UI — the beat
   // markers, the highlighted card, and the transport's chord readout.
@@ -502,7 +474,6 @@ export function useChordClockPlayback(): void {
   useChordStopHandler(scheduler, clearChordUi);
   useChordClock({
     scheduler,
-    releasesRef,
     isPlaying,
     chords,
     clearChordUi,

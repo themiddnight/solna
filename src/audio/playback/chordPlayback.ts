@@ -1,6 +1,6 @@
-import { audioEngine, STEPS_PER_BAR, type AudioEngine } from "../engine";
+import { audioEngine, type AudioEngine } from "../engine";
 import { getDiatonicChordForDegree, noteFrequency } from "@/utils/musicTheory";
-import { barDurationSec, stepDurationSec } from "@/utils/tempo";
+import { stepDurationSec } from "@/utils/tempo";
 import type { ChordItem } from "@/types";
 import type { ActiveSynth } from "@/types/synth";
 import { synthReleaseSeconds } from "@/utils/synthPatch";
@@ -215,17 +215,6 @@ export function previewChordForScale(
     quality: tonic.quality,
     bars: 1,
   };
-}
-
-/**
- * Duration of one bar at the given bpm, in seconds. `stepsPerBar` defaults to
- * the 16-step 4/4 bar so every existing caller is unaffected; the ChordView
- * preview call sites pass the active meter's `stepsPerBar` so the preview
- * loop period matches what `playChordWithRhythm`/`playBassWithPattern`
- * actually adapt the pattern to.
- */
-export function previewBarSeconds(bpm: number, stepsPerBar: number = STEPS_PER_BAR): number {
-  return barDurationSec(bpm, stepsPerBar);
 }
 
 /**
