@@ -185,7 +185,6 @@ export const SoundView = React.memo(function SoundView() {
           that is unmounted on a drum focus. */}
       <ViewHeader
         view="sound"
-        sticky
         viewControls={
           <SoundFocusChips
             focusTrack={focusTrack}

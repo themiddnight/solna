@@ -15,8 +15,6 @@ export interface ViewHeaderProps {
   viewControls?: React.ReactNode;
   /** Right-hand control cluster. */
   actions?: React.ReactNode;
-  /** See HeaderCardProps.sticky. */
-  sticky?: boolean;
 }
 
 /**
@@ -28,7 +26,7 @@ export interface ViewHeaderProps {
  * the synth's signal stages (design.md 6.5) — ChordView used to tint this chip
  * `module-chord`, which is the violation this component removes.
  */
-export function ViewHeader({ view, badge, viewControls, actions, sticky }: ViewHeaderProps) {
+export function ViewHeader({ view, badge, viewControls, actions }: ViewHeaderProps) {
   const { icon, title } = VIEW_META[view];
   // No `children` pass-through. It advertised a slot for absolutely-positioned
   // extras that no call site used, and the slot did not work: a child here
@@ -42,7 +40,6 @@ export function ViewHeader({ view, badge, viewControls, actions, sticky }: ViewH
       badge={badge}
       viewControls={viewControls}
       actions={actions}
-      sticky={sticky}
     />
   );
 }
@@ -77,14 +74,6 @@ export interface HeaderCardProps {
    */
   viewControls?: React.ReactNode;
   actions?: React.ReactNode;
-  /**
-   * Pin the card to the top of the scrolling `<main>`, in both frames, so its
-   * controls stay in reach down a long view; every view header pins. A pinned
-   * card with controls drops its icon and title on a phone only: MobileTabBar
-   * already names the tab, and every row the card pins is a row the view below
-   * it loses. One with no controls keeps them, since they are all it shows.
-   */
-  sticky?: boolean;
   children?: React.ReactNode;
 }
 
@@ -102,17 +91,19 @@ export function HeaderCard({
   badge,
   viewControls,
   actions,
-  sticky = false,
   children,
 }: HeaderCardProps) {
-  // A pinned card with nothing but its title (Master) keeps the title, or it
-  // would pin an empty bar.
-  const compact = sticky && (viewControls !== undefined || actions !== undefined);
+  // Every card pins to the top of the scrolling `<main>`, in both frames, so
+  // its controls stay in reach down a long view. A card with controls drops
+  // its icon and title on a phone only: MobileTabBar already names the tab,
+  // and every row the card pins is a row the view below it loses. One with
+  // nothing but its title (Master) keeps it, or it would pin an empty bar.
+  const compact = viewControls !== undefined || actions !== undefined;
   const phoneHidden = compact && 'max-md:hidden';
   // The title leaves the eye, not the outline: the view keeps its heading.
   const phoneTitle = compact && 'max-md:sr-only';
   return (
-    <PanelCard className={cx('relative', sticky && 'sticky top-0 z-20')}>
+    <PanelCard className="relative sticky top-0 z-20">
       <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center flex-wrap gap-2 min-h-8 min-w-0 max-w-full">
           <div className={cx('p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary', phoneHidden)}>

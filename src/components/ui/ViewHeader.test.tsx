@@ -36,21 +36,21 @@ describe('HeaderCard slots', () => {
   });
 });
 
-describe('a sticky header', () => {
+describe('a pinned header', () => {
   test('pins at every width, and hides its title from the eye on a phone only', () => {
-    const html = renderToString(<ViewHeader view="sound" sticky viewControls={<span>chips</span>} />);
+    const html = renderToString(<ViewHeader view="sound" viewControls={<span>chips</span>} />);
     expect(html).toMatch(/class="[^"]*(?<!:)\bsticky top-0\b/);
     expect(html).not.toContain('max-md:sticky');
     expect(html).toContain('max-md:sr-only');
     expect(html).not.toMatch(/(?<!max-md:)\bsr-only\b/);
   });
 
-  test('is opt-in: a plain header does not pin', () => {
-    expect(renderToString(<ViewHeader view="arrange" />)).not.toContain('sticky');
+  test('every view header pins', () => {
+    expect(renderToString(<ViewHeader view="arrange" />)).toContain('sticky top-0');
   });
 
   test('a pinned header with no controls keeps its icon and title in view', () => {
-    const html = renderToString(<ViewHeader view="master" sticky />);
+    const html = renderToString(<ViewHeader view="master" />);
     expect(html).toContain('sticky top-0');
     expect(html).not.toContain('max-md:sr-only');
     expect(html).not.toContain('max-md:hidden');

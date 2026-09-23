@@ -683,7 +683,7 @@ export const EffectsRackView = React.memo(function EffectsRackView() {
 
   return (
     <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3 sm:space-y-4">
-      <ViewHeader view="master" sticky />
+      <ViewHeader view="master" />
 
       <FxChain
         effects={draft.effects}
