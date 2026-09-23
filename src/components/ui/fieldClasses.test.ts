@@ -219,13 +219,12 @@ describe('button and dialog chrome', () => {
  */
 describe('feedback surfaces', () => {
   /**
-   * Not yet migrated, each owned by a later commit of the secondary-canvas
-   * plan: ArrangeView's loop Undo toast becomes a host snackbar (§5.6 Undo),
-   * ProjectNotice becomes toasts plus an in-flow banner (§5.6 split). Each
-   * commit deletes its entry here.
+   * Not yet migrated, owned by a later commit of the secondary-canvas plan:
+   * ProjectNotice becomes toasts plus an in-flow banner (§5.6 split). The
+   * commit deletes this entry.
    */
   const NOT_YET_MIGRATED = {
-    toast: ['src/components/song/ArrangeView.tsx'],
+    toast: [] as string[],
     fixedAlert: ['src/components/project/ProjectNotice.tsx'],
   };
 

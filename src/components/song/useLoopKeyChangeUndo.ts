@@ -9,8 +9,6 @@ export interface UseLoopKeyChangeUndo {
   openKeyChange: () => void;
   closeKeyChange: () => void;
   onApplyKeyChange: (ids: string[], target: BatchKeyTarget, opts: KeyChangeOptions) => void;
-  keyChangeUndo: LoopKeyChangeUndo | null;
-  onUndoKeyChange: () => void;
 }
 
 export function keyChangeToastMessage(undo: LoopKeyChangeUndo): string {
@@ -22,11 +20,11 @@ const restoreKeyChange = (undo: LoopKeyChangeUndo) => useAppStore.getState().und
 
 /**
  * Batch key change from Arrange: the dialog's open state, the apply, and a
- * single-level timed Undo (useLoopUndo) — a new batch replaces a pending Undo.
+ * single-level Undo snackbar (useLoopUndo) — a new batch replaces a pending one.
  */
 export function useLoopKeyChangeUndo(): UseLoopKeyChangeUndo {
   const [keyChangeOpen, setKeyChangeOpen] = useState(false);
-  const { pending, offer, undo } = useLoopUndo(restoreKeyChange);
+  const { offer } = useLoopUndo(restoreKeyChange, 'btn-undo-key-change', keyChangeToastMessage);
 
   const onApplyKeyChange = useCallback(
     (ids: string[], target: BatchKeyTarget, opts: KeyChangeOptions) => {
@@ -41,7 +39,5 @@ export function useLoopKeyChangeUndo(): UseLoopKeyChangeUndo {
     openKeyChange: () => setKeyChangeOpen(true),
     closeKeyChange: () => setKeyChangeOpen(false),
     onApplyKeyChange,
-    keyChangeUndo: pending,
-    onUndoKeyChange: undo,
   };
 }

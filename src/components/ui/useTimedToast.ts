@@ -16,7 +16,7 @@ export function scheduleTimeout(
  * pending timer is cleared on unmount, so it never sets state on an unmounted
  * component.
  */
-export function useTimedToast<T>(): {
+function useTimedToast<T>(): {
   toast: T | null;
   show: (t: T, ms: number) => void;
   dismiss: () => void;

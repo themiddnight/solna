@@ -1,38 +1,59 @@
 import { useCallback, useEffect } from 'react';
 import { useAppStore } from '@/store/store';
-import { useTimedToast } from '../ui/useTimedToast';
-
-/** How long a loop delete or a batch key change stays undoable. */
-const LOOP_UNDO_MS = 5000;
+import type { FeedbackRequest } from '@/store/feedback';
 
 export interface UseLoopUndo<T> {
-  /** The pending Undo, or null when there is none. */
-  pending: T | null;
-  /** Makes `undo` the pending one, replacing any other and restarting the window. */
-  offer: (undo: T) => void;
-  /** Runs `restore` on the pending Undo and dismisses it; a no-op when none is pending. */
-  undo: () => void;
+  /** Offers `payload` as an Undo snackbar, replacing any other pending one and restarting its window. */
+  offer: (payload: T) => void;
 }
 
 /**
- * One single-level, timed Arrange Undo (loop delete, batch key change).
- * ArrangeView stays mounted across a project install, and loop ids collide
- * across projects, so an install dismisses a pending Undo — off a store
- * subscription rather than a selector, so the view never re-renders for it.
- * `restore` must be stable (a module-level function).
+ * Builds the Undo snackbar's `FeedbackRequest` for one payload — pure, so the
+ * closure `run` takes over `payload` (this call's, never a later offer's) is
+ * testable without a store or a clock. `key` doubles as the Undo button's DOM
+ * id (`btn-undo-loop-delete`, `btn-undo-key-change`).
  */
-export function useLoopUndo<T>(restore: (undo: T) => void): UseLoopUndo<T> {
-  const { toast, show, dismiss } = useTimedToast<T>();
+export function buildLoopUndoRequest<T>(
+  restore: (payload: T) => void,
+  key: string,
+  messageOf: (payload: T) => string,
+  payload: T,
+): FeedbackRequest {
+  return {
+    key,
+    message: messageOf(payload),
+    tone: 'info',
+    action: { id: key, label: 'Undo', run: () => restore(payload) },
+  };
+}
 
-  useEffect(() => useAppStore.subscribe((s) => s.projectInstallCount, dismiss), [dismiss]);
+/**
+ * One single-level, timed Arrange Undo snackbar (loop delete, batch key
+ * change), raised through the shared feedback host (§5.6). ArrangeView stays
+ * mounted across a project install, and loop ids collide across projects, so
+ * an install dismisses a pending Undo — off a store subscription rather than
+ * a selector, so the view never re-renders for it. `restore` and `messageOf`
+ * must be stable (module-level functions).
+ */
+export function useLoopUndo<T>(
+  restore: (payload: T) => void,
+  key: string,
+  messageOf: (payload: T) => string,
+): UseLoopUndo<T> {
+  useEffect(
+    () =>
+      useAppStore.subscribe(
+        (s) => s.projectInstallCount,
+        () => useAppStore.getState().dismissFeedback(key),
+      ),
+    [key],
+  );
 
-  const offer = useCallback((next: T) => show(next, LOOP_UNDO_MS), [show]);
+  const offer = useCallback(
+    (payload: T) =>
+      useAppStore.getState().showFeedback(buildLoopUndoRequest(restore, key, messageOf, payload)),
+    [restore, key, messageOf],
+  );
 
-  const undo = useCallback(() => {
-    if (!toast) return;
-    restore(toast);
-    dismiss();
-  }, [toast, restore, dismiss]);
-
-  return { pending: toast, offer, undo };
+  return { offer };
 }

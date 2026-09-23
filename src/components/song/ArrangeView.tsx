@@ -29,12 +29,11 @@ import { subscribePlaybackClock } from '@/audio/playback/playbackEngine';
 import { ViewHeader } from '../ui/ViewHeader';
 import { KeyChangeDialog } from './KeyChangeDialog';
 import { LoopCopyDialog } from './LoopCopyDialog';
-import { LoopUndoToast } from './LoopUndoToast';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
 import { useLoopUndo } from './useLoopUndo';
-import { keyChangeToastMessage, useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
+import { useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
 
 /** Stable identity for the closed-dialog case — see the `labels` memo below. */
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -234,7 +233,11 @@ function useArrangeDrag(loops: Loop[]) {
  * nothing plays. A project install dismisses a pending Undo (useLoopUndo).
  */
 function useLoopDeleteUndo() {
-  const { pending, offer, undo } = useLoopUndo<DeletedLoop>(undoLoopDelete);
+  const { offer } = useLoopUndo<DeletedLoop>(
+    undoLoopDelete,
+    'btn-undo-loop-delete',
+    (deleted) => `${loopLabel(deleted.loop)} deleted`,
+  );
 
   const onDelete = useCallback(
     (id: string) => {
@@ -244,7 +247,7 @@ function useLoopDeleteUndo() {
     [offer]
   );
 
-  return { deletedLoop: pending, onDelete, onUndoDelete: undo };
+  return { onDelete };
 }
 
 /**
@@ -254,7 +257,7 @@ function useLoopDeleteUndo() {
  */
 function useLoopCardActions() {
   const duplicateLoop = useAppStore((s) => s.duplicateLoop);
-  const { deletedLoop, onDelete, onUndoDelete } = useLoopDeleteUndo();
+  const { onDelete } = useLoopDeleteUndo();
   const reorderLoops = useAppStore((s) => s.reorderLoops);
   const setLoopName = useAppStore((s) => s.setLoopName);
   const setLoopRepeatCount = useAppStore((s) => s.setLoopRepeatCount);
@@ -323,8 +326,6 @@ function useLoopCardActions() {
     onDuplicate,
     onCopyInto,
     onDelete,
-    deletedLoop,
-    onUndoDelete,
     onReorder: reorderLoops,
     onRename: setLoopName,
     onSetRepeat: setLoopRepeatCount,
@@ -555,25 +556,6 @@ export const ArrangeView = React.memo(function ArrangeView() {
         playbackScope={playbackScope}
         actions={actions}
       />
-
-      {(actions.deletedLoop || keyChange.keyChangeUndo) && (
-        <div className="toast toast-bottom toast-center z-30 animate-fade-in">
-          {actions.deletedLoop && (
-            <LoopUndoToast
-              message={`${loopLabel(actions.deletedLoop.loop)} deleted`}
-              buttonId="btn-undo-loop-delete"
-              onUndo={actions.onUndoDelete}
-            />
-          )}
-          {keyChange.keyChangeUndo && (
-            <LoopUndoToast
-              message={keyChangeToastMessage(keyChange.keyChangeUndo)}
-              buttonId="btn-undo-key-change"
-              onUndo={keyChange.onUndoKeyChange}
-            />
-          )}
-        </div>
-      )}
 
       {actions.copyTargetId !== null && (
         <LoopCopyDialog
