@@ -1,6 +1,6 @@
 ---
 name: instant-vibes
-description: Add, remove, retune or debug an Instant Vibe in solna — the genre cards in the Vibes picker (a Header tool) (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) and the dice that rerolls them. Carries a survey-first workflow, the eight library ids a vibe resolves, the per-vibe dice pools and the two invariants that guard them, and the three golden fixtures behind the tests. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in vibes / vibeVariation / instantVibesProgressions tests.
+description: Add, remove, retune or debug an Instant Vibe in solna — the genre cards (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) in the Vibes picker, a Header tool, and the dice that rerolls them. Carries a survey-first workflow, the eight library ids a vibe resolves, the per-vibe dice pools and the two invariants that guard them, and the three golden fixtures behind the tests. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in vibes / vibeVariation / instantVibesProgressions tests.
 ---
 
 # Instant Vibes (solna)
