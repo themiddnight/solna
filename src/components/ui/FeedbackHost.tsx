@@ -60,11 +60,15 @@ function FeedbackItem({
  * under `MobileTopBar`. The messages live in the store, so a layout switch keeps
  * them.
  *
- * Two `aria-live` regions, always rendered empty or not so both exist before
- * their first message: `role="status"` (polite) for everything but errors,
- * `role="alert"` (assertive, its own region rather than nested inside the
- * polite one) for errors — nesting announced an error twice. Not the daisyUI
- * `toast` class: that is `position: fixed` and would ignore the slot.
+ * One positioned flex column holds two `aria-live` regions as ordinary
+ * in-flow (`contents`) children, always rendered empty or not so both exist
+ * before their first message: `role="status"` (polite) for everything but
+ * errors, `role="alert"` (assertive, its own region rather than nested
+ * inside the polite one — nesting announced an error twice) for errors.
+ * Both stay inside the one column rather than each getting its own
+ * `absolute` layer, so an error and a pending snackbar never paint on top of
+ * each other. Not the daisyUI `toast` class: that is `position: fixed` and
+ * would ignore the slot.
  *
  * `useLiveStore`, not `useAppStore`: a `renderToString` test sets `feedback`
  * before rendering (.claude/rules/testing.md, R257).
@@ -76,36 +80,34 @@ export const FeedbackHost = React.memo(function FeedbackHost({ edge }: { edge: '
   const rest = entries.filter((e) => e.tone !== 'error');
   return (
     <div className="relative z-55 h-0 shrink-0">
-      <div
-        id="feedback-host"
-        role="status"
-        aria-live="polite"
-        className={`absolute inset-x-0 ${EDGE_CLASS[edge]} flex items-center gap-1.5 px-3 pointer-events-none`}
-      >
-        {rest.map((entry) => (
-          <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
-        ))}
-      </div>
       {/*
-       * Errors get their own always-present assertive region instead of a
-       * `role="alert"` nested inside the polite region above: nesting
-       * announced an error twice — once for the alert's own insertion, once
-       * for the polite region's content-changed mutation. This region is
-       * absolutely positioned over the same slot so splitting it never shifts
-       * the stack's on-screen position; both regions holding an entry at once
-       * is rare (`FEEDBACK_LIMIT` keeps the queue short and same-key
-       * replacement collapses repeats).
+       * One positioned flex column; the two live regions below are ordinary
+       * in-flow children of it (`contents`: no box of their own), so every
+       * entry — whichever region announces it — is a direct flex item of
+       * this single column and none can paint over another (an error region
+       * absolutely positioned a second time here once covered a pending
+       * Undo snackbar's button).
        */}
       <div
-        id="feedback-host-errors"
-        role="alert"
-        aria-live="assertive"
         className={`absolute inset-x-0 ${EDGE_CLASS[edge]} flex items-center gap-1.5 px-3 pointer-events-none`}
       >
-        {errors.map((entry) => (
-          <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
-        ))}
+        <div id="feedback-host" role="status" aria-live="polite" className="contents">
+          {rest.map((entry) => (
+            <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
+          ))}
+        </div>
+        {/*
+         * Errors get their own always-present assertive region instead of a
+         * `role="alert"` nested inside the polite region above: nesting
+         * announced an error twice — once for the alert's own insertion,
+         * once for the polite region's content-changed mutation.
+         */}
+        <div id="feedback-host-errors" role="alert" aria-live="assertive" className="contents">
+          {errors.map((entry) => (
+            <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
+          ))}
+        </div>
       </div>
     </div>
   );
-});;
+});

@@ -41,26 +41,6 @@ describe('FeedbackHost', () => {
     }
   });
 
-  test('an error entry renders inside the assertive alert region, not the polite status one', () => {
-    useAppStore.setState({ feedback: [entry({ key: 'drive', tone: 'error', message: 'Drive failed' })] });
-    const html = renderToString(<FeedbackHost edge="top" />);
-    const statusStart = html.indexOf('id="feedback-host"');
-    const errorsStart = html.indexOf('id="feedback-host-errors"');
-    expect(html).toContain('alert alert-soft alert-error');
-    // The errors region opens after the status region and holds the message,
-    // so the two are siblings and the entry sits only in the assertive one.
-    expect(errorsStart).toBeGreaterThan(statusStart);
-    expect(html.indexOf('Drive failed')).toBeGreaterThan(errorsStart);
-  });
-
-  test('an error entry never doubles up with a role="alert" on the item itself', () => {
-    useAppStore.setState({ feedback: [entry({ key: 'drive', tone: 'error', message: 'Drive failed' })] });
-    const html = renderToString(<FeedbackHost edge="top" />);
-    // Only the region carries role="alert"; the item itself carries none, so
-    // a screen reader announces the entry once, from the region alone.
-    expect(html.match(/role="alert"/g)?.length).toBe(1);
-  });
-
   test('a detail line renders under the message', () => {
     useAppStore.setState({ feedback: [entry({ key: 'vibe', message: 'Rerolled', detail: 'drums: boom-bap' })] });
     const html = renderToString(<FeedbackHost edge="bottom" />);
@@ -111,5 +91,50 @@ describe('FeedbackHost', () => {
     test('two different keys at the same seq never collide', () => {
       expect(feedbackEntryKey({ key: 'drive', seq: 1 })).not.toBe(feedbackEntryKey({ key: 'vibe', seq: 1 }));
     });
+  });
+});
+
+describe('FeedbackHost error/status regions', () => {
+  test('an error entry renders inside the assertive alert region, not the polite status one', () => {
+    useAppStore.setState({ feedback: [entry({ key: 'drive', tone: 'error', message: 'Drive failed' })] });
+    const html = renderToString(<FeedbackHost edge="top" />);
+    const statusStart = html.indexOf('id="feedback-host"');
+    const errorsStart = html.indexOf('id="feedback-host-errors"');
+    expect(html).toContain('alert alert-soft alert-error');
+    // The errors region opens after the status region and holds the message,
+    // so the two are siblings and the entry sits only in the assertive one.
+    expect(errorsStart).toBeGreaterThan(statusStart);
+    expect(html.indexOf('Drive failed')).toBeGreaterThan(errorsStart);
+  });
+
+  test('an error and a snackbar share one positioned column, so neither can paint over the other', () => {
+    useAppStore.setState({
+      feedback: [
+        entry({
+          key: 'loop-delete',
+          tone: 'info',
+          message: 'Deleted loop',
+          action: { id: 'btn-undo-loop-delete', label: 'Undo', run: () => {} },
+        }),
+        entry({ key: 'drive', tone: 'error', message: 'Drive failed' }),
+      ],
+    });
+    const html = renderToString(<FeedbackHost edge="bottom" />);
+    // Exactly one `absolute`-positioned wrapper: the two live regions render
+    // as ordinary (`contents`) in-flow children of it, not as a second
+    // absolutely positioned layer that could paint over the first.
+    expect(html.match(/class="absolute /g)?.length).toBe(1);
+    expect(html).toContain('id="feedback-host"');
+    expect(html).toContain('id="feedback-host-errors"');
+    expect(html).toContain('id="btn-undo-loop-delete"');
+    expect(html).toContain('Drive failed');
+  });
+
+  test('an error entry never doubles up with a role="alert" on the item itself', () => {
+    useAppStore.setState({ feedback: [entry({ key: 'drive', tone: 'error', message: 'Drive failed' })] });
+    const html = renderToString(<FeedbackHost edge="top" />);
+    // Only the region carries role="alert"; the item itself carries none, so
+    // a screen reader announces the entry once, from the region alone.
+    expect(html.match(/role="alert"/g)?.length).toBe(1);
   });
 });
