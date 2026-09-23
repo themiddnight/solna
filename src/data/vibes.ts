@@ -22,7 +22,7 @@
  *
  * No presentational field belongs here: `color`, `bgGradient`, `borderColor`
  * and `textColor` are forbidden on a vibe. The chip's look comes from theme
- * tokens in InstantVibesBar.
+ * tokens in `components/vibes/VibePickerModal.tsx`.
  */
 import type {
   BeatFilterType,

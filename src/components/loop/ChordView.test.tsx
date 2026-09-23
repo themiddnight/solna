@@ -266,7 +266,7 @@ describe('ChordView pattern selects carry each pattern\'s meter', () => {
   // the object captured once at store creation — `useAppStore.setState(...)`
   // never touches it, and `react-dom/server`'s `useSyncExternalStore` shim
   // calls only `getServerSnapshot()`. Already confirmed and documented in
-  // this repo at `TransportBar.test.tsx:51-66` and `InstantVibesBar.test.tsx`;
+  // this repo at `TransportBar.test.tsx:51-66` and `ui/BottomInputDock.tsx`'s `useLiveStore`;
   // verified empirically here too (`useAppStore.setState({ meterId: '6/8' })`
   // followed by `renderToString(<ChordView />)` still renders the 4/4
   // default).

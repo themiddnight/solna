@@ -1,7 +1,4 @@
 import React from 'react';
-import { isSongLayer } from '@/types';
-import { useAppStore } from '@/store/store';
-import { InstantVibesBar } from '@/components/InstantVibesBar';
 import { TransportBar, type TransportVariant } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
 import { FeedbackHost } from '@/components/ui/FeedbackHost';
@@ -29,15 +26,8 @@ export function ShellBody({
   transportVariant,
   feedbackSlot,
 }: ShellProps & { bottomInset?: boolean; transportVariant?: TransportVariant; feedbackSlot: boolean }) {
-  const activeTab = useAppStore((s) => s.activeTab);
   return (
     <>
-      {/* 1-Click Instant Vibes Quick Starter Bar. Loop-layer only: a vibe
-          rewrites the loop's chords, drums, presets and BPM, which is not an
-          action the song layer offers — showing it over the arrangement
-          invites a click that silently rewrites the loop being arranged. */}
-      {!isSongLayer(activeTab) && <InstantVibesBar />}
-
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity.
           Both layers stay mounted; the active layer gates which page is visible,
           and each page toggles its own sub-tabs (block/hidden). */}

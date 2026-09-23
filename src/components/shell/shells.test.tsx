@@ -54,7 +54,6 @@ describe('the shells', () => {
     for (const marker of [
       '<header class="navbar',
       '<nav aria-label="Views" class="flex',
-      'id="btn-vibe-',
       'id="btn-vibes"',
       // LoopPage's SoundView and SongPage's EffectsRackView: only reachable
       // through <LayerPages />, so these fail if it is ever removed.
@@ -80,7 +79,6 @@ describe('the shells', () => {
       // through <LayerPages />, so these fail if it is ever removed.
       'id="btn-solo-target"',
       'id="slider-reverb-wet"',
-      'id="btn-vibe-',
       'id="btn-focus-chip"',
       'id="btn-bottom-transport"',
     ]) {
@@ -97,8 +95,8 @@ describe('the shells', () => {
   test('the desktop host hangs above the dock, the mobile host under the top bar', () => {
     expect(desktop).toContain('bottom-10 flex-col ');
     expect(mobile).toContain('top-2 flex-col-reverse ');
-    // Under the top bar: before the vibe bar, the first thing ShellBody renders.
-    expect(mobile.indexOf('id="feedback-host"')).toBeLessThan(mobile.indexOf('id="btn-vibe-'));
+    // Under the top bar: before the pages, the first thing ShellBody renders.
+    expect(mobile.indexOf('id="feedback-host"')).toBeLessThan(mobile.indexOf('id="btn-solo-target"'));
     // Above the dock: after the pages, before the dock's focus chip.
     expect(desktop.indexOf('id="feedback-host"')).toBeGreaterThan(desktop.indexOf('id="slider-reverb-wet"'));
     expect(desktop.indexOf('id="feedback-host"')).toBeLessThan(desktop.indexOf('id="btn-focus-chip"'));
@@ -121,13 +119,18 @@ describe('the shells', () => {
       }
     }
   });
+
+  test('no frame renders a vibe strip; vibes open only from the Vibes tool (R333)', () => {
+    for (const html of [desktop, mobile]) expect(html).not.toContain('id="btn-vibe-');
+    expect(read('./ShellBody.tsx')).not.toContain('Vibes');
+  });
 });
 
 describe('Workspace keeps what survives a layout switch', () => {
   const app = read('../../App.tsx');
 
   test('it renders no frame component itself', () => {
-    for (const frame of ['<Header', '<InstantVibesBar', '<LoopPage', '<SongPage', '<BottomInputDock', '<UpdateBanner', '<TransportBar']) {
+    for (const frame of ['<Header', '<LoopPage', '<SongPage', '<BottomInputDock', '<UpdateBanner', '<TransportBar']) {
       expect(app).not.toContain(frame);
     }
   });

@@ -37,7 +37,7 @@ export function withImpliedKey(
   return [...next, 'key'];
 }
 
-/** The shared key-label convention (Header, InstantVibesBar, ...) — see
+/** The shared key-label convention (Header, the vibe picker, ...) — see
  *  formatKeyLabel's own docblock for why this must not be reopened locally. */
 const keyName = (loop: Loop) => formatKeyLabel(loop.scaleRoot, loop.scaleType);
 

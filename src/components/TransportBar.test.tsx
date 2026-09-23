@@ -86,8 +86,8 @@ describe('transport bar aggregate behaviour', () => {
   // call in this suite reflects the store's *original* default values,
   // regardless of any `setState` performed beforehand — confirmed empirically
   // and already documented next door in
-  // `InstantVibesBar.test.tsx` ("renderToString reads that initial
-  // snapshot"). Working around it needs either a production change to
+  // `ui/BottomInputDock.tsx`'s `useLiveStore` ("renderToString reads that
+  // initial snapshot"). Working around it needs either a production change to
   // `TransportBar.tsx` or new module-mocking test infrastructure this repo
   // does not otherwise use, both out of scope for a test-only fix — see the
   // task report for the full investigation.

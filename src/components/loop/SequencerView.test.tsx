@@ -113,8 +113,8 @@ describe('SequencerView grid options carry their meter', () => {
   // the object captured once at store creation — `useAppStore.setState(...)`
   // never touches it, and `react-dom/server`'s `useSyncExternalStore` shim
   // calls only `getServerSnapshot()`. This is already confirmed and documented
-  // in this repo at `TransportBar.test.tsx:51-66` and `InstantVibesBar.test.tsx`
-  // ("renderToString reads that initial snapshot"). Verified empirically here
+  // in this repo at `TransportBar.test.tsx:51-66` and `ui/BottomInputDock.tsx`'s
+  // `useLiveStore` ("renderToString reads that initial snapshot"). Verified empirically here
   // too: `useAppStore.setState({ meterId: '3/4' })` followed by
   // `renderToString(<SequencerView />)` still renders the 4/4 default.
   //
