@@ -311,16 +311,14 @@ describe('export lives in its own feature folder', () => {
 describe('the tabs lead the header, the subject run follows', () => {
   const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
   const navAt = src.indexOf('<ViewNav ');
-  const subject = HEADER_TOOLS.filter((tool) => tool.group === 'subject').map((tool) => tool.id);
+  const subject = HEADER_TOOLS.filter((tool) => tool.id !== 'theme').map((tool) => tool.id);
 
   // The subject run changes with the layer, so tabs placed after it would
   // slide sideways on every layer crossing.
-  test('the Header renders the tab nav, then the subject tools, then the actions', () => {
+  test('the Header renders the tab nav, then the tools, the theme last', () => {
     expect(navAt).toBeGreaterThan(-1);
-    expect(src.indexOf('<HeaderToolRun layer={layer} group="subject" />')).toBeGreaterThan(navAt);
-    expect(src.indexOf('<HeaderToolRun layer={layer} group="actions" />')).toBeGreaterThan(
-      src.indexOf('<HeaderToolRun layer={layer} group="subject" />'),
-    );
+    expect(src.indexOf('headerToolsOn(')).toBeGreaterThan(navAt);
+    expect(HEADER_TOOLS.at(-1)?.id).toBe('theme');
   });
 
   test('there is no layer switch', () => {

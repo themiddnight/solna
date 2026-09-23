@@ -207,6 +207,12 @@ const LABEL_BELOW_MD = 'max-md:sr-only';
  */
 const SELECT_TIGHT = 'max-md:ps-2 max-md:pe-6 @3xs:ps-2 @3xs:pe-6';
 
+/** A painted-over select keeps its open list legible. */
+const OPTIONS_KEEP_FILL = '[&_option]:[-webkit-text-fill-color:initial]';
+
+/** The short face painted over a select's closed value, clear of its arrow; the caller sets when it shows. */
+const SELECT_FACE = 'pointer-events-none absolute inset-y-0 left-0 right-6 items-center pl-2 text-[11px]';
+
 /**
  * Root, quality and duration. One row when the CARD has room for it: the card
  * is an `@container`, and from `@3xs` (16rem) the three fit one row with
@@ -269,7 +275,7 @@ function ChordEditControls({
             id={`select-chord-quality-${chord.id}`}
             value={chord.quality}
             onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordQuality })}
-            className={`select select-xs w-full ${SELECT_TIGHT} max-md:[-webkit-text-fill-color:transparent] [&_optgroup]:[-webkit-text-fill-color:initial] [&_option]:[-webkit-text-fill-color:initial]`}
+            className={`select select-xs w-full ${SELECT_TIGHT} max-md:[-webkit-text-fill-color:transparent] [&_optgroup]:[-webkit-text-fill-color:initial] ${OPTIONS_KEEP_FILL}`}
           >
             {CHORD_QUALITY_GROUPS.map((group) => (
               <optgroup key={group.label} label={group.label}>
@@ -281,7 +287,7 @@ function ChordEditControls({
               </optgroup>
             ))}
           </select>
-          <span aria-hidden="true" className="md:hidden pointer-events-none absolute inset-y-0 left-0 right-6 flex items-center pl-2 text-[11px]">
+          <span aria-hidden="true" className={`flex md:hidden ${SELECT_FACE}`}>
             <span className="truncate">{chord.quality}</span>
           </span>
         </div>
@@ -300,13 +306,13 @@ function ChordEditControls({
             onChange={(e) =>
               updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
             }
-            className={`select select-xs w-full ${SELECT_TIGHT} @3xs:[-webkit-text-fill-color:transparent] [&_option]:[-webkit-text-fill-color:initial]`}
+            className={`select select-xs w-full ${SELECT_TIGHT} @3xs:[-webkit-text-fill-color:transparent] ${OPTIONS_KEEP_FILL}`}
           >
             <option value={1}>1 Bar</option>
             <option value={2}>2 Bars</option>
             <option value={4}>4 Bars</option>
           </select>
-          <span aria-hidden="true" className="hidden @3xs:flex pointer-events-none absolute inset-y-0 left-0 right-6 items-center pl-2 text-[11px] tabular-nums">
+          <span aria-hidden="true" className={`hidden @3xs:flex ${SELECT_FACE} tabular-nums`}>
             {chord.bars || 1}
           </span>
         </div>

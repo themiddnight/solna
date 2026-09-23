@@ -60,8 +60,8 @@ export const FIELD_LANE = 'flex items-center h-8';
 export const JOIN_LANE = `join ${FIELD_LANE} bg-base-200 border border-base-300 rounded-box px-0.5`;
 
 /**
- * The shell every group in the header chrome sits in: the layer switcher and
- * the tab bar in `Header.tsx`, Pattern's segment row, and the Sound tab's
+ * The shell every group in the header chrome sits in: the two view-nav joins
+ * in `Header.tsx`, Pattern's segment row, and the Sound tab's
  * Simple/Pro switch. A `join` of `btn-sm` buttons, so every one of them is the
  * same height.
  *
@@ -182,7 +182,7 @@ export const TRANSPORT_FIELD_SHELL =
  * The transport pill's caption. Lowercase where `GROUP_LABEL` is uppercase:
  * "BPM" and "Meter" are already caps as words, so the transform buys nothing
  * and the tracking it carries costs width the row does not have. Hidden
- * below `lg`: from `sm` the bar is one row, and at a 744px tablet the two
+ * below `lg`: from `md` the bar is one row, and at a 744px tablet the two
  * captions are the width that row is short by.
  */
 export const TRANSPORT_FIELD_LABEL = 'text-[10px] text-base-content/50 hidden lg:inline px-1';

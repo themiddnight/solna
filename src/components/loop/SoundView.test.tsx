@@ -232,7 +232,7 @@ describe('the drum-focus sound surface (Beat Sound)', () => {
   // The slice is bounded at BOTH ends on purpose. It used to run to the end of
   // the string, which was only correct while nothing rendered after this card
   // (the preset drawer's Suspense/lazy content is null while closed). SoundMixer
-  // now renders below it and contributes five ChannelStrip FIELD_LABELs, so an
+  // now renders below it and contributes one FIELD_LABEL per row, so an
   // open-ended slice would count the mixer's fields as the card's and the
   // numbers below would stop meaning "this row". `>Mixer<` is the mixer's
   // SECTION_HEADER span, i.e. the first byte after the card.

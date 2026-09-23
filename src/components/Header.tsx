@@ -1,10 +1,10 @@
 import React from "react";
-import { Layer, layerForTab, LOOP_TABS, SONG_TABS, ViewMode } from "../types";
+import { layerForTab, LOOP_TABS, SONG_TABS, ViewMode } from "../types";
 import { useAppStore } from "../store/store";
 import { HEADER_GROUP } from "./ui/fieldClasses";
 import { ProjectMenu } from "./project/ProjectMenu";
 import { VIEW_META } from "./viewMeta";
-import { headerToolsFor } from "./header/headerTools";
+import { headerToolsOn } from "./header/headerTools";
 
 interface TabButtonProps {
   view: ViewMode;
@@ -65,20 +65,8 @@ function ViewNav({ activeTab, onSelect }: { activeTab: ViewMode; onSelect: (view
   );
 }
 
-/** One run of Header tools: those of `group` available on `layer`, in `HEADER_TOOLS` order. */
-function HeaderToolRun({ layer, group }: { layer: Layer; group: Parameters<typeof headerToolsFor>[1] }) {
-  return (
-    <>
-      {headerToolsFor(layer, group).map(({ id, Component }) => (
-        <Component key={id} />
-      ))}
-    </>
-  );
-}
-
 export const Header = React.memo(function Header() {
   const activeTab = useAppStore((s) => s.activeTab);
-  const layer = layerForTab(activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
 
   return (
@@ -99,11 +87,12 @@ export const Header = React.memo(function Header() {
           loop picker on the loop layer, the project name on the song layer,
           exactly one of the two per layer), then what Arrange does with it
           while it plays and export (song layer only), then the key it is in
-          (loop layer only), per `HEADER_TOOLS`' order; then the actions. This
+          (loop layer only), per `HEADER_TOOLS`' order; then the theme. This
           run is what tells the two layers apart at a glance. */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <HeaderToolRun layer={layer} group="subject" />
-        <HeaderToolRun layer={layer} group="actions" />
+        {headerToolsOn(layerForTab(activeTab)).map(({ id, Component }) => (
+          <Component key={id} />
+        ))}
       </div>
     </header>
   );

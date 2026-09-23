@@ -132,7 +132,7 @@ describe('ProjectMenu menu composition', () => {
     // store creation and the Drive rows would be absent. useLiveStore serves
     // getState() for both snapshots, so setting it here does reach the render.
     useAppStore.setState({ driveAvailable: true });
-    const html = renderToString(<ProjectMenu textClassName="hidden sm:inline" />);
+    const html = renderToString(<ProjectMenu />);
     expect(html).toContain('id="project-menu-save"');
     expect(html).toContain('id="project-menu-save-as"');
     expect(html).not.toContain('id="project-menu-export"');
@@ -143,7 +143,7 @@ describe('ProjectMenu menu composition', () => {
 
   test('renders "Save to Drive" when the project came from Drive', () => {
     useAppStore.setState({ driveAvailable: true, projectSource: { kind: 'drive', fileId: 'f1' } });
-    const html = renderToString(<ProjectMenu textClassName="hidden sm:inline" />);
+    const html = renderToString(<ProjectMenu />);
     expect(html).toContain('Save to Drive');
     expect(html).toContain('id="project-menu-save-as-drive"');
     useAppStore.setState({ driveAvailable: false, projectSource: { kind: 'untitled' } });
@@ -151,7 +151,7 @@ describe('ProjectMenu menu composition', () => {
 
   test('renders the account under the Drive heading on its own line', () => {
     useAppStore.setState({ driveAvailable: true, driveUser: { email: 'ann@example.com', name: 'Ann' } });
-    const html = renderToString(<ProjectMenu textClassName="hidden sm:inline" />);
+    const html = renderToString(<ProjectMenu />);
     expect(html).toContain('ann@example.com');
     expect(html).toContain('block truncate');
     useAppStore.setState({ driveAvailable: false, driveUser: null });
@@ -303,12 +303,11 @@ describe('ProjectMenu rendering', () => {
   // never triggers — so the closed state is what is pinned here: the trigger is
   // a labelled button and the file input is present but hidden.
   test('renders a labelled dropdown trigger and a hidden file picker', () => {
-    const html = renderToString(<ProjectMenu textClassName="hidden sm:inline" />);
+    const html = renderToString(<ProjectMenu />);
     expect(html).toContain('dropdown');
     expect(html).toContain('aria-label="Project menu"');
     expect(html).toContain('type="file"');
     expect(html).toContain('accept=".solna,.json"');
-    expect(html).toContain('hidden sm:inline');
   });
 });
 

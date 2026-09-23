@@ -31,7 +31,7 @@ export const SYNTH_TARGET_STYLES: Record<
     border: string;
     /**
      * Icon/label tint. Kept to the literals `ui/Knob`'s `KnobColor` allows,
-     * so `ChannelStrip`'s `accentClass` accepts it without a cast — spelled
+     * so a mixer row's `accentClass` (`components/mixLayers.ts`) accepts it without a cast — spelled
      * out rather than imported because `utils/` does not reach into
      * `components/`.
      */

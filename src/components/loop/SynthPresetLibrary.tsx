@@ -22,7 +22,7 @@ import { validateActiveSynth } from '@/store/sanitizeSynth';
 import { PresetLibrary } from '../ui/PresetLibrary';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { IconButton } from '../ui/IconButton';
-import { useTimedToast } from '../ui/useTimedToast';
+import { useLibraryToast, type UseLibraryToast } from '../ui/useTimedToast';
 import type { PresetLibraryEntry, PresetCategory, PresetLibraryGroup, PresetSaveDraft } from '../ui/PresetLibrary';
 import { previewSynthPatch } from '@/audio/playback/presetPreview';
 import type { PreviewHandle } from '@/audio/playback/presetPreview';
@@ -141,18 +141,6 @@ function useSynthLibraryIndex(currentPresetId: string | null) {
   return { allPresets, activeEntryId, entries, categories, filterEntries };
 }
 
-/** The drawer's one toast line: a message, a tone, and its three-second self-clear. */
-function useSynthPresetToast() {
-  const { toast, show } = useTimedToast<{ msg: string; tone: 'success' | 'error' }>();
-
-  const showToast = useCallback(
-    (msg: string, tone: 'success' | 'error' = 'success') => show({ msg, tone }, 3000),
-    [show],
-  );
-
-  return { toastMsg: toast?.msg ?? null, toastTone: toast?.tone ?? 'success', showToast };
-}
-
 /**
  * Everything the drawer does to a preset: save, delete, audition and the two
  * JSON file commands — plus the audition handle and the pending delete, which
@@ -165,7 +153,7 @@ function useSynthPresetActions({
 }: {
   target: SynthControlTarget;
   onSavedPreset: (preset: SynthPreset) => void;
-  showToast: (msg: string, tone?: 'success' | 'error') => void;
+  showToast: UseLibraryToast['showToast'];
 }) {
   const customPresets = useAppStore((s) => s.customSynthPresets);
   const savePreset = useAppStore((s) => s.saveCustomPreset);
@@ -514,7 +502,7 @@ export function SynthPresetLibrary({
   const { allPresets, activeEntryId, entries, categories, filterEntries } =
     useSynthLibraryIndex(currentPresetId);
   const currentPresetName = allPresets.find((p) => p.id === currentPresetId)?.name;
-  const { toastMsg, toastTone, showToast } = useSynthPresetToast();
+  const { toastMsg, toastTone, showToast } = useLibraryToast();
   const actions = useSynthPresetActions({ target, onSavedPreset, showToast });
 
   return (

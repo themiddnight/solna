@@ -6,9 +6,9 @@ import { SILENCE_DB, UNITY_DB, dbToSliderPos, formatDb, sliderPosTodB } from '@/
 
 /**
  * THE dB fader. Every user-facing level in the app renders through this
- * component: the transport master, the five ChannelStrip layers, the five bus
- * faders on a loop card and the eleven per-track drum faders — about twenty
- * call sites. That is the point. The taper, the readout, the unity reset and
+ * component or its `VolumeKnob` twin: the transport master, the mixer's layer
+ * knobs, the five bus faders on a loop card and the eleven per-track drum
+ * faders — about twenty call sites. That is the point. The taper, the readout, the unity reset and
  * the silence detent are behaviour, and behaviour written twenty times is not
  * a contract, it is twenty chances to disagree. A caller passes decibels and
  * gets decibels back; this is the only COMPONENT that converts a slider

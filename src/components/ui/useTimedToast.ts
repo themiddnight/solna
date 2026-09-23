@@ -45,3 +45,21 @@ export function useTimedToast<T>(): {
 
   return { toast, show, dismiss };
 }
+
+type LibraryToastTone = 'success' | 'error';
+
+export interface UseLibraryToast {
+  toastMsg: string | null;
+  toastTone: LibraryToastTone;
+  showToast: (msg: string, tone?: LibraryToastTone) => void;
+}
+
+/** A preset library's toast line: a message, a tone, and its three-second self-clear. */
+export function useLibraryToast(): UseLibraryToast {
+  const { toast, show } = useTimedToast<{ msg: string; tone: LibraryToastTone }>();
+  const showToast = useCallback(
+    (msg: string, tone: LibraryToastTone = 'success') => show({ msg, tone }, 3000),
+    [show],
+  );
+  return { toastMsg: toast?.msg ?? null, toastTone: toast?.tone ?? 'success', showToast };
+}

@@ -9,7 +9,7 @@ import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
 import type { AppStore } from '@/store/types';
 import { pickLocalOpenHandle, readTextFromHandle, type PickHandleResult } from '@/utils/localFileSave';
-import { UNREADABLE_FILE_MESSAGE, downloadTextFile, projectFileName, readFileAsText, type FileReadResult } from '@/utils/projectFileIO';
+import { DOWNLOAD_FAILED_MESSAGE, UNREADABLE_FILE_MESSAGE, downloadTextFile, projectFileName, readFileAsText, type FileReadResult } from '@/utils/projectFileIO';
 import { ProjectLoading } from '../ProjectLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useLiveStore } from '../ui/useLiveStore';
@@ -382,7 +382,7 @@ function useProjectFileCommands({
     } catch {
       // downloadTextFile's anchor/blob path can throw in a restricted
       // embedding; downloading is best-effort and the live session is untouched.
-      report('Could not write the file. Check the browser’s download settings.');
+      report(DOWNLOAD_FAILED_MESSAGE);
     }
   };
 
@@ -647,11 +647,11 @@ export function ProjectMenuEffects({ menu }: { menu: UseProjectMenu }) {
   );
 }
 
-export function ProjectMenu({ textClassName }: { textClassName?: string }) {
+export function ProjectMenu() {
   const menu = useProjectMenu();
   return (
     <div className="dropdown">
-      <Wordmark textClassName={textClassName} ariaLabel="Project menu" chevron />
+      <Wordmark ariaLabel="Project menu" chevron />
       <ul
         // daisyUI's dropdown holds itself open on :focus-within, so the panel
         // must be focusable or the menu closes the moment a pointer-down lands

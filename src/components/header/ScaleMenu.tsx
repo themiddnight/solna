@@ -10,7 +10,7 @@ interface ScaleSelectsProps {
 }
 
 /**
- * The two master scale selects. They render twice — inline from `md` up, and
+ * The two master scale selects. They render twice — inline from `xl` up, and
  * inside a dropdown below it — so each instance takes its own id prefix rather
  * than duplicating ids into the DOM (the hidden copy is still rendered).
  */

@@ -96,7 +96,7 @@ export interface MixLayer extends MixLayerAccess {
   idPrefix: MixLayerId;
   label: string;
   tone: PowerToggleTone;
-  /** Icon tint. Typed as ChannelStrip's `accentClass` (KnobColor) accepts it. */
+  /** The row's knob tint, typed so `KnobColor` accepts it. */
   accentClass: 'text-primary' | 'text-module-chord' | 'text-module-bass' | 'text-module-pad' | 'text-module-fx' | 'text-accent';
   /**
    * Which group of the Sound mixer the row sits under. A column rather than an

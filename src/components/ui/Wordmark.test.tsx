@@ -37,8 +37,7 @@ describe('Wordmark', () => {
     expect(html).not.toContain('cursor-pointer');
   });
 
-  test('keeps the text props working', () => {
-    expect(renderToString(<Wordmark textClassName="hidden sm:inline" />)).toContain('leading-none hidden sm:inline');
+  test('markOnly drops the text', () => {
     expect(renderToString(<Wordmark markOnly />)).not.toContain('solna</span>');
   });
 });

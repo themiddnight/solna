@@ -5,13 +5,6 @@ interface WordmarkProps {
   /** Hide the "Solna" text and show the logo mark only. */
   markOnly?: boolean;
   className?: string;
-  /**
-   * Extra classes on the wordmark TEXT only. `markOnly` drops the text from the
-   * DOM outright, which a media query cannot undo — this is the hook a caller
-   * uses to hide it at one width and show it at another (the navbar passes
-   * `hidden sm:inline`, which is what keeps its phone layout down to two rows).
-   */
-  textClassName?: string;
   /** Overridden by ProjectMenu, which names the control it wraps. */
   ariaLabel?: string;
   /** Show a dropdown chevron after the text — the ProjectMenu trigger's hint. */
@@ -24,6 +17,9 @@ interface WordmarkProps {
   interactive?: boolean;
 }
 
+/** The 44px box both renderings share. */
+const WORDMARK_BOX = 'inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5';
+
 /**
  * The brand wordmark, and — through ProjectMenu — the project menu's trigger.
  * Deliberately NOT a <button>: it is rendered inside daisyUI's `dropdown`,
@@ -33,7 +29,6 @@ interface WordmarkProps {
 export function Wordmark({
   markOnly = false,
   className = "",
-  textClassName = "",
   ariaLabel,
   chevron = false,
   interactive = true,
@@ -48,7 +43,7 @@ export function Wordmark({
       />
       {!markOnly && (
         <span
-          className={`text-2xl font-normal text-primary leading-none ${textClassName}`}
+          className="text-2xl font-normal text-primary leading-none"
           style={{ letterSpacing: "0.08em" }}
         >
           solna
@@ -68,7 +63,7 @@ export function Wordmark({
       <span
         role="img"
         aria-label="Solna"
-        className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 ${className}`}
+        className={`${WORDMARK_BOX} ${className}`}
       >
         {content}
       </span>
@@ -80,7 +75,7 @@ export function Wordmark({
       tabIndex={0}
       role="button"
       aria-label={ariaLabel}
-      className={`inline-flex items-center gap-2 min-h-11 min-w-11 px-1.5 rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
+      className={`${WORDMARK_BOX} rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${className}`}
     >
       {content}
     </span>

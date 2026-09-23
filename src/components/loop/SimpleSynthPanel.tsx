@@ -5,6 +5,7 @@ import type { KnobScale } from '../ui/Knob';
 import { PanelCard } from '../ui/PanelCard';
 import { HINT_TEXT } from '../ui/fieldClasses';
 import { ToggleButton, ToggleRow, type ProModuleColor } from './synth/proControls';
+import { formatPercent } from '@/utils/gainUnits';
 import type { SynthChannel } from '@/utils/synthControl';
 import { SYNTH_GAIN_FLOOR_DB } from '@/utils/synthPatch';
 import {
@@ -64,7 +65,6 @@ interface SimpleControlSpec {
 
 /** Milliseconds while it is one, seconds after — the Pro envelope readout. */
 const envTime = (value: number) => (value < 1 ? `${Math.round(value * 1000)} ms` : `${value.toFixed(2)} s`);
-const percent = (value: number) => `${Math.round(value * 100)}%`;
 
 /**
  * The eight controls. Each range is the SAME range Pro offers for the same
@@ -79,7 +79,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
     min: 0,
     max: 1,
     step: 0.01,
-    format: percent,
+    format: formatPercent,
   },
   weight: {
     label: 'Weight',
@@ -110,7 +110,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
     min: 0,
     max: 1,
     step: 0.01,
-    format: percent,
+    format: formatPercent,
   },
   attack: {
     label: 'Attack',
@@ -137,7 +137,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
     min: 0,
     max: 1,
     step: 0.01,
-    format: percent,
+    format: formatPercent,
   },
   width: {
     label: 'Width',
@@ -146,7 +146,7 @@ export const SIMPLE_CONTROL_SPECS: Record<SimpleControlId, SimpleControlSpec> = 
     min: 0,
     max: 1,
     step: 0.01,
-    format: percent,
+    format: formatPercent,
   },
 };
 

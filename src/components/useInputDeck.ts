@@ -432,11 +432,10 @@ interface HeldNoteRelease {
  * The two backstops for a release gesture that never arrives.
  *
  * A keyboard-mode or layout-mode change (and the unmount that ends this hook)
- * releases every
- * note still sounding and clears the chord key-tracking ref: without it, a mode
- * switch while a key is held leaves its voices hanging forever, because the
- * key-up handler that would have released them now branches on the NEW mode and
- * finds nothing to release. Separately, Cmd-Tab / alt-tab / an OS dialog steals
+ * releases every note still sounding and clears the chord key-tracking ref:
+ * without it, a mode switch while a key is held leaves its voices hanging
+ * forever, because the key-up handler that would have released them now
+ * branches on the NEW mode and finds nothing to release. Separately, Cmd-Tab / alt-tab / an OS dialog steals
  * the keyup that would have released a held note, and window blur plus
  * visibilitychange (tab hidden) are the only two signals a page gets for "the
  * user is no longer interacting with this tab" — so both release everything
@@ -743,8 +742,8 @@ export function useInputDeck(layoutMode: LayoutMode): {
   useArpPlayback(arpStateRef, arpActive);
 
   // Both backstops for a release gesture that never arrives: release every note
-  // still sounding when the keyboard or layout mode changes or this hook's owner unmounts,
-  // and release everything held when the window loses focus.
+  // still sounding when the keyboard or layout mode changes or this hook's
+  // owner unmounts, and release everything held when the window loses focus.
   useHeldNoteRelease({ arpStateRef, chordKeyNotesRef, handleNoteOff, keyboardMode, layoutMode });
 
   // Silence lingering arp voices when all keys are released in arp mode.

@@ -303,12 +303,6 @@ export function useProgressionEditor(
 export type ProgressionEditor = ReturnType<typeof useProgressionEditor>;
 
 /**
- * The auto-harmonize rule: a key or scale change rewrites the progression,
- * and the badge says it did. Held as one hook because the refs, the two
- * effects and the two buttons are one mechanism — split them and the
- * declaration order that keeps the refs fresh stops being visible.
- */
-/**
  * The progression's harmonize controls. The key change itself — melodies AND
  * chords — is one store write (`changeKey`, store/keyChange.ts); this hook only
  * reads the session toggle and badge and offers the two buttons.

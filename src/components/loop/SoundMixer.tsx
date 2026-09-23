@@ -3,7 +3,6 @@ import { SlidersVertical } from 'lucide-react';
 import { useAppStore } from '@/store/store';
 import { isAnyPlayerActive } from '@/store/transportSlice';
 import { SectionCard } from '../ui/SectionCard';
-import { layerVolumeSliderId } from '../ui/ChannelStrip';
 import { VolumeKnob } from '../ui/VolumeFader';
 import { Knob } from '../ui/Knob';
 import { PowerToggle } from '../ui/PowerToggle';
@@ -23,8 +22,8 @@ import { formatPercent } from '@/utils/gainUnits';
 import { SEND_EFFECTS, type SendEffect } from '@/types';
 
 /**
- * A mix layer plus the two things only THIS surface has: the slice actions it
- * writes through, and the slider class its ChannelStrip wears.
+ * A mix layer plus what only THIS surface has: the slice actions it writes
+ * through.
  *
  * `Record<MixLayerId, …>` rather than a second six-row array: the compiler
  * then refuses a layer that has a label and a store field but no way to write
@@ -109,6 +108,9 @@ export const MIXER_GROUP_PLACEMENT: Record<MixGroupId, string> = {
   beat: 'md:col-start-1 md:row-start-2',
 };
 
+/** The level knob's element id. */
+const layerVolumeSliderId = (idPrefix: string) => `slider-${idPrefix}-layer-volume`;
+
 /** Each send knob's short label and the accessible name's tail. */
 const SEND_KNOB_TEXT: Record<SendEffect, { label: string; aria: string }> = {
   reverb: { label: 'Rev', aria: 'reverb send' },
@@ -151,9 +153,8 @@ function TrackSendKnobs({ channel }: { channel: MixerChannel }) {
 /**
  * One row = one layer. The store subscriptions live HERE, not in SoundMixer:
  * every view stays mounted, so ten selectors at the top of the mixer would
- * re-render all five rows on any one of the ten fields. Per row, a fader drag
- * re-renders that row alone — which is the same direct-write behaviour the
- * ChannelStrip call sites this replaces already had.
+ * re-render all five rows on any one of the ten fields. Per row, a level-knob
+ * drag re-renders that row alone.
  */
 function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: boolean }) {
   // The row's own two values, read through the layer's accessors rather than
@@ -169,21 +170,12 @@ function MixerRow({ channel, isPlaying }: { channel: MixerChannel; isPlaying: bo
 
   return (
     /* The row is a COLUMN: the field label on its own line, then one control
-       line carrying the toggle, the fader and the meter.
-
-       The label used to be ChannelStrip's, which put it inside the fader's own
-       box-plus-label stack — so the toggle beside that stack centred against 48
-       px while the fader box centred against its own 32, and every toggle sat 8
-       px above the control it operates. Lifting the label out makes the three
-       controls siblings on one line, and they align by construction rather than
-       by a margin someone has to keep in step with the label's height. */
+       line carrying the toggle and the knobs, then the meter. */
     <div className="flex flex-col gap-1">
       {/* The row's own name is the focus control: clicking it points every
           Sound-page knob at this layer. A button rather than a click handler
-          on the row body, because the row body already contains a fader and a
-          mute toggle and a click that lands on either must not also navigate.
-          The `htmlFor` moves onto a sibling `<label className="sr-only">` so
-          the fader keeps an accessible name. */}
+          on the row body, because the row body already contains knobs and a
+          mute toggle and a click that lands on either must not also navigate. */}
       <div className="flex items-center gap-1.5">
         <button
           id={`btn-mix-focus-${channel.idPrefix}`}

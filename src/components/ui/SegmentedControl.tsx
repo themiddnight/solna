@@ -21,8 +21,8 @@ import { HEADER_GROUP } from './fieldClasses';
  * `ui/SegmentHeader` renders one of them, and a `ui/` primitive reaching back
  * into the app shell for it pulled the whole navbar module graph — LoopSelector,
  * SCALES, noteSpelling — into every importer, with an import cycle one render
- * away. `HEADER_GROUP` is what keeps it in visual step with the tab bar and the
- * layer switcher, and that token already lives here.
+ * away. `HEADER_GROUP` is what keeps it in visual step with the tab bar, and
+ * that token already lives here.
  *
  * `TabButton` deliberately stays its own thing: it carries a different padding
  * ramp (`px-2 sm:px-2.5 xl:px-3`) because the tab bar has to survive widths the
@@ -41,9 +41,9 @@ export interface SegmentedGroupProps {
 }
 
 /**
- * The `join` shell the tab bar and the layer switcher also wear. `max-w-full`
- * caps HEADER_GROUP's `shrink-0` at its container, so on a 320px phone the
- * buttons (`min-w-0`, labels `truncate`) shrink instead of running off it.
+ * The `join` shell the tab bar also wears. `max-w-full` caps HEADER_GROUP's
+ * `shrink-0` at its container, so on a 320px phone the buttons (`min-w-0`,
+ * labels `truncate`) shrink instead of running off it.
  */
 export function SegmentedGroup({ children }: SegmentedGroupProps) {
   return <div className={`${HEADER_GROUP} inline-flex items-center max-w-full`}>{children}</div>;
@@ -72,7 +72,7 @@ export function SegmentedButton({
       id={id}
       type="button"
       // BOTH, and they answer different questions. `aria-current` says which
-      // view the app is showing — what the tab bar and the layer switcher use,
+      // view the app is showing — what the tab bar uses,
       // and what Header.test.tsx pins. `aria-pressed` says whether THIS button
       // is the selected one, which is the only cue a screen-reader user gets
       // for a mutually-exclusive selector whose selected state is otherwise
