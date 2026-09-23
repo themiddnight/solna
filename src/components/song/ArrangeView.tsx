@@ -365,6 +365,7 @@ function ArrangeHeader({
   return (
     <ViewHeader
       view="arrange"
+      sticky
       badge={`${loopCount} loop${loopCount === 1 ? '' : 's'}`}
       actions={
         <div className="flex gap-2">

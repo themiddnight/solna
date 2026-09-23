@@ -78,11 +78,11 @@ export interface HeaderCardProps {
   viewControls?: React.ReactNode;
   actions?: React.ReactNode;
   /**
-   * Below `md`, pin the card to the top of the scrolling `<main>` so the
-   * selector stays in reach down a long view. Only for a view whose
-   * `viewControls` pick what it shows. The pinned card drops its icon and title
-   * on a phone: MobileTabBar already names the tab, and every row the card
-   * pins is a row the grid below it loses.
+   * Pin the card to the top of the scrolling `<main>`, in both frames, so its
+   * controls stay in reach down a long view; every view header pins. A pinned
+   * card with controls drops its icon and title on a phone only: MobileTabBar
+   * already names the tab, and every row the card pins is a row the view below
+   * it loses. One with no controls keeps them, since they are all it shows.
    */
   sticky?: boolean;
   children?: React.ReactNode;
@@ -105,11 +105,14 @@ export function HeaderCard({
   sticky = false,
   children,
 }: HeaderCardProps) {
-  const phoneHidden = sticky && 'max-md:hidden';
+  // A pinned card with nothing but its title (Master) keeps the title, or it
+  // would pin an empty bar.
+  const compact = sticky && (viewControls !== undefined || actions !== undefined);
+  const phoneHidden = compact && 'max-md:hidden';
   // The title leaves the eye, not the outline: the view keeps its heading.
-  const phoneTitle = sticky && 'max-md:sr-only';
+  const phoneTitle = compact && 'max-md:sr-only';
   return (
-    <PanelCard className={cx('relative', sticky && 'max-md:sticky max-md:top-0 max-md:z-20')}>
+    <PanelCard className={cx('relative', sticky && 'sticky top-0 z-20')}>
       <div className="card-body p-3 sm:p-4 flex-row flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center flex-wrap gap-2 min-h-8 min-w-0 max-w-full">
           <div className={cx('p-1.5 rounded-selector bg-primary/20 border border-primary/30 text-primary', phoneHidden)}>

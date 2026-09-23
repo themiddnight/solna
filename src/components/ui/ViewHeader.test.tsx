@@ -37,19 +37,27 @@ describe('HeaderCard slots', () => {
 });
 
 describe('a sticky header', () => {
-  test('pins below md only, and keeps its title for screen readers', () => {
-    const html = renderToString(<ViewHeader view="sound" sticky />);
-    expect(html).toContain('max-md:sticky');
+  test('pins at every width, and hides its title from the eye on a phone only', () => {
+    const html = renderToString(<ViewHeader view="sound" sticky viewControls={<span>chips</span>} />);
+    expect(html).toMatch(/class="[^"]*(?<!:)\bsticky top-0\b/);
+    expect(html).not.toContain('max-md:sticky');
     expect(html).toContain('max-md:sr-only');
-    expect(html).not.toMatch(/(?<!max-md:)\bsticky\b/);
+    expect(html).not.toMatch(/(?<!max-md:)\bsr-only\b/);
   });
 
   test('is opt-in: a plain header does not pin', () => {
     expect(renderToString(<ViewHeader view="arrange" />)).not.toContain('sticky');
   });
 
+  test('a pinned header with no controls keeps its icon and title in view', () => {
+    const html = renderToString(<ViewHeader view="master" sticky />);
+    expect(html).toContain('sticky top-0');
+    expect(html).not.toContain('max-md:sr-only');
+    expect(html).not.toContain('max-md:hidden');
+  });
+
   test('every Pattern segment header pins', () => {
-    expect(renderToString(<SegmentHeader segment="fx" />)).toContain('max-md:sticky');
+    expect(renderToString(<SegmentHeader segment="fx" />)).toContain('sticky top-0');
   });
 });
 
