@@ -2,7 +2,11 @@ import React, { useState, useEffect } from "react";
 import { Radio } from "lucide-react";
 import { useAppStore } from "@/store/store";
 
-export const MidiIndicator = React.memo(function MidiIndicator() {
+/**
+ * `showLabel` keeps the "MIDI" word at every width — the mobile transport sheet
+ * has the room the desktop bar lacks below `sm`.
+ */
+export const MidiIndicator = React.memo(function MidiIndicator({ showLabel = false }: { showLabel?: boolean }) {
   const midiActivityTimestamp = useAppStore((s) => s.midiActivityTimestamp);
   const setIsMidiSettingsOpen = useAppStore((s) => s.setIsMidiSettingsOpen);
   const [active, setActive] = useState(false);
@@ -28,7 +32,7 @@ export const MidiIndicator = React.memo(function MidiIndicator() {
       title={active ? "MIDI Event Received! Click to configure mappings" : "MIDI Connected. Click to open MIDI settings & mappings"}
     >
       <Radio className={`w-3.5 h-3.5 ${active ? "animate-pulse text-primary" : "opacity-70"}`} />
-      <span className="hidden sm:inline text-[10px]">MIDI</span>
+      <span className={`${showLabel ? "inline" : "hidden sm:inline"} text-[10px]`}>MIDI</span>
       <span
         className={`w-2 h-2 rounded-full transition-all ${
           active ? "bg-primary scale-125" : "bg-base-content/30"

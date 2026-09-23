@@ -43,7 +43,7 @@ inline `row` controls instead.
 
 **A non-modal bottom sheet.** `BottomSheet` is modal by default. `modal={false}` exists for one
 case the modal shape cannot serve: a sheet whose own frame must stay usable while it is open — the
-mobile transport sheet, whose Play/Stop sit on the bar directly below it, so a user can
+mobile transport sheet (R332), whose Play/Stop sit on the bar directly below it, so a user can
 nudge the tempo or the master level while starting and stopping playback. A modal sheet would make
 the bar inert under its backdrop and force a close before every Play. The non-modal sheet opens
 with `show()`: no backdrop, not in the top layer, nothing made inert. It is not a `.modal`/
@@ -53,6 +53,16 @@ the page. It renders inside the bar it opens from and anchors to that bar's top 
 the frame-bar step (40), because it is part of that bar. `show()` gives a dialog no close request,
 so the shared hook listens for Escape while the sheet is open, yielding to a modal dialog open
 above it. It never closes on an outside tap: the page around it is meant to be used.
+
+**The mobile transport (R332).** The phone-specific transport [ADR-0041](0041-mobile-frame.md)
+deferred: below `md` the bar is one row — play/stop, the play target (truncating), the incident
+chip, a read-only `BPM · meter` readout with a metronome dot, and a chevron. The readout and the
+chevron toggle the transport sheet, which holds the tempo stepper, the meter select, the
+metronome, the MIDI entry, the level meter and the master fader with its dB readout. The two-row
+bar it replaces cost the phone a second row of chrome for controls touched far less often than
+Play; the dot keeps a running click track visible with the sheet closed, and the incident chip
+stays on the row because it must be seen without looking for it. The frame picks the variant
+(R316), so the desktop bar is untouched.
 
 **Nesting.** A modal may open from a sheet, a drawer or another modal (top layer). A popup never
 nests inside a bottom sheet.
@@ -126,6 +136,8 @@ accepted trade-off of the fixed z-scale, not a bug to chase with a higher one-of
 - **R330** — Toasts/snackbars go only through `showFeedback` into one `FeedbackHost`; only
   `useNativeDialog` holds/releases their timers.
 - **R331** — The z-scale is fixed; a new layer takes a listed step.
+- **R332** — Below `md` the transport is one row; tempo, meter, metronome, MIDI, level and master
+  live in a non-modal transport sheet above it; the frame picks the variant; desktop unchanged.
 
 ## Sources
 

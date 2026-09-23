@@ -188,6 +188,13 @@ export const TRANSPORT_FIELD_SHELL =
 export const TRANSPORT_FIELD_LABEL = 'text-[10px] text-base-content/50 hidden lg:inline px-1';
 
 /**
+ * The same caption in the mobile transport sheet, shown at every width: the
+ * sheet has the room the bar's row lacks, and a phone surface reads from its
+ * labels (R323).
+ */
+export const TRANSPORT_SHEET_FIELD_LABEL = 'text-[10px] text-base-content/50 px-1';
+
+/**
  * The badge a view header carries beside its title. `ViewHeader` renders it,
  * and ChordView's inline chord-count chip is the same role in the same place —
  * it just sits in a card body rather than the header.

@@ -69,6 +69,16 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - Desktop navigation is `ViewNav` in the Header's left group, beside `ProjectMenu`: every view as a `LOOP_TABS` join and a `SONG_TABS` join, each tab calling `setActiveTab`; the tab implies the layer, as on the phone. No frame renders a layer switch, and the tab nav never sits after a layer-gated tool run, where it would shift as the layer changes. <!-- R322 -->
 - Descriptive prose (a card's subtitle or description, a how-to line) wears `HINT_TEXT` (`ui/fieldClasses.ts`) and so shows on the desktop frame only; empty states, loading, errors, warnings and confirmations never wear it. A phone surface must read from its headings and controls alone. <!-- R323 -->
 - Exactly one element per frame consumes `env(safe-area-inset-bottom)`: `TransportBar` on desktop, `MobileTabBar` on mobile (`TransportBar bottomInset={false}`). <!-- R321 -->
+- Below `md` the transport bar is one row: the frame asks for it (`MobileShell` passes
+  `transportVariant="mobile"` through `ShellBody` to `TransportBar variant`), never a media query
+  in the bar. The row holds the play/stop join, the play-target label (the only flexible,
+  truncating item), `IncidentWarning`, a read-only `BPM · meter` readout with a dot while the
+  metronome is on, and a chevron with `aria-expanded`/`aria-controls`; the readout and the chevron
+  both toggle the transport sheet. The sheet is a non-modal `BottomSheet` (R326) rendered inside
+  the bar, holding the BPM stepper, the meter select, the metronome, the MIDI entry, the level
+  meter and the master fader with its dB readout; its open state is local `useState` (R016); it
+  closes on its toggles, its close button and Escape, and stays open while playing. The desktop
+  bar keeps every control inline and does not change for the phone. <!-- R332 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 
 ([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md), [ADR-0043](../../docs/decisions/0043-hint-text-on-desktop-only.md))
 
@@ -134,6 +144,9 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A placement or label field on a `HEADER_TOOLS` row, or a menu tool without a `row` rendering <!-- R319 -->
 - Closing the mobile menu sheet on a row tap, or a dialog rendered inside a daisyUI `menu` item <!-- R320 -->
 - Two elements of one frame both consuming the bottom safe-area inset <!-- R321 -->
+- A tempo, meter, metronome, MIDI, level-meter or master-fader control on the mobile transport
+  row; a media query choosing the transport variant; the transport sheet's open state in a slice;
+  a modal transport sheet; or a phone-driven change to the desktop bar <!-- R332 -->
 - A Loop/Song layer switch in either frame, or the desktop tab nav placed after a layer-gated tool run <!-- R322 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
 - A new overlay built without picking one of the five kinds and its named primitive <!-- R325 -->

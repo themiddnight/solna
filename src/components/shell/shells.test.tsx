@@ -66,6 +66,13 @@ describe('the shells', () => {
     }
   });
 
+  test('only the mobile frame asks for the one-row transport and its sheet (R332)', () => {
+    expect(desktop).not.toContain('id="btn-transport-sheet"');
+    expect(desktop).not.toContain('id="sheet-transport"');
+    expect(mobile).toContain('id="btn-transport-sheet"');
+    expect(mobile).toContain('id="sheet-transport"');
+  });
+
   test('the mobile shell renders the same feature children (R014 level 1)', () => {
     for (const marker of [
       // LoopPage's SoundView and SongPage's EffectsRackView: only reachable

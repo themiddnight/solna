@@ -171,7 +171,7 @@ violations.** Checked individually:
 
 | Pair | Forward | Backward | Kind |
 |---|---|---|---|
-| components ↔ diagnostics | `PlayheadReadout.tsx:6`, `TransportBar.tsx:19`, `loop/ChordView.tsx:13`, `loop/chord/ProgressionCard.tsx:11` → `diagnostics/renderCounts.ts`; `project/ProjectMenu.tsx:22` (dynamic) | `diagnostics/DiagnosticPanel.tsx:3` → `components/ui/Modal.tsx` | value both ways |
+| components ↔ diagnostics | `PlayheadReadout.tsx:6`, `TransportBar.tsx:9`, `loop/ChordView.tsx:13`, `loop/chord/ProgressionCard.tsx:11` → `diagnostics/renderCounts.ts`; `project/ProjectMenu.tsx:22` (dynamic) | `diagnostics/DiagnosticPanel.tsx:3` → `components/ui/Modal.tsx` | value both ways |
 | store ↔ utils | 70 edges | `utils/driveBrowser.ts:1`, `utils/localFileSave.ts:1` | value both ways (documented exception) |
 | data ↔ musicCore | `data/chordProgressions.ts:18` (type) | `musicCore/scale.ts:1` (value) | type-only one way |
 | data ↔ utils | `data/{vibes,chordRhythms,bassPatterns,drumGrids}.ts` → `utils/timeSignature.ts`, `data/vibes.ts` → `utils/synthControl.ts` (type) | `utils/musicTheory.ts`, `utils/noteSpelling.ts`, `utils/synthPresets.ts` → data (value) | type-only one way |

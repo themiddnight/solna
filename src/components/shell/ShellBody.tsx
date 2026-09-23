@@ -2,7 +2,7 @@ import React from 'react';
 import { isSongLayer } from '@/types';
 import { useAppStore } from '@/store/store';
 import { InstantVibesBar } from '@/components/InstantVibesBar';
-import { TransportBar } from '@/components/TransportBar';
+import { TransportBar, type TransportVariant } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
 import { FeedbackHost } from '@/components/ui/FeedbackHost';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
@@ -14,6 +14,8 @@ import type { ShellProps } from './shellProps';
  * The frame both shells share, between each one's own top bar and (on mobile)
  * its bottom navigation. `bottomInset` passes through to `TransportBar`: the
  * mobile frame hands the bottom safe-area inset to its tab bar (R321).
+ * `transportVariant` is the frame's choice of transport bar (R316, R332): the
+ * mobile frame asks for the one-row bar with its settings sheet.
  * `feedbackSlot` puts the frame's one feedback host (R330) above the input
  * dock; the mobile frame passes `false` and hangs its own under the top bar.
  */
@@ -24,8 +26,9 @@ export function ShellBody({
   onApplyUpdate,
   onDismissUpdate,
   bottomInset,
+  transportVariant,
   feedbackSlot,
-}: ShellProps & { bottomInset?: boolean; feedbackSlot: boolean }) {
+}: ShellProps & { bottomInset?: boolean; transportVariant?: TransportVariant; feedbackSlot: boolean }) {
   const activeTab = useAppStore((s) => s.activeTab);
   return (
     <>
@@ -63,7 +66,7 @@ export function ShellBody({
       <ProjectNotice />
 
       {/* Persistent Transport Bar at bottom */}
-      <TransportBar bottomInset={bottomInset} />
+      <TransportBar bottomInset={bottomInset} variant={transportVariant} />
     </>
   );
 }

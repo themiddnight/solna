@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
-import { TransportBar, songModeLabel } from './TransportBar';
+import { TransportBar, TransportReadout } from './TransportBar';
+import { TransportSheet } from './TransportSheet';
+import { songModeLabel, transportReadout } from './useTransportBar';
 import { aggregatePlayerState, transportDisplayState } from '../store/transportSlice';
 import { resolveTransportButtons } from './ui/PlayerTransport';
 import { createDefaultLoop } from '../store/loopSlice';
@@ -173,5 +175,149 @@ describe('transport bar audio recovery warning', () => {
     expect(renderToString(<TransportBar />)).not.toContain('Audio needs recovery');
     audioRecoveryStore.setState({ status: 'unhealthy', modalOpen: false });
     expect(renderToString(<TransportBar />)).toContain('aria-label="Audio needs recovery"');
+  });
+});
+
+/**
+ * R332: below `md` the bar is one row — play/stop, the target, the incident
+ * chip, a tempo readout and a chevron — and everything else lives in a
+ * non-modal sheet rendered inside the bar. Split at the sheet's `<dialog` so
+ * each half is asserted on its own.
+ */
+describe('the mobile transport bar', () => {
+  const html = renderToString(<TransportBar variant="mobile" bottomInset={false} />);
+  const sheetAt = html.indexOf('<dialog');
+  const bar = html.slice(0, sheetAt);
+  const sheet = html.slice(sheetAt);
+  const { bpm, meterId } = useAppStore.getInitialState();
+
+  test('is one row: no column stack, no md:contents wrappers', () => {
+    expect(html).toMatch(/^<div class="shrink-0 bg-base-100 border-t border-base-300 px-2 py-1 flex items-center gap-1 /);
+    expect(html).not.toContain('flex-col');
+    expect(html).not.toContain('md:contents');
+  });
+
+  test('keeps play/stop, the target label and the readout', () => {
+    expect(bar).toContain('id="btn-bottom-transport"');
+    expect(bar).toContain('id="btn-bottom-transport-hard"');
+    expect(bar).toContain('id="label-transport-play-target" class="text-xs text-base-content/70 truncate min-w-0 flex-1"');
+    expect(bar).toContain(`>${transportReadout(bpm, meterId)}</button>`);
+  });
+
+  test('the chevron and the readout both control the sheet, collapsed at first', () => {
+    expect(bar).toContain('aria-label="Transport settings"');
+    for (const id of ['btn-transport-sheet', 'btn-transport-readout']) {
+      const button = bar.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`))?.[0] ?? '';
+      expect(button).toContain('aria-expanded="false"');
+      expect(button).toContain('aria-controls="sheet-transport"');
+    }
+    expect(sheet).toContain('<dialog id="sheet-transport"');
+  });
+
+  test('carries no BPM stepper, meter select, fader, metronome, MIDI or level meter in the bar', () => {
+    for (const marker of [
+      'id="input-transport-bpm"',
+      'id="select-transport-meter"',
+      'id="slider-transport-master"',
+      'id="btn-transport-metronome"',
+      'MIDI',
+      'Master peak',
+    ]) {
+      expect(bar).not.toContain(marker);
+    }
+  });
+
+  test('the sheet is non-modal and anchored above the bar', () => {
+    expect(sheet).toContain('class="absolute bottom-full inset-x-0 z-40');
+    expect(sheet).not.toContain('modal-backdrop');
+  });
+
+  test('no song-mode badge: it never shows below md', () => {
+    expect(html).not.toContain('id="badge-song-mode"');
+  });
+});
+
+describe('the transport sheet', () => {
+  const noop = () => {};
+  const html = renderToString(
+    <TransportSheet
+      open
+      onClose={noop}
+      bpm={120}
+      setBpm={noop}
+      meterId="4/4"
+      setMeter={noop}
+      metronomeActive
+      onToggleMetronome={noop}
+      masterVolume={0}
+      setMasterVolume={noop}
+      isPlaying={false}
+    />,
+  );
+
+  test('renders all six controls', () => {
+    expect(html).toContain('id="input-transport-bpm"');
+    expect(html).toContain('id="select-transport-meter"');
+    expect(html).toContain('id="btn-transport-metronome"');
+    expect(html).toContain('>MIDI</span>');
+    expect(html).toContain('title="Master peak: -∞ dB"');
+    expect(html).toContain('id="slider-transport-master"');
+  });
+
+  test('shows what the bar row hides: captions, the level meter, the MIDI word, the dB readout', () => {
+    expect(html).toContain('<span class="text-[10px] text-base-content/50 px-1">BPM</span>');
+    expect(html).toContain('<span class="text-[10px] text-base-content/50 px-1">Meter</span>');
+    expect(html).toContain('class="flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box"');
+    expect(html).toContain('<span class="inline text-[10px]">MIDI</span>');
+    expect(html).toContain('<span class="tabular-nums text-[10px] text-base-content/60 w-14 text-right shrink-0">0.0 dB</span>');
+  });
+
+  test('the metronome is a labelled toggle that states its pressed state', () => {
+    expect(html).toMatch(/<button id="btn-transport-metronome" type="button" aria-pressed="true" class="btn btn-sm gap-1.5 text-xs btn-primary"/);
+    expect(html).toContain('Metronome</button>');
+  });
+});
+
+describe('the mobile readout', () => {
+  const readout = (metronomeActive: boolean) =>
+    renderToString(<TransportReadout bpm={96} meterId="6/8" metronomeActive={metronomeActive} open={false} onToggle={() => {}} />);
+
+  test('reads BPM · meter', () => {
+    expect(transportReadout(96, '6/8')).toBe('96 · 6/8');
+    expect(readout(false)).toContain('>96 · 6/8</button>');
+  });
+
+  test('a dot, and the same fact for a screen reader, while the metronome is on', () => {
+    expect(readout(true)).toContain('<span aria-hidden="true" class="w-1.5 h-1.5 rounded-full bg-primary"></span>');
+    expect(readout(true)).toContain('<span class="sr-only">, metronome on</span>');
+    expect(readout(false)).not.toContain('rounded-full');
+    expect(readout(false)).not.toContain('metronome on');
+  });
+});
+
+describe('the desktop transport bar is unchanged', () => {
+  const html = renderToString(<TransportBar />);
+
+  test('keeps its two-group row and every control inline', () => {
+    expect(html).toContain(
+      'class="shrink-0 bg-base-100 border-t border-base-300 px-2 sm:px-3 py-1.5 sm:py-2 pb-safe sm:pb-safe-lg flex flex-col md:flex-row md:items-center md:justify-between gap-1 sm:gap-2 text-xs select-none sticky bottom-0 z-40 shadow-2xl"',
+    );
+    for (const marker of [
+      'id="input-transport-bpm"',
+      'id="select-transport-meter"',
+      'id="btn-transport-metronome"',
+      'id="slider-transport-master"',
+      'title="Master peak: -∞ dB"',
+      '<span class="hidden sm:inline text-[10px]">MIDI</span>',
+      'id="label-transport-play-target" class="text-xs text-base-content/70 truncate max-w-20 sm:max-w-32 min-w-0"',
+    ]) {
+      expect(html).toContain(marker);
+    }
+  });
+
+  test('has no readout, no chevron and no sheet', () => {
+    expect(html).not.toContain('btn-transport-readout');
+    expect(html).not.toContain('btn-transport-sheet');
+    expect(html).not.toContain('<dialog');
   });
 });

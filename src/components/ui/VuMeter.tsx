@@ -7,6 +7,11 @@ import { useMeterLevel } from "./useMeterLevel";
 export interface VuMeterProps {
   /** Whether anything is sounding; the meter parks on the offscreen tier when false. */
   isPlaying: boolean;
+  /**
+   * Shown at every width. The desktop bar hides the meter below `sm`; the
+   * mobile transport sheet, which has the room, shows it.
+   */
+  alwaysShown?: boolean;
 }
 
 /**
@@ -26,7 +31,7 @@ export interface VuMeterProps {
  * Nothing here touches a zustand slice. A store write per tick would re-render all four mounted
  * tab views.
  */
-export const VuMeter = React.memo(function VuMeter({ isPlaying }: VuMeterProps) {
+export const VuMeter = React.memo(function VuMeter({ isPlaying, alwaysShown = false }: VuMeterProps) {
   // Resolved on each render rather than in a ref: before the first user click there is no
   // AudioContext and this is null, and the hook re-registers when the node finally appears.
   const analyser = audioEngine.getMasterLevelAnalyser();
@@ -35,7 +40,7 @@ export const VuMeter = React.memo(function VuMeter({ isPlaying }: VuMeterProps) 
   const level = useMeterLevel(analyser, { tier: isPlaying ? "master" : "offscreen" });
 
   return (
-    <div className="hidden sm:flex items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box">
+    <div className={`${alwaysShown ? "flex" : "hidden sm:flex"} items-center gap-1 bg-base-200 border border-base-300 p-1.5 rounded-box`}>
       <MeterBar
         peakDbfs={level.peakDbfs}
         rmsDbfs={level.rmsDbfs}

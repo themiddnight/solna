@@ -125,6 +125,17 @@ describe('the mobile frame', () => {
     expect(html).not.toContain('id="layer-song"');
   });
 
+  /** R332, R316: the frame picks the bar; the phone's is one row with its settings in a sheet. */
+  test('asks for the one-row transport, its settings sheet inside the bar and above the tab bar', () => {
+    const html = renderToString(createElement(MobileShell, SHELL_PROPS));
+    const sheet = html.indexOf('<dialog id="sheet-transport"');
+    expect(html).toContain('id="btn-transport-sheet"');
+    expect(sheet).toBeGreaterThan(html.indexOf('id="btn-transport-sheet"'));
+    expect(html.indexOf('<nav aria-label="Views"')).toBeGreaterThan(sheet);
+    expect(html.split('id="input-transport-bpm"').length - 1).toBe(1);
+    expect(html.indexOf('id="input-transport-bpm"')).toBeGreaterThan(sheet);
+  });
+
   test('the top bar shows the full wordmark, and its field tools keep their desktop heights', () => {
     const html = renderToString(createElement(MobileShell, SHELL_PROPS));
     expect(html).toContain('solna</span>');
