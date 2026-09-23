@@ -45,6 +45,12 @@ function recordingReport() {
   return { report: (m: string | null) => messages.push(m), messages };
 }
 
+/** Records every toast `notify` was called with (§5.6: message + tone). */
+function recordingNotify() {
+  const toasts: Array<{ message: string; tone: string }> = [];
+  return { notify: (message: string, tone: string) => toasts.push({ message, tone }), toasts };
+}
+
 /** The Tools rows this build ships: `Diagnostics` exists only when `import.meta.env.DEV`. */
 const shippedTools = () => toolsRows({ development: import.meta.env.DEV === true }).map((r) => r.action);
 
@@ -188,9 +194,11 @@ describe('openReadResult', () => {
   test('a read failure is reported as unreadable and never reaches the parser', async () => {
     const { openProjectFile, calls } = fakeOpenProjectFile();
     const { report, messages } = recordingReport();
+    const { notify, toasts } = recordingNotify();
     const read: FileReadResult = { ok: false, cause: new Error('permission revoked') };
-    await openReadResult(read, openProjectFile, report);
-    expect(messages).toEqual([UNREADABLE_FILE_MESSAGE]);
+    await openReadResult(read, openProjectFile, report, notify);
+    expect(toasts).toEqual([{ message: UNREADABLE_FILE_MESSAGE, tone: 'error' }]);
+    expect(messages).toEqual([]);
     expect(calls).toEqual([]);
   });
 
@@ -199,9 +207,11 @@ describe('openReadResult', () => {
   test('content that reads fine but is not JSON still reports malformed', async () => {
     const { openProjectFile, calls } = fakeOpenProjectFile();
     const { report, messages } = recordingReport();
+    const { notify, toasts } = recordingNotify();
     const read: FileReadResult = { ok: true, text: 'not json at all' };
-    await openReadResult(read, openProjectFile, report);
-    expect(messages).toEqual([MALFORMED_MESSAGE]);
+    await openReadResult(read, openProjectFile, report, notify);
+    expect(toasts).toEqual([{ message: MALFORMED_MESSAGE, tone: 'error' }]);
+    expect(messages).toEqual([]);
     expect(calls).toEqual([]);
   });
 });
@@ -213,6 +223,7 @@ describe('openPickedLocalFile', () => {
   function harness(picked: PickHandleResult, read: FileReadResult) {
     const { openProjectFile, calls } = fakeOpenProjectFile();
     const { report, messages } = recordingReport();
+    const { notify, toasts } = recordingNotify();
     let inputClicks = 0;
     const run = () =>
       openPickedLocalFile({
@@ -221,8 +232,9 @@ describe('openPickedLocalFile', () => {
         openWithInput: () => { inputClicks += 1; },
         openProjectFile,
         report,
+        notify,
       });
-    return { run, calls, messages, inputs: () => inputClicks };
+    return { run, calls, messages, toasts, inputs: () => inputClicks };
   }
 
   // The defect this pins, and it is the case a user actually hit: in an
@@ -239,7 +251,8 @@ describe('openPickedLocalFile', () => {
     expect(h.inputs()).toBe(1);
     // Still said out loud: the second dialog is a route forward, not a denial
     // that the first attempt failed.
-    expect(h.messages).toEqual([UNREADABLE_FILE_MESSAGE]);
+    expect(h.toasts).toEqual([{ message: UNREADABLE_FILE_MESSAGE, tone: 'error' }]);
+    expect(h.messages).toEqual([]);
     expect(h.calls).toEqual([]);
   });
 
@@ -250,6 +263,7 @@ describe('openPickedLocalFile', () => {
     expect(h.inputs()).toBe(1);
     // An honest degradation, not a failure: nothing went wrong to report.
     expect(h.messages).toEqual([]);
+    expect(h.toasts).toEqual([]);
   });
 
   test('a cancelled pick does nothing at all', async () => {
@@ -258,6 +272,7 @@ describe('openPickedLocalFile', () => {
 
     expect(h.inputs()).toBe(0);
     expect(h.messages).toEqual([]);
+    expect(h.toasts).toEqual([]);
     expect(h.calls).toEqual([]);
   });
 
@@ -272,12 +287,14 @@ describe('openPickedLocalFile', () => {
 });
 
 describe('openParsedProjectFile', () => {
-  test('a parse failure reports its message and never calls openProjectFile', async () => {
+  test('a parse failure is a toast, and never calls openProjectFile', async () => {
     const { openProjectFile, calls } = fakeOpenProjectFile();
     const { report, messages } = recordingReport();
+    const { notify, toasts } = recordingNotify();
     const parsed: ProjectParseResult = { ok: false, error: 'malformed', message: MALFORMED_MESSAGE };
-    await openParsedProjectFile(parsed, openProjectFile, report);
-    expect(messages).toEqual([MALFORMED_MESSAGE]);
+    await openParsedProjectFile(parsed, openProjectFile, report, notify);
+    expect(toasts).toEqual([{ message: MALFORMED_MESSAGE, tone: 'error' }]);
+    expect(messages).toEqual([]);
     expect(calls).toEqual([]);
   });
 
@@ -289,21 +306,28 @@ describe('openParsedProjectFile', () => {
   test('carries the parser’s warnings through to openProjectFile', async () => {
     const { openProjectFile, calls } = fakeOpenProjectFile();
     const { report } = recordingReport();
+    const { notify } = recordingNotify();
     const warnings = ['Lead sound (reset to the default)'];
     const parsed: ProjectParseResult = { ok: true, body: FAKE_BODY, warnings };
-    await openParsedProjectFile(parsed, openProjectFile, report);
+    await openParsedProjectFile(parsed, openProjectFile, report, notify);
     expect(calls).toEqual([[FAKE_BODY, undefined, warnings]]);
   });
 
-  test('an install failure reports it, unless it is the storage-unavailable degrade', async () => {
+  // A save-storage failure (unavailable/failed/quota) is the same banner
+  // family `openProjectFile` already wrote to — reported through `report`,
+  // never a toast (§5.6), unless it is the notice-free storage-unavailable
+  // degrade.
+  test('an install failure reports it to the banner, unless it is the storage-unavailable degrade', async () => {
     const { report, messages } = recordingReport();
+    const { notify, toasts } = recordingNotify();
     const failing = fakeOpenProjectFile({ ok: false, error: 'failed', message: 'boom' }).openProjectFile;
-    await openParsedProjectFile({ ok: true, body: FAKE_BODY, warnings: [] }, failing, report);
+    await openParsedProjectFile({ ok: true, body: FAKE_BODY, warnings: [] }, failing, report, notify);
     expect(messages).toEqual(['boom']);
+    expect(toasts).toEqual([]);
 
     const { report: report2, messages: messages2 } = recordingReport();
     const unavailable = fakeOpenProjectFile({ ok: false, error: 'unavailable', message: 'nope' }).openProjectFile;
-    await openParsedProjectFile({ ok: true, body: FAKE_BODY, warnings: [] }, unavailable, report2);
+    await openParsedProjectFile({ ok: true, body: FAKE_BODY, warnings: [] }, unavailable, report2, notify);
     expect(messages2).toEqual([]);
   });
 });

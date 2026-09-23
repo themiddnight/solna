@@ -66,6 +66,13 @@ async function freshStore(overrides: Partial<DriveSliceDeps> = {}) {
   return { useAppStore: mod.useAppStore, drive, deps };
 }
 
+/** The drive slice's own toast entry, keyed `drive` (§5.6 split). */
+function driveFeedback(useAppStore: {
+  getState: () => { feedback: readonly { key: string; message: string; tone: string }[] };
+}) {
+  return useAppStore.getState().feedback.find((e) => e.key === 'drive');
+}
+
 describe('connectDrive', () => {
   test('acquires a token, flips driveSignedIn and clears any notice', async () => {
     const { useAppStore, drive } = await freshStore();
@@ -86,7 +93,8 @@ describe('connectDrive', () => {
     });
     expect(await drive.connectDrive()).toBe(false);
     expect(useAppStore.getState().driveSignedIn).toBe(false);
-    expect(useAppStore.getState().projectNotice).toBe(DRIVE_DENIED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.message).toBe(DRIVE_DENIED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.tone).toBe('error');
   });
 
   test('an unconfigured deployment never asks for a token at all', async () => {
@@ -101,7 +109,8 @@ describe('connectDrive', () => {
     });
     expect(await drive.connectDrive()).toBe(false);
     expect(useAppStore.getState().driveAvailable).toBe(false);
-    expect(useAppStore.getState().projectNotice).toBe(DRIVE_NOT_CONFIGURED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.message).toBe(DRIVE_NOT_CONFIGURED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.tone).toBe('error');
   });
 
   test('records the connected account for the Drive heading', async () => {
@@ -247,7 +256,8 @@ describe('openFromDrive', () => {
     await drive.openFromDrive('drive-1');
     expect(useAppStore.getState().projectName).toBe('Keep me');
     expect(useAppStore.getState().projectSource).toEqual(UNTITLED_SOURCE);
-    expect(useAppStore.getState().projectNotice).toBe(MALFORMED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.message).toBe(MALFORMED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.tone).toBe('error');
   });
 
   test('a failed read reports it and installs nothing', async () => {
@@ -261,7 +271,8 @@ describe('openFromDrive', () => {
     useAppStore.setState({ projectName: 'Keep me', driveSignedIn: true });
     await drive.openFromDrive('drive-1');
     expect(useAppStore.getState().projectName).toBe('Keep me');
-    expect(useAppStore.getState().projectNotice).toBe(DRIVE_DENIED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.message).toBe(DRIVE_DENIED_MESSAGE);
+    expect(driveFeedback(useAppStore)?.tone).toBe('error');
     expect(useAppStore.getState().driveSignedIn).toBe(false);
   });
 });
@@ -311,7 +322,10 @@ describe('saveToDrive', () => {
     const result = await drive.saveToDrive();
     expect(result.ok).toBe(false);
     expect(useAppStore.getState().projectSource).toEqual({ kind: 'drive', fileId: 'drive-9' });
-    expect(useAppStore.getState().projectNotice).not.toBeNull();
+    // NOT a `drive` toast: `saveToDrive`'s one caller (`saveProject`, through
+    // ProjectMenu's `finishSave`) already toasts this exact result as an
+    // explicit save failure (§5.6) — a second one here would say it twice.
+    expect(driveFeedback(useAppStore)).toBeUndefined();
   });
 
   test('with no drive source there is nothing to update, and it says so', async () => {
@@ -358,6 +372,9 @@ describe('saveAsToDrive', () => {
     useAppStore.setState({ projectName: 'Sketch' });
     const result = await drive.saveAsToDrive('Remix');
     expect(result.ok).toBe(false);
+    // Same reasoning as saveToDrive: ProjectMenu's finishSave is the one
+    // caller and already toasts this result.
+    expect(driveFeedback(useAppStore)).toBeUndefined();
     expect(useAppStore.getState().projectSource).toEqual(UNTITLED_SOURCE);
     expect(useAppStore.getState().projectName).toBe('Sketch');
     // The identity a failed Save As did NOT adopt, checked through the one

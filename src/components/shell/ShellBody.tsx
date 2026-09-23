@@ -6,6 +6,7 @@ import { TransportBar } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
 import { FeedbackHost } from '@/components/ui/FeedbackHost';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
+import { ProjectNotice } from '@/components/project/ProjectNotice';
 import { LayerPages } from './LayerPages';
 import type { ShellProps } from './shellProps';
 
@@ -54,8 +55,12 @@ export function ShellBody({
       {/* Bottom Input Dock — Keyboard | Drums, reachable from any page */}
       <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />
 
-      {/* A waiting service worker, announced above the transport bar. */}
+      {/* Persistent banners, above the transport bar: a waiting service worker,
+          and any project storage problem (unavailable/failed/quota, or a
+          `.solna` opened with unrecognised references) — in flow, never
+          floating, unlike the toasts and snackbars in the feedback slot. */}
       <UpdateBanner open={updateReady} onReload={onApplyUpdate} onDismiss={onDismissUpdate} />
+      <ProjectNotice />
 
       {/* Persistent Transport Bar at bottom */}
       <TransportBar bottomInset={bottomInset} />

@@ -26,6 +26,14 @@ describe('ProjectNotice', () => {
     expect(html).toContain('aria-label="Dismiss project notice"');
   });
 
+  // §5.6: the banner is in layout flow on both frames — no `fixed`, no z-index.
+  test('renders in flow, never fixed or z-indexed', () => {
+    useAppStore.setState({ projectNotice: 'Storage is unavailable on this device.' });
+    const html = renderToString(<ProjectNotice />);
+    expect(html).not.toContain('fixed');
+    expect(html).not.toMatch(/\bz-\d/);
+  });
+
   // There is no DOM in this suite, so the click itself cannot be dispatched —
   // what is pinned is the path the button takes: the store field is the single
   // source, clearing it is the whole of the dismiss, and the surface goes with

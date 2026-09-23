@@ -218,14 +218,10 @@ describe('button and dialog chrome', () => {
  * host that ignores the frame's slot and the dialog hold.
  */
 describe('feedback surfaces', () => {
-  /**
-   * Not yet migrated, owned by a later commit of the secondary-canvas plan:
-   * ProjectNotice becomes toasts plus an in-flow banner (§5.6 split). The
-   * commit deletes this entry.
-   */
+  /** Every surface has migrated to the feedback host (§5.5, §5.6): empty on purpose. */
   const NOT_YET_MIGRATED = {
     toast: [] as string[],
-    fixedAlert: ['src/components/project/ProjectNotice.tsx'],
+    fixedAlert: [] as string[],
   };
 
   /** Comments name the toast freely (this very describe does); only code counts. */

@@ -8,8 +8,8 @@
  */
 
 /**
- * Why a render produced no file. A union rather than a string so the slice's
- * `projectNotice` sentence is a switch the compiler checks, and so a test can
+ * Why a render produced no file. A union rather than a string so the job's
+ * `notify` sentence is a switch the compiler checks, and so a test can
  * assert the reason without matching prose.
  */
 export type MixdownFailureReason =

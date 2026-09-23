@@ -108,7 +108,7 @@ describe('the shells', () => {
       './MobileTopBar.tsx', './useMobileTopBar.ts',
     ]) {
       const src = read(file);
-      for (const name of ['PlaybackHost', 'useInputDeck', 'useEngineSync', 'IncidentDialog', 'MidiSettingsModal', 'ProjectNotice']) {
+      for (const name of ['PlaybackHost', 'useInputDeck', 'useEngineSync', 'IncidentDialog', 'MidiSettingsModal']) {
         expect(src).not.toContain(name);
       }
     }
@@ -128,7 +128,7 @@ describe('Workspace keeps what survives a layout switch', () => {
     const host = app.indexOf('<PlaybackHost />');
     expect(host).toBeGreaterThan(-1);
     expect(host).toBeLessThan(app.indexOf('<Shell'));
-    for (const dialog of ['<IncidentDialog />', '<MidiSettingsModal />', '<ProjectNotice />']) {
+    for (const dialog of ['<IncidentDialog />', '<MidiSettingsModal />']) {
       expect(app.split(dialog).length - 1).toBe(1);
     }
   });

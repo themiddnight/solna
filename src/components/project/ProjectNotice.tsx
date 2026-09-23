@@ -3,23 +3,23 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useLiveStore } from '../ui/useLiveStore';
 
 /**
- * The only surface for `projectNotice` — the spec's "the notice is the only
- * signal" for a malformed `.solna`, a download that could not be written, a
- * store that is unavailable, and an autosave that failed. The project manager's
- * modal used to be that surface; it is gone, so this is it.
+ * The persistent banner for `projectNotice` (R329, §5.6 split): a storage
+ * problem the app cannot resolve on its own — an unavailable IndexedDB/
+ * localStorage backend, a write that hit quota, or a `.solna` opened with
+ * unrecognised references. Every one-shot result of a user's own action
+ * (a parse failure, a Drive error, an export outcome) is a toast through
+ * `showFeedback` instead; this banner is for what nothing the user does next
+ * makes go away on its own — the next content change or autosave retries it.
+ *
+ * In flow beside `UpdateBanner` (`ShellBody`), never floating: unlike a toast
+ * it needs no auto-dismiss timer, because a stuck storage backend does not
+ * fix itself in a few seconds. Dismissing clears the store field; the notice
+ * is session-only and never persisted.
  *
  * Reads the store through `useLiveStore`: under `renderToString` a plain
  * `useAppStore` selector would serve the store's creation-time value and the
  * notice would be untestable (and, worse, invisible for the whole first render
  * of a session that booted with a message already set).
- *
- * A toast, not a dialog: every message it carries is informational and nothing
- * it reports can be resolved by a click — an unavailable store and a failed
- * autosave both re-attempt on the next content change, not on a confirmation —
- * so it must never block the keys or the transport, which is exactly why the
- * old `confirm()`-style alert was replaced in the first place. Dismissing
- * clears the store field; the notice is session-only state and is never
- * persisted.
  */
 export function ProjectNotice() {
   const notice = useLiveStore((s) => s.projectNotice);
@@ -30,10 +30,10 @@ export function ProjectNotice() {
     <div
       id="project-notice"
       role="status"
-      className="fixed left-1/2 -translate-x-1/2 bottom-24 z-50 w-max max-w-[92vw] alert alert-info shadow-lg text-sm select-none"
+      className="shrink-0 flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-base-200 border-t border-warning/40 text-xs select-none"
     >
-      <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
-      <span className="min-w-0">{notice}</span>
+      <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" aria-hidden="true" />
+      <span className="flex-1 min-w-0">{notice}</span>
       <button
         id="btn-dismiss-project-notice"
         type="button"

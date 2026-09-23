@@ -77,7 +77,7 @@ export function createExportSlice(set: Set, get: Get): ExportSlice {
           snapshot,
           signal: job.controller.signal,
           publish,
-          setNotice: (projectNotice) => set({ projectNotice }),
+          notify: (message, tone) => get().showFeedback({ key: 'project-export', message, tone }),
           download: downloadBlob,
           yieldToTask: nextTask,
           yieldToBrowserPaint,

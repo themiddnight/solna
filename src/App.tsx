@@ -7,7 +7,6 @@ import { MobileShell } from './components/shell/MobileShell';
 import { useLayoutMode } from './components/shell/useLayoutMode';
 import { IncidentDialog } from './components/ui/IncidentDialog';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
-import { ProjectNotice } from './components/project/ProjectNotice';
 import { installGlobalIncidentCapture } from './incidents/globalCapture';
 import { reportOperationFailure } from './incidents/operationFailure';
 import { hydrateLatestIncident } from './incidents/incidentStore';
@@ -186,10 +185,6 @@ function Workspace() {
 
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
-
-      {/* The one surface for a parse/export/autosave failure — mounted at the
-          app root because the notice outlives whichever view raised it. */}
-      <ProjectNotice />
     </div>
   );
 }

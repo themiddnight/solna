@@ -66,12 +66,19 @@ beforeEach(() => {
   useAppStore.setState({ loops: [fastLoop()] });
 });
 
+/** The export slice's own toast entry, keyed `project-export` (§5.6). */
+function exportFeedback() {
+  return useAppStore.getState().feedback.find((e) => e.key === 'project-export');
+}
+
 afterEach(() => {
   downloads.restore();
   useAppStore.setState({
     projectNotice: initial.projectNotice,
     loops: initial.loops,
     projectName: initial.projectName,
+    feedback: initial.feedback,
+    feedbackHolds: initial.feedbackHolds,
   });
   // A stranded job (the lock still held while the store thinks it is idle)
   // must fail the test that left it that way, not the next test that
@@ -103,7 +110,8 @@ describe('startExport — a successful job', () => {
     const outcome = await useAppStore.getState().startExport('mixdown-wav');
     expect(outcome).toEqual({ status: 'downloaded', fileName: 'my-song.wav' });
     expect(downloads.names).toEqual(['my-song.wav']);
-    expect(useAppStore.getState().projectNotice).toBe('Exported my-song.wav.');
+    expect(exportFeedback()?.message).toBe('Exported my-song.wav.');
+    expect(exportFeedback()?.tone).toBe('success');
   });
 
   test('captures the arrangement and file name before yielding to the browser', async () => {
@@ -126,12 +134,11 @@ describe('startExport — a successful job', () => {
 
 describe('startExport — cancellation', () => {
   test('cancel marks the job cancelling and ends it silently', async () => {
-    useAppStore.setState({ projectNotice: null });
     const pending = useAppStore.getState().startExport('mixdown-wav');
     useAppStore.getState().cancelExport();
     expect(useAppStore.getState().exportJob).toEqual({ kind: 'mixdown-wav', phase: 'cancelling' });
     expect(await pending).toEqual({ status: 'cancelled' });
-    expect(useAppStore.getState().projectNotice).toBeNull();
+    expect(exportFeedback()).toBeUndefined();
     expect(downloads.names).toEqual([]);
     expect(useAppStore.getState().exportJob).toBeNull();
   });
@@ -195,7 +202,8 @@ describe('startExport — failures', () => {
     useAppStore.setState({ loops: [] });
     const outcome = await useAppStore.getState().startExport('mixdown-wav');
     expect(outcome).toEqual({ status: 'failed', reason: { kind: 'empty-arrangement' } });
-    expect(useAppStore.getState().projectNotice).toBe(MIXDOWN_FAILURE_MESSAGE['empty-arrangement']);
+    expect(exportFeedback()?.message).toBe(MIXDOWN_FAILURE_MESSAGE['empty-arrangement']);
+    expect(exportFeedback()?.tone).toBe('error');
     expect(useAppStore.getState().exportJob).toBeNull();
   });
 
@@ -216,7 +224,8 @@ describe('startExport — failures', () => {
       };
       const outcome = await useAppStore.getState().startExport('mixdown-wav');
       expect(outcome.status === 'failed' && outcome.reason.kind).toBe('render-failed');
-      expect(useAppStore.getState().projectNotice).toBe(MIXDOWN_FAILURE_MESSAGE['render-failed']);
+      expect(exportFeedback()?.message).toBe(MIXDOWN_FAILURE_MESSAGE['render-failed']);
+      expect(exportFeedback()?.tone).toBe('error');
       expect(incidents).toEqual(['Unexpected failure during mixdown']);
     } finally {
       (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = original;

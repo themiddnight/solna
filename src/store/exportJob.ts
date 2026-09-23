@@ -17,6 +17,7 @@ import type {
   IncidentOperation,
 } from './exportKinds';
 import { nextTask, renderFailed } from '@/audio/export/renderResult';
+import type { FeedbackTone } from './feedback';
 import { DOWNLOAD_FAILED_MESSAGE } from '@/utils/projectFileIO';
 
 export type ExportJobPhase = ExportProgress | { phase: 'downloading' } | { phase: 'cancelling' };
@@ -38,7 +39,8 @@ export interface ExportJobDeps {
   signal: AbortSignal;
   /** Publishes a phase; the slice drops it once the job is aborted or superseded. */
   publish: (phase: ExportJobPhase) => void;
-  setNotice: (message: string) => void;
+  /** Writes a one-shot toast (R330), replacing `project-export`'s current entry. */
+  notify: (message: string, tone: FeedbackTone) => void;
   download: (fileName: string, blob: Blob) => void;
   /** Puts the render in the next task so React can paint the pending state first. */
   yieldToTask: () => Promise<void>;
@@ -77,7 +79,7 @@ async function runKind(deps: ExportJobDeps): Promise<ExportKindResult> {
  */
 function reportKindFailure(deps: ExportJobDeps, reason: ExportFailureReason): ExportOutcome {
   if (reason.kind === 'cancelled') return { status: 'cancelled' };
-  deps.setNotice(deps.kind.failureMessages[reason.kind]);
+  deps.notify(deps.kind.failureMessages[reason.kind], 'error');
   if (reason.kind === 'render-failed') deps.reportFailure(deps.kind.incidentOperation, reason.detail);
   return { status: 'failed', reason };
 }
@@ -95,10 +97,10 @@ async function deliver(deps: ExportJobDeps, blob: Blob, fileName: string): Promi
   try {
     deps.download(fileName, blob);
   } catch {
-    deps.setNotice(DOWNLOAD_FAILED_MESSAGE);
+    deps.notify(DOWNLOAD_FAILED_MESSAGE, 'error');
     return { status: 'download-failed', fileName };
   }
-  deps.setNotice(exportSuccessMessage(fileName));
+  deps.notify(exportSuccessMessage(fileName), 'success');
   return { status: 'downloaded', fileName };
 }
 

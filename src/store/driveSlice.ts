@@ -44,7 +44,7 @@ export interface DriveSlice {
 }
 
 /**
- * The one place a Drive failure becomes either a notice or an outcome. The
+ * The one place a Drive failure becomes either a toast or an outcome. The
  * transport already retried once on a 401 (withDriveToken), so anything that
  * arrives here is final: a `DriveAuthError` means the grant is gone and the
  * sign-in mirror must be corrected, and everything else is a sentence.
@@ -58,9 +58,13 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
     if (get().driveSignedIn !== signedIn) set({ driveSignedIn: signedIn });
   };
 
-  /** A Drive failure is a notice plus a result — written once so the two stay together. */
+  /**
+   * Every Drive error is a toast, keyed `drive` so a repeat replaces rather
+   * than stacks (§5.6) — written once so the toast and the returned result
+   * stay in sync.
+   */
   const fail = (message: string): { ok: false; message: string } => {
-    set({ projectNotice: message });
+    get().showFeedback({ key: 'drive', message, tone: 'error' });
     return { ok: false, message };
   };
 
@@ -82,7 +86,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
 
     connectDrive: async () => {
       if (!deps.available) {
-        set({ projectNotice: DRIVE_NOT_CONFIGURED_MESSAGE });
+        get().showFeedback({ key: 'drive', message: DRIVE_NOT_CONFIGURED_MESSAGE, tone: 'error' });
         return false;
       }
       try {
@@ -95,7 +99,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
         return true;
       } catch (err) {
         setSignedIn(false);
-        set({ projectNotice: driveErrorMessage(err) });
+        get().showFeedback({ key: 'drive', message: driveErrorMessage(err), tone: 'error' });
         return false;
       }
     },
@@ -147,7 +151,10 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       }
       const body = get().exportProjectFile();
       const updated = await guard(() => deps.client.updateProject(source.fileId, body));
-      if (updated.ok === false) return fail(updated.message);
+      // NOT `fail()`: every caller of `saveToDrive` is `saveProject`, which
+      // `ProjectMenu`'s `finishSave` already toasts as an explicit save
+      // failure (§5.6) — toasting here too would show the same sentence twice.
+      if (updated.ok === false) return { ok: false, message: updated.message };
       set({ projectNotice: null });
       return { ok: true, destination: 'drive' };
     },
@@ -158,7 +165,9 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       // not leave the live document wearing an id no file carries.
       const { body, identity } = get().saveAsBody(name);
       const created = await guard(() => deps.client.createProject(name, body));
-      if (created.ok === false) return fail(created.message);
+      // Same reasoning as saveToDrive: ProjectMenu's finishSave is the one
+      // caller and already toasts this result.
+      if (created.ok === false) return { ok: false, message: created.message };
       await get().adoptSaveAs(identity, name, { kind: 'drive', fileId: created.value.id });
       set({ projectNotice: null });
       return { ok: true, destination: 'drive' };

@@ -34,6 +34,7 @@ interface Harness {
   deps: ExportJobDeps;
   events: string[];
   notices: string[];
+  tones: string[];
   incidents: [string, string][];
   controller: AbortController;
 }
@@ -41,6 +42,7 @@ interface Harness {
 function harness(kind: ExportKindSpec, overrides: Partial<ExportJobDeps> = {}): Harness {
   const events: string[] = [];
   const notices: string[] = [];
+  const tones: string[] = [];
   const incidents: [string, string][] = [];
   const controller = new AbortController();
   const deps: ExportJobDeps = {
@@ -48,7 +50,10 @@ function harness(kind: ExportKindSpec, overrides: Partial<ExportJobDeps> = {}): 
     snapshot: { song: {} as MixdownSnapshot, projectName: 'My Song' },
     signal: controller.signal,
     publish: (p) => events.push(p.phase === 'rendering' ? `rendering ${p.percent}` : p.phase),
-    setNotice: (message) => notices.push(message),
+    notify: (message, tone) => {
+      notices.push(message);
+      tones.push(tone);
+    },
     download: (fileName) => events.push(`download ${fileName}`),
     yieldToTask: async () => {
       events.push('task');
@@ -59,7 +64,7 @@ function harness(kind: ExportKindSpec, overrides: Partial<ExportJobDeps> = {}): 
     reportFailure: (operation, detail) => incidents.push([operation, detail]),
     ...overrides,
   };
-  return { deps, events, notices, incidents, controller };
+  return { deps, events, notices, tones, incidents, controller };
 }
 
 describe('runExportJob — success and delivery', () => {
@@ -69,6 +74,7 @@ describe('runExportJob — success and delivery', () => {
     expect(outcome).toEqual({ status: 'downloaded', fileName: 'my-song.wav' });
     expect(h.events).toEqual(['task', 'rendering 100', 'downloading', 'paint', 'download my-song.wav']);
     expect(h.notices).toEqual(['Exported my-song.wav.']);
+    expect(h.tones).toEqual(['success']);
   });
 
   // The download is the one step that can throw AFTER a full render — a
@@ -83,6 +89,7 @@ describe('runExportJob — success and delivery', () => {
     const outcome = await runExportJob(h.deps);
     expect(outcome).toEqual({ status: 'download-failed', fileName: 'my-song.wav' });
     expect(h.notices).toEqual([DOWNLOAD_FAILED_MESSAGE]);
+    expect(h.tones).toEqual(['error']);
   });
 
   test('the messages keep their wording', () => {
@@ -97,6 +104,7 @@ describe('runExportJob — failures', () => {
     const outcome = await runExportJob(h.deps);
     expect(outcome).toEqual({ status: 'failed', reason: { kind: 'empty-arrangement' } });
     expect(h.notices).toEqual(['empty']);
+    expect(h.tones).toEqual(['error']);
     expect(h.events).toEqual(['task']);
     expect(h.incidents).toEqual([]);
   });
@@ -105,6 +113,7 @@ describe('runExportJob — failures', () => {
     const h = harness(fakeKind(async () => ({ ok: false, reason: { kind: 'render-failed', detail: 'boom' } })));
     await runExportJob(h.deps);
     expect(h.notices).toEqual(['failed']);
+    expect(h.tones).toEqual(['error']);
     expect(h.incidents).toEqual([['mixdown', 'boom']]);
   });
 

@@ -4,6 +4,7 @@ import { reportManualIncident } from '@/store/incidentReporter';
 import { defaultSaveName } from '@/utils/driveBrowser';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectSaveResult } from '@/store/projectSlice';
+import type { FeedbackTone } from '@/store/feedback';
 import { selectExportBusy } from '@/store/exportSlice';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
@@ -264,13 +265,19 @@ export async function openParsedProjectFile(
   parsed: ProjectParseResult,
   openProjectFile: OpenProjectFile,
   report: (message: string | null) => void,
+  notify: (message: string, tone: FeedbackTone) => void,
   source?: ProjectSource,
 ): Promise<void> {
   if (parsed.ok === false) {
-    report(parsed.message);
+    // A malformed / newer-version file: the result of THIS open attempt, not a
+    // persistent problem, so it is a toast (§5.6), not the banner.
+    notify(parsed.message, 'error');
     return;
   }
   const result = await openProjectFile(parsed.body, source, parsed.warnings);
+  // Install failure here is the same storage-unavailable/failed/quota family
+  // `openProjectFile` already wrote to the banner (§5.6) — reported through
+  // `report`, never a toast, so the two stay in the same surface.
   if (result.ok === false && result.error !== 'unavailable') report(result.message);
 }
 
@@ -285,13 +292,14 @@ export async function openReadResult(
   read: FileReadResult,
   openProjectFile: OpenProjectFile,
   report: (message: string | null) => void,
+  notify: (message: string, tone: FeedbackTone) => void,
   source?: ProjectSource,
 ): Promise<void> {
   if (read.ok === false) {
-    report(UNREADABLE_FILE_MESSAGE);
+    notify(UNREADABLE_FILE_MESSAGE, 'error');
     return;
   }
-  await openParsedProjectFile(parseProjectFile(read.text), openProjectFile, report, source);
+  await openParsedProjectFile(parseProjectFile(read.text), openProjectFile, report, notify, source);
 }
 
 /**
@@ -322,12 +330,14 @@ export async function openPickedLocalFile({
   openWithInput,
   openProjectFile,
   report,
+  notify,
 }: {
   pick: () => Promise<PickHandleResult>;
   readHandle: (handle: FileSystemFileHandle) => Promise<FileReadResult>;
   openWithInput: () => void;
   openProjectFile: OpenProjectFile;
   report: (message: string | null) => void;
+  notify: (message: string, tone: FeedbackTone) => void;
 }): Promise<void> {
   const picked = await pick();
   if (picked.ok === false) {
@@ -336,11 +346,11 @@ export async function openPickedLocalFile({
   }
   const read = await readHandle(picked.handle);
   if (read.ok === false) {
-    report(UNREADABLE_FILE_MESSAGE);
+    notify(UNREADABLE_FILE_MESSAGE, 'error');
     openWithInput();
     return;
   }
-  await openReadResult(read, openProjectFile, report, { kind: 'local', handle: picked.handle });
+  await openReadResult(read, openProjectFile, report, notify, { kind: 'local', handle: picked.handle });
 }
 
 /**
@@ -360,6 +370,7 @@ function useProjectFileCommands({
   const openProjectFile = useLiveStore((s) => s.openProjectFile);
   const exportProjectFile = useLiveStore((s) => s.exportProjectFile);
   const setProjectNotice = useLiveStore((s) => s.setProjectNotice);
+  const showFeedback = useLiveStore((s) => s.showFeedback);
   const saveProject = useLiveStore((s) => s.saveProject);
   const saveProjectAsLocal = useLiveStore((s) => s.saveProjectAsLocal);
   const disconnectDrive = useLiveStore((s) => s.disconnectDrive);
@@ -367,7 +378,10 @@ function useProjectFileCommands({
   const listDriveProjects = useLiveStore((s) => s.listDriveProjects);
   const saveAsToDrive = useLiveStore((s) => s.saveAsToDrive);
 
+  /** The banner (§5.6): a persistent storage problem, cleared the same way. */
   const report = (message: string | null) => setProjectNotice(message);
+  /** A one-shot toast (§5.6), keyed `project-file` so a repeat replaces rather than stacks. */
+  const notify = (message: string, tone: FeedbackTone) => showFeedback({ key: 'project-file', message, tone });
 
   /**
    * The no-File-System-Access fallback for Save As (Safari, Firefox): a
@@ -382,7 +396,7 @@ function useProjectFileCommands({
     } catch {
       // downloadTextFile's anchor/blob path can throw in a restricted
       // embedding; downloading is best-effort and the live session is untouched.
-      report(DOWNLOAD_FAILED_MESSAGE);
+      notify(DOWNLOAD_FAILED_MESSAGE, 'error');
     }
   };
 
@@ -393,7 +407,9 @@ function useProjectFileCommands({
    */
   const finishSave = (result: ProjectSaveResult) => {
     if (result.ok === false) {
-      report(result.message);
+      // An explicit save failure / handle denial (§5.6): the result of THIS
+      // action, so a toast, never the persistent banner.
+      notify(result.message, 'error');
       return;
     }
     if (result.destination === 'download') {
@@ -444,7 +460,7 @@ function useProjectFileCommands({
     e.target.value = '';
     if (!file) return;
     await run('Opening…', async () => {
-      await openReadResult(await readFileAsText(file), openProjectFile, report);
+      await openReadResult(await readFileAsText(file), openProjectFile, report, notify);
     });
   };
 
@@ -461,6 +477,7 @@ function useProjectFileCommands({
         openWithInput: () => fileInputRef.current?.click(),
         openProjectFile,
         report,
+        notify,
       }),
     );
 
