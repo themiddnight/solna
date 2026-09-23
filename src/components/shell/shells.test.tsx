@@ -55,6 +55,7 @@ describe('the shells', () => {
       '<header class="navbar',
       '<nav aria-label="Views" class="flex',
       'id="btn-vibe-',
+      'id="btn-vibes"',
       // LoopPage's SoundView and SongPage's EffectsRackView: only reachable
       // through <LayerPages />, so these fail if it is ever removed.
       'id="btn-solo-target"',

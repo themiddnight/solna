@@ -327,8 +327,8 @@ describe('the tabs lead the header, the subject run follows', () => {
 
   // Subject, then what Arrange does with it while it plays, then export, then
   // the key it is in.
-  test('the subject run is loop picker, project name, follow toggle, export, key/scale', () => {
-    expect(subject).toEqual(['loop-copy', 'loop-selector', 'project-name', 'follow-playhead', 'export', 'scale']);
+  test('the subject run is loop picker, vibes, project name, follow toggle, export, key/scale', () => {
+    expect(subject).toEqual(['loop-copy', 'loop-selector', 'vibes', 'project-name', 'follow-playhead', 'export', 'scale']);
   });
 
   test('the copy button sits immediately before the loop selector', () => {

@@ -6,13 +6,13 @@ const ids = (tools: readonly { id: string }[]) => tools.map((tool) => tool.id);
 describe('HEADER_TOOLS', () => {
   test('lists the right cluster in today\'s order, each tool once', () => {
     expect(ids(HEADER_TOOLS)).toEqual([
-      'loop-copy', 'loop-selector', 'project-name', 'follow-playhead', 'export', 'scale', 'theme',
+      'loop-copy', 'loop-selector', 'vibes', 'project-name', 'follow-playhead', 'export', 'scale', 'theme',
     ]);
     expect(new Set(ids(HEADER_TOOLS)).size).toBe(HEADER_TOOLS.length);
   });
 
-  test('the loop layer gets the copy button, the loop picker, the key menu and the theme', () => {
-    expect(ids(headerToolsOn('loop'))).toEqual(['loop-copy', 'loop-selector', 'scale', 'theme']);
+  test('the loop layer gets the copy button, the loop picker, the vibes, the key menu and the theme', () => {
+    expect(ids(headerToolsOn('loop'))).toEqual(['loop-copy', 'loop-selector', 'vibes', 'scale', 'theme']);
   });
 
   // Project name, follow and export are what the SONG tabs edit; an export is

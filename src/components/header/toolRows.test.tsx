@@ -4,6 +4,7 @@ import { renderToString } from 'react-dom/server';
 import type { ToolVariantProps } from '@/components/ui/MenuRowButton';
 import { ExportButton } from '@/components/export/ExportButton';
 import { LoopCopyButton } from '@/components/loop/LoopCopyButton';
+import { VibesButton } from '@/components/vibes/VibesButton';
 import { FollowPlayheadToggle } from './FollowPlayheadToggle';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -12,6 +13,7 @@ const ROW_TOOLS: Array<[string, ComponentType<ToolVariantProps>, string, string]
   ['ThemeToggle', ThemeToggle, 'btn-toggle-theme', 'Theme'],
   ['FollowPlayheadToggle', FollowPlayheadToggle, 'btn-follow-playhead', 'Follow the playing loop'],
   ['ExportButton', ExportButton, 'btn-export', 'Export'],
+  ['VibesButton', VibesButton, 'btn-vibes', 'Vibes'],
 ];
 
 describe('menu tools render a touch-sized row', () => {

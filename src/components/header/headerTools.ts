@@ -4,13 +4,14 @@ import type { ToolVariantProps } from '@/components/ui/MenuRowButton';
 import { ExportButton } from '@/components/export/ExportButton';
 import { LoopCopyButton } from '@/components/loop/LoopCopyButton';
 import { LoopSelector } from '@/components/loop/LoopSelector';
+import { VibesButton } from '@/components/vibes/VibesButton';
 import { FollowPlayheadToggle } from './FollowPlayheadToggle';
 import { ProjectNameLabel } from './ProjectNameLabel';
 import { ScaleMenu } from './ScaleMenu';
 import { ThemeToggle } from './ThemeToggle';
 
 export type HeaderToolId =
-  | 'loop-copy' | 'loop-selector' | 'project-name' | 'follow-playhead' | 'export' | 'scale' | 'theme';
+  | 'loop-copy' | 'loop-selector' | 'vibes' | 'project-name' | 'follow-playhead' | 'export' | 'scale' | 'theme';
 
 export interface HeaderTool {
   readonly id: HeaderToolId;
@@ -34,6 +35,7 @@ const BOTH: readonly Layer[] = ['loop', 'song'];
 export const HEADER_TOOLS: readonly HeaderTool[] = [
   { id: 'loop-copy', Component: LoopCopyButton, layers: LOOP },
   { id: 'loop-selector', Component: LoopSelector, layers: LOOP },
+  { id: 'vibes', Component: VibesButton, layers: LOOP },
   { id: 'project-name', Component: ProjectNameLabel, layers: SONG },
   { id: 'follow-playhead', Component: FollowPlayheadToggle, layers: SONG },
   { id: 'export', Component: ExportButton, layers: SONG },
