@@ -37,7 +37,6 @@ function FeedbackItem({
 }) {
   return (
     <div
-      role={entry.tone === 'error' ? 'alert' : undefined}
       className={`alert alert-soft ${TONE_CLASS[entry.tone]} pointer-events-auto w-auto max-w-md py-1.5 px-3 text-xs shadow-lg animate-fade-in`}
     >
       <div className="flex flex-col items-start gap-0.5">
@@ -61,9 +60,11 @@ function FeedbackItem({
  * under `MobileTopBar`. The messages live in the store, so a layout switch keeps
  * them.
  *
- * Always rendered, empty or not, so the `aria-live` region exists before its
- * first message and screen readers announce it. Not the daisyUI `toast` class:
- * that is `position: fixed` and would ignore the slot.
+ * Two `aria-live` regions, always rendered empty or not so both exist before
+ * their first message: `role="status"` (polite) for everything but errors,
+ * `role="alert"` (assertive, its own region rather than nested inside the
+ * polite one) for errors — nesting announced an error twice. Not the daisyUI
+ * `toast` class: that is `position: fixed` and would ignore the slot.
  *
  * `useLiveStore`, not `useAppStore`: a `renderToString` test sets `feedback`
  * before rendering (.claude/rules/testing.md, R257).
@@ -71,6 +72,8 @@ function FeedbackItem({
 export const FeedbackHost = React.memo(function FeedbackHost({ edge }: { edge: 'top' | 'bottom' }) {
   const entries = useLiveStore((s) => s.feedback);
   const runAction = useLiveStore((s) => s.runFeedbackAction);
+  const errors = entries.filter((e) => e.tone === 'error');
+  const rest = entries.filter((e) => e.tone !== 'error');
   return (
     <div className="relative z-55 h-0 shrink-0">
       <div
@@ -79,10 +82,30 @@ export const FeedbackHost = React.memo(function FeedbackHost({ edge }: { edge: '
         aria-live="polite"
         className={`absolute inset-x-0 ${EDGE_CLASS[edge]} flex items-center gap-1.5 px-3 pointer-events-none`}
       >
-        {entries.map((entry) => (
+        {rest.map((entry) => (
+          <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
+        ))}
+      </div>
+      {/*
+       * Errors get their own always-present assertive region instead of a
+       * `role="alert"` nested inside the polite region above: nesting
+       * announced an error twice — once for the alert's own insertion, once
+       * for the polite region's content-changed mutation. This region is
+       * absolutely positioned over the same slot so splitting it never shifts
+       * the stack's on-screen position; both regions holding an entry at once
+       * is rare (`FEEDBACK_LIMIT` keeps the queue short and same-key
+       * replacement collapses repeats).
+       */}
+      <div
+        id="feedback-host-errors"
+        role="alert"
+        aria-live="assertive"
+        className={`absolute inset-x-0 ${EDGE_CLASS[edge]} flex items-center gap-1.5 px-3 pointer-events-none`}
+      >
+        {errors.map((entry) => (
           <FeedbackItem key={feedbackEntryKey(entry)} entry={entry} onAction={runAction} />
         ))}
       </div>
     </div>
   );
-});
+});;

@@ -16,10 +16,10 @@ const entry = (extra: Partial<FeedbackEntry> & Pick<FeedbackEntry, 'key'>): Feed
 });
 
 describe('FeedbackHost', () => {
-  test('renders an empty live region, so the first message is announced', () => {
+  test('renders both empty live regions, so the first message of either kind is announced', () => {
     const html = renderToString(<FeedbackHost edge="bottom" />);
     expect(html).toContain('id="feedback-host" role="status" aria-live="polite"');
-    expect(html).not.toContain('alert');
+    expect(html).toContain('id="feedback-host-errors" role="alert" aria-live="assertive"');
   });
 
   test('sits in a zero-height slot above drawers (R331)', () => {
@@ -41,11 +41,24 @@ describe('FeedbackHost', () => {
     }
   });
 
-  test('an error entry is also an alert region', () => {
+  test('an error entry renders inside the assertive alert region, not the polite status one', () => {
     useAppStore.setState({ feedback: [entry({ key: 'drive', tone: 'error', message: 'Drive failed' })] });
     const html = renderToString(<FeedbackHost edge="top" />);
-    expect(html).toContain('role="alert" class="alert alert-soft alert-error');
-    expect(html).toContain('Drive failed');
+    const statusStart = html.indexOf('id="feedback-host"');
+    const errorsStart = html.indexOf('id="feedback-host-errors"');
+    expect(html).toContain('alert alert-soft alert-error');
+    // The errors region opens after the status region and holds the message,
+    // so the two are siblings and the entry sits only in the assertive one.
+    expect(errorsStart).toBeGreaterThan(statusStart);
+    expect(html.indexOf('Drive failed')).toBeGreaterThan(errorsStart);
+  });
+
+  test('an error entry never doubles up with a role="alert" on the item itself', () => {
+    useAppStore.setState({ feedback: [entry({ key: 'drive', tone: 'error', message: 'Drive failed' })] });
+    const html = renderToString(<FeedbackHost edge="top" />);
+    // Only the region carries role="alert"; the item itself carries none, so
+    // a screen reader announces the entry once, from the region alone.
+    expect(html.match(/role="alert"/g)?.length).toBe(1);
   });
 
   test('a detail line renders under the message', () => {
