@@ -3,13 +3,17 @@ import { syncDialogOpen, type DialogHandle } from './syncDialogOpen';
 
 /**
  * There is no DOM in this runner (.claude/rules/testing.md), so the reconciler
- * is tested against the three-member shape it actually uses. A real
+ * is tested against the four-member shape it actually uses. A real
  * HTMLDialogElement satisfies the same shape.
  */
 function stubDialog(open: boolean): DialogHandle & { calls: string[] } {
   return {
     open,
     calls: [] as string[],
+    show() {
+      this.open = true;
+      this.calls.push('show');
+    },
     showModal() {
       this.open = true;
       this.calls.push('showModal');
@@ -27,6 +31,19 @@ describe('syncDialogOpen', () => {
     syncDialogOpen(el, true);
     expect(el.calls).toEqual(['showModal']);
     expect(el.open).toBe(true);
+  });
+
+  test('opens a non-modal dialog with show(), never showModal()', () => {
+    const el = stubDialog(false);
+    syncDialogOpen(el, true, false);
+    expect(el.calls).toEqual(['show']);
+    expect(el.open).toBe(true);
+  });
+
+  test('closes an open non-modal dialog the same way', () => {
+    const el = stubDialog(true);
+    syncDialogOpen(el, false, false);
+    expect(el.calls).toEqual(['close']);
   });
 
   test('closes an open dialog', () => {
@@ -49,6 +66,10 @@ describe('syncDialogOpen', () => {
     const alreadyClosed = stubDialog(false);
     syncDialogOpen(alreadyClosed, false);
     expect(alreadyClosed.calls).toEqual([]);
+
+    const alreadyShown = stubDialog(true);
+    syncDialogOpen(alreadyShown, true, false);
+    expect(alreadyShown.calls).toEqual([]);
   });
 
   test('tolerates a ref that has not attached yet', () => {

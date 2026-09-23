@@ -41,6 +41,19 @@ presets). A popup is a daisyUI `dropdown` anchored to its trigger, kept inside t
 pure helper; it never renders inside a bottom sheet, because a bottom sheet's own tool renders
 inline `row` controls instead.
 
+**A non-modal bottom sheet.** `BottomSheet` is modal by default. `modal={false}` exists for one
+case the modal shape cannot serve: a sheet whose own frame must stay usable while it is open — the
+mobile transport sheet, whose Play/Stop sit on the bar directly below it, so a user can
+nudge the tempo or the master level while starting and stopping playback. A modal sheet would make
+the bar inert under its backdrop and force a close before every Play. The non-modal sheet opens
+with `show()`: no backdrop, not in the top layer, nothing made inert. It is not a `.modal`/
+`.modal-box` either — daisyUI's `.modal` is a `fixed inset-0` layer that would catch every tap on
+the page. It renders inside the bar it opens from and anchors to that bar's top edge
+(`absolute bottom-full`), so it needs no offset and no safe-area padding of its own; its z-index is
+the frame-bar step (40), because it is part of that bar. `show()` gives a dialog no close request,
+so the shared hook listens for Escape while the sheet is open, yielding to a modal dialog open
+above it. It never closes on an outside tap: the page around it is meant to be used.
+
 **Nesting.** A modal may open from a sheet, a drawer or another modal (top layer). A popup never
 nests inside a bottom sheet.
 
@@ -48,21 +61,28 @@ nests inside a bottom sheet.
 icons); 20 pinned view headers; 30 the input dock body; 40 frame bars (`Header`, `MobileTopBar`,
 `TransportBar`, `MobileTabBar`, the dock's header); 50 drawer and popup panels plus full-screen
 overlays; 55 the feedback slot, placed above drawers because a drawer action (a synth preset load)
-can itself fire a toast; top layer for `Modal`/`BottomSheet`, above every z-index. A new layer
-takes one of these listed steps rather than picking an arbitrary number.
+can itself fire a toast; top layer for `Modal` and a modal `BottomSheet`, above every z-index. A
+non-modal sheet is not in the top layer; it takes the step of the frame bar it belongs to (40). A
+new layer takes one of these listed steps rather than picking an arbitrary number.
 
 **Feedback waits while a dialog is open.** A toast cannot rise above a modal or sheet backdrop —
 nothing below the top layer can — so a toast/snackbar raised while a `Modal` or `BottomSheet` is
 open would expire unseen behind it. Feedback is therefore a session-only store slice
 (`showFeedback`/`dismissFeedback`, read through `useLiveStore`) feeding one `FeedbackHost` per
 frame, and the slice holds a `feedbackHolds` counter: `useNativeDialog` takes a hold while its
-dialog is open and releases it on close or unmount. While any hold is active no timer runs;
-entries still render in the host, under the backdrop, so nothing is lost and a snackbar's action
-stays valid. When the last hold releases, every queued entry gets a fresh full-duration timer.
+modal dialog is open and releases it on close or unmount. A non-modal sheet takes no hold: it has
+no backdrop and covers only part of the page, and the mobile feedback host sits under the top bar,
+clear of a sheet rising from the transport bar, so a toast raised while it is open is seen. While
+any hold is active no timer runs; entries still render in the host, under the backdrop, so nothing
+is lost and a snackbar's action stays valid. When the last hold releases, every queued entry gets a fresh full-duration timer.
 This is the only place feedback timing is paused or resumed.
 
 ### Rejected alternatives
 
+- A modal transport sheet: its backdrop makes Play/Stop inert, so every start or stop costs a
+  close first — the one control a transport sheet sits beside is the one it would block.
+- A non-modal sheet positioned `fixed` above the bar: needs the bar's height as a number (or a
+  measurement) and the safe-area inset a second time; anchoring inside the bar needs neither.
 - The HTML popover API or CSS anchor positioning for popups and toasts: both sit above the
   project's browser floor (Tailwind v4's minimum supported browsers — see
   `docs/dependency-upgrade-research.md` — and the iPhone Home-Screen PWA target).
@@ -97,11 +117,12 @@ accepted trade-off of the fixed z-scale, not a bug to chase with a higher one-of
 - **R325** — Every overlay is exactly one kind: Dock, Drawer, Bottom sheet, Modal, Popup; a new
   one picks a kind and its primitive.
 - **R326** — `Modal` is always centered; `BottomSheet` is the only bottom-sheet primitive, mobile
-  frame only.
+  frame only; modal by default, non-modal (`show()`, no backdrop, no feedback hold, anchored in
+  its bar at the frame-bar step) only where the frame must stay interactive.
 - **R327** — A preset library is a side drawer on both frames; a deletable user library gets one.
 - **R328** — A popup is an anchored daisyUI `dropdown`, kept in-viewport, never inside a bottom
   sheet.
-- **R329** — Feedback is toast, snackbar or banner; it queues and holds while a dialog is open.
+- **R329** — Feedback is toast, snackbar or banner; it queues and holds while a modal dialog is open.
 - **R330** — Toasts/snackbars go only through `showFeedback` into one `FeedbackHost`; only
   `useNativeDialog` holds/releases their timers.
 - **R331** — The z-scale is fixed; a new layer takes a listed step.

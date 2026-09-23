@@ -78,7 +78,12 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   `MobileTabBar` is navigation, not this kind), Drawer, Bottom sheet, Modal or Popup; a new
   overlay picks one of these kinds and its named primitive rather than inventing a position. <!-- R325 -->
 - `Modal` is always centered; `BottomSheet` is the only bottom-sheet primitive, used only by the
-  mobile frame for what sits inline on desktop. <!-- R326 -->
+  mobile frame for what sits inline on desktop. It is modal by default (`showModal()`, backdrop,
+  top layer, a feedback hold); `modal={false}` is for a sheet whose frame must stay interactive
+  while it is open — the transport sheet, whose Play/Stop sit on the bar below it. A non-modal
+  sheet opens with `show()`, has no backdrop and takes no feedback hold, renders inside the bar it
+  opens from and anchors to that bar's top edge (no offset, no safe-area padding), sits at the
+  frame-bar step (40), and closes on its trigger, its close button and Escape. <!-- R326 -->
 - A preset library is a `PresetLibrary` side drawer on both frames, never a sheet; a quick
   in-place pick is a native `<select>`; a surface with a user library that can be deleted from
   gets a drawer, even where a quick pick also exists. <!-- R327 -->
@@ -88,17 +93,18 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   reaches the sheet renders inline controls for its `row` variant instead. <!-- R328 -->
 - Feedback is a toast, a snackbar (at most one action) or a banner (in flow, persistent until
   handled); an alert rendered inside a modal, drawer or card body is content, not feedback. While
-  any `Modal` or `BottomSheet` is open, entries queue in the host with their timers held, so a
+  any `Modal` or modal `BottomSheet` is open, entries queue in the host with their timers held, so a
   message raised inside a dialog is seen rather than expiring unseen; every held timer restarts at
   full duration once the last dialog closes. <!-- R329 -->
 - Toasts and snackbars go only through `showFeedback` (the session-only feedback slice, read via
   `useLiveStore`) into the one `FeedbackHost` per frame; no component renders the daisyUI `toast`
   class or a fixed alert of its own. `useNativeDialog` is the only place that takes and releases a
-  feedback hold — while its dialog is open and until close or unmount. <!-- R330 -->
+  feedback hold — while its modal dialog is open and until close or unmount. <!-- R330 -->
 - The z-scale is fixed end to end and a new layer takes one of its listed steps: 10 in-content
   overlays, 20 pinned view headers, 30 the input dock body, 40 frame bars, 50 drawer and popup
   panels plus full-screen overlays, 55 the feedback slot (above drawers, because a drawer action
-  can fire a toast), and the top layer for `Modal`/`BottomSheet`, above every z-index. A popup that
+  can fire a toast), and the top layer for `Modal` and a modal `BottomSheet`, above every z-index (a non-modal sheet
+  is not in the top layer: it takes the frame-bar step of the bar it opens from). A popup that
   opens from inside a frame bar or the dock is capped by that parent's own stacking context, so the
   feedback host can cover an open bar popup (the mobile Scale dropdown under a toast, say) even
   though the popup's own step nominally outranks it — an accepted trade-off, not a bug to chase
@@ -132,6 +138,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
 - A new overlay built without picking one of the five kinds and its named primitive <!-- R325 -->
 - A non-centered `Modal`, or a bottom sheet built from anything but `BottomSheet` <!-- R326 -->
+- A non-modal `BottomSheet` with a backdrop, a feedback hold, its own offset or safe-area padding,
+  a z-index off the frame-bar step, or used where the frame need not stay interactive <!-- R326 -->
 - A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
 - A popup rendered inside a bottom sheet, or positioned via the popover API or CSS anchor positioning <!-- R328 -->
 - A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an
