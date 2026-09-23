@@ -130,13 +130,16 @@ export function TransportReadout({ bpm, meterId, metronomeActive, open, onToggle
   );
 }
 
-/** The chevron that opens and closes the transport sheet; flips while it is open. */
+/**
+ * The chevron that opens and closes the transport sheet. It points where the
+ * sheet will move: up while closed (the sheet rises out of the bar), down while open.
+ */
 function SheetToggle({ open, onToggle }: SheetToggleProps) {
   return (
     <IconButton
       id="btn-transport-sheet"
       label="Transport settings"
-      icon={open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      icon={open ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
       aria-expanded={open}
       aria-controls={TRANSPORT_SHEET_ID}
       className="min-h-11 min-w-11 shrink-0"
