@@ -6,6 +6,7 @@ import { isAnyPlayerActive } from '@/store/transportSlice';
 import type { AppStore } from '@/store/types';
 import { formatKeyLabel } from '@/utils/noteSpelling';
 import { scheduleTimeout } from '@/components/ui/useTimedToast';
+import { useLiveStore } from '@/components/ui/useLiveStore';
 
 type VibePreviewModule = typeof import('@/store/vibePreview');
 
@@ -60,6 +61,21 @@ interface PreviewSession {
   snapshot: Partial<AppStore>;
 }
 
+/** What the session captured at open that the cards show. */
+export interface OpenedFrom {
+  /** The vibe the active loop was loaded from when the picker opened. */
+  vibeId: string | null;
+}
+
+/**
+ * The vibe the active loop was loaded from — the card the picker marks
+ * "Current". Mid-session the store's `selectedVibeId` names the vibe being
+ * previewed, so the id captured at open answers instead.
+ */
+export function currentVibeId(stored: string | null, openedFrom: OpenedFrom | null): string | null {
+  return openedFrom ? openedFrom.vibeId : stored;
+}
+
 /**
  * One open of the picker: load the preview module, then begin the session
  * and hand it to `ready`. The returned disposer is the close — it runs `end`,
@@ -88,6 +104,8 @@ export function startPickerSession<M, S>(
 export interface UseVibePicker {
   /** The module is loaded and the session has begun; the cards are live. */
   ready: boolean;
+  /** The vibe the active loop was loaded from; its card is marked "Current". */
+  currentVibeId: string | null;
   previewed: VibePreviewed | null;
   /** The transport aggregate, one boolean (R274). */
   playing: boolean;
@@ -107,10 +125,12 @@ export interface UseVibePicker {
 export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker {
   const sessionRef = useRef<PreviewSession | null>(null);
   const spinRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [ready, setReady] = useState(false);
+  const [openedFrom, setOpenedFrom] = useState<OpenedFrom | null>(null);
   const [previewed, setPreviewed] = useState<VibePreviewed | null>(null);
   const [rolling, setRolling] = useState(false);
   const playing = useAppStore((s) => isAnyPlayerActive(s));
+  // Through useLiveStore so a renderToString test can seed it (R257).
+  const storedVibeId = useLiveStore((s) => s.selectedVibeId);
 
   /** Ends the session if one is live: keep = Use, otherwise the snapshot goes back. */
   const end = useCallback((keep: boolean) => {
@@ -120,7 +140,7 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
       if (keep) session.preview.commitVibePreview();
       else session.preview.cancelVibePreview(session.snapshot);
     }
-    setReady(false);
+    setOpenedFrom(null);
     setPreviewed(null);
   }, []);
 
@@ -135,7 +155,7 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
       (preview): PreviewSession => ({ preview, snapshot: preview.beginVibePreview() }),
       (session) => {
         sessionRef.current = session;
-        setReady(true);
+        setOpenedFrom({ vibeId: session.snapshot.selectedVibeId ?? null });
       },
       () => end(false), // a no-op after Use or Cancel already ended it
     );
@@ -182,7 +202,11 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
     onClose();
   }, [end, onClose]);
 
-  return { ready, previewed, playing, rolling, pick, reroll, togglePlay, use, cancel };
+  return {
+    ready: openedFrom !== null,
+    currentVibeId: currentVibeId(storedVibeId, openedFrom),
+    previewed, playing, rolling, pick, reroll, togglePlay, use, cancel,
+  };
 }
 
 export interface UseVibesButton {

@@ -57,7 +57,7 @@
  * your origin group defines anyway, even where the source is silent — a grid
  * should state what it plays, including where it plays nothing.
  *
- * The eight `crash` rows (the eight grids the vibe chips point at, and the
+ * The eight `crash` rows (the eight grids the vibes point at, and the
  * only ones with a crash row at all) used to hit step 0 and nowhere else.
  * That was a song gesture — a section opening — borrowed into a one-bar loop
  * that repeats it on every pass, which no drummer plays; it was also standing

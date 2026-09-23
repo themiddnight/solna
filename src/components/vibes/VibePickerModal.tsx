@@ -8,21 +8,32 @@ import { useVibePicker, vibeSummaryLine, type VibePreviewed } from './useVibePic
 interface VibeCardProps {
   vibe: VibeSpec;
   selected: boolean;
+  /** The vibe the active loop was loaded from: labelled, never pressed. */
+  current: boolean;
   disabled: boolean;
   rolling: boolean;
   onPick: (vibe: VibeSpec) => void;
   onReroll: () => void;
 }
 
-/** One vibe. The card being previewed is pressed and alone carries the dice. */
-function VibeCard({ vibe, selected, disabled, rolling, onPick, onReroll }: VibeCardProps) {
+/**
+ * One vibe. The card being previewed is pressed and alone carries the dice;
+ * the card the loop was loaded from carries a "Current" label instead, so the
+ * two states stay apart even on one card.
+ */
+function VibeCard({ vibe, selected, current, disabled, rolling, onPick, onReroll }: VibeCardProps) {
   return (
     <div className="relative">
       <button id={`btn-vibes-card-${vibe.id}`} type="button" aria-pressed={selected} disabled={disabled}
         onClick={() => onPick(vibe)}
         className={cx('btn w-full h-auto min-h-11 flex-col items-start gap-0.5 py-2 text-left normal-case',
           selected ? 'btn-primary' : 'btn-soft')}>
-        <span className="text-lg leading-none" aria-hidden="true">{vibe.emoji}</span>
+        <span className="flex items-center gap-2">
+          <span className="text-lg leading-none" aria-hidden="true">{vibe.emoji}</span>
+          {current && (
+            <span id="vibes-current-mark" className="rounded border border-current px-1 text-xs font-semibold leading-4">Current</span>
+          )}
+        </span>
         <span className="text-sm font-semibold">{vibe.name}</span>
         <span className="text-xs tabular-nums opacity-70">
           {vibe.bpm} BPM · {formatKeyLabel(vibe.scaleRoot, vibe.scaleType)}
@@ -88,6 +99,7 @@ export function VibePickerModal({ open, onClose }: { open: boolean; onClose: () 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {VIBES.map((vibe) => (
             <VibeCard key={vibe.id} vibe={vibe} selected={p.previewed?.base.id === vibe.id}
+              current={p.currentVibeId === vibe.id}
               disabled={!p.ready} rolling={p.rolling} onPick={p.pick} onReroll={p.reroll} />
           ))}
         </div>

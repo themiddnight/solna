@@ -179,9 +179,10 @@ let storeApi: StoreApi<AppStore> | undefined;
  * NOTHING ELSE. Project content (bpm, meterId, masterVolume, effects, loops) is
  * no longer here — IndexedDB is its home now, written by the autosave path
  * below. What is left is exactly what must survive a reload but is not a
- * project: which track/loop the user was on, the metronome, the last vibe chip,
- * the drum-pad velocity overrides, and the cross-project preset/progression/Beat library (never project content —
- * the 2026-09-03 "excluded — user library" rule).
+ * project: which track/loop the user was on, the metronome, the vibe the loop
+ * was loaded from, the drum-pad velocity overrides, and the cross-project
+ * preset/progression/Beat library (never project content — the 2026-09-03
+ * "excluded — user library" rule).
  */
 export function partializeAppState(state: AppStore): PersistedState {
   return {

@@ -69,7 +69,7 @@ export function eligibleFor<T>(items: T[], current: T): T[] {
  *
  * Takes a VibeSpec and returns a VibeSpec: a reroll is an ID-LEVEL operation,
  * so `resolveVibeVariation` resolves the result through `resolveVibe` exactly
- * as a chip pick does, and `rerollPreview` (`store/vibePreview.ts`) previews
+ * as a card pick does, and `rerollPreview` (`store/vibePreview.ts`) previews
  * it through the same `previewVibe`. There is deliberately no second resolve
  * path and no second apply path — the first kept a drawn `progressionId` able
  * to disagree with the `chords` beside it, the second is what keeps the

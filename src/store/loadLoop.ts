@@ -183,7 +183,7 @@ function crossLoopSeam(
     audioEngine.stopSource('pad', LOAD_LOOP_RELEASE, atBoundary);
   }
   withSourceTransitionTime(atBoundary, write);
-  // The vibe chip highlight clears itself here: vibeNav.ts watches
+  // The picker's "Current" vibe mark clears itself here: vibeNav.ts watches
   // activeLoopId and clears selectedVibeId on any change, including this
   // one, and leaves it alone when the id written above is the one already
   // active (a re-select, an audition toggle on the same card) — a bare

@@ -111,9 +111,9 @@ function Workspace() {
   // a focus change never leaves the dock showing a panel that focus has
   // nothing to play on — see store/focusPanelSync.ts.
   useFocusPanelSync();
-  // The vibe chip highlight means "the loop this vibe was applied to is in
-  // focus", so it clears on any activeLoopId change, whoever the writer —
-  // see store/vibeNav.ts.
+  // The vibe picker's "Current" mark means "the loop in focus was loaded
+  // from this vibe", so selectedVibeId clears on any activeLoopId change,
+  // whoever the writer — see store/vibeNav.ts.
   useVibeNavClear();
   // The reharmonized badge describes the active loop's chords; it clears on
   // a loop change or project install — see store/reharmonizeNav.ts.

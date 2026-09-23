@@ -42,7 +42,7 @@ export function previewBeatParams(params: BeatParams): void {
  * reaches the engine through `engineSync`'s `beatParams` subscription, so the
  * commit path must NOT push a patch itself — it must only make sure the frame
  * the drag armed cannot drain afterwards. A trailing thunk that drained after
- * an intervening `beatParams` write (a preset pick, a vibe chip,
+ * an intervening `beatParams` write (a preset pick, a vibe preview,
  * `resetBeatParams`) would re-apply the abandoned draft and leave the engine on
  * a patch the store does not hold.
  */

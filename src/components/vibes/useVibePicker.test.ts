@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { VIBES } from '@/data/vibes';
 import { formatKeyLabel } from '@/utils/noteSpelling';
-import { PICK_PROMPT, startPickerSession, vibeLoadedFeedback, vibeSummaryLine } from './useVibePicker';
+import { currentVibeId, PICK_PROMPT, startPickerSession, vibeLoadedFeedback, vibeSummaryLine } from './useVibePicker';
 
 const vibe = VIBES[0];
 const key = formatKeyLabel(vibe.scaleRoot, vibe.scaleType);
@@ -23,6 +23,18 @@ describe('the picker footer and its Use toast', () => {
     });
     const rolled = vibeLoadedFeedback({ base: vibe, spec: vibe, reroll: { headline: 'H', detail: 'D' } });
     expect(rolled.detail).toBe('H');
+  });
+});
+
+describe('the current-vibe mark', () => {
+  test('outside a session it is the vibe the store says the loop was loaded from', () => {
+    expect(currentVibeId('lofi-chill', null)).toBe('lofi-chill');
+    expect(currentVibeId(null, null)).toBeNull();
+  });
+
+  test('mid-session the store holds the preview, so the id captured at open answers', () => {
+    expect(currentVibeId('synthwave-80s', { vibeId: 'lofi-chill' })).toBe('lofi-chill');
+    expect(currentVibeId('synthwave-80s', { vibeId: null })).toBeNull();
   });
 });
 

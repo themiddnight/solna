@@ -2,16 +2,17 @@ import React from 'react';
 import { useAppStore } from './store';
 
 /**
- * The vibe chip highlight means "the loop this vibe was applied to is in
- * focus", so it must clear the moment `activeLoopId` moves to any OTHER
- * loop — whoever the writer is. Mirrors soloNav.ts's design for the same
+ * The vibe picker's "Current" mark (the card of `selectedVibeId`) means
+ * "the loop in focus was loaded from this vibe", so `selectedVibeId` must
+ * clear the moment `activeLoopId` moves to any OTHER loop — whoever the
+ * writer is. Mirrors soloNav.ts's design for the same
  * reason: `activeLoopId` has five writers today (loadLoop's two setState
  * calls, addLoop, duplicateLoop, deleteLoop) plus
  * applyProjectContent's open patch and the song advance, which reaches it
  * through loadLoop. A clear hand-copied into every one of those writers has
  * to be remembered by each of them and by every writer added later, and a
- * missed one is silent — the chip just stays lit on a loop the vibe was
- * never applied to. That happened twice inside this feature's own review
+ * missed one is silent — the picker just marks a vibe the loop in focus
+ * was never loaded from. That happened twice inside this feature's own review
  * history before this subscription replaced the inline copies. ONE
  * subscription over the field covers every writer that exists and every
  * writer that will exist.

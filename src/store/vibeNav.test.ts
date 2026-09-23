@@ -27,7 +27,7 @@ afterEach(() => {
   useAppStore.setState({ ...baseline });
 });
 
-describe('the vibe chip highlight is cleared by an activeLoopId change', () => {
+describe('the picker\'s current-vibe mark is cleared by an activeLoopId change', () => {
   test('changing the active loop clears it', () => {
     useAppStore.setState({ selectedVibeId: 'lofi-chill' });
     useAppStore.setState({ activeLoopId: 'some-other-loop-id' });
@@ -61,7 +61,7 @@ describe('the vibe chip highlight is cleared by an activeLoopId change', () => {
    * The mechanism-level assertion, and the reason there is no separate test
    * per writer (loadLoop, deleteLoop, the song advance): the subscription
    * watches the FIELD, so any writer of it — including ones that do not
-   * exist yet — clears the chip. See soloNav.test.ts's identical test for
+   * exist yet — clears the mark. See soloNav.test.ts's identical test for
    * the sibling feature this one is deliberately modeled on.
    */
   test('a bare write of activeLoopId clears it, whoever the writer is', () => {

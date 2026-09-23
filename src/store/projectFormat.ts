@@ -247,7 +247,7 @@ export type ProjectOpenPatch = Omit<ProjectContent, 'loops'> &
 
 /**
  * The single store patch that installs a project. Encodes the reset rules:
- * `selectedVibeId` -> null (a project has no vibe until a chip is pressed),
+ * `selectedVibeId` -> null (a project has no vibe until one is used from the picker),
  * `activeLoopId` -> the saved selection at boot, or loops[0] on Open/New,
  * and the flat per-loop keys written through loopStatePatch in the SAME
  * patch — writing `loops` without them would leave the previous project's
