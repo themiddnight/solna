@@ -112,6 +112,22 @@ interface VibeVoices {
 }
 
 /**
+ * Every voice a vibe installs, resolved before any state is touched: an
+ * unknown preset id falls back to the target default, and `resolveVibe`
+ * (which does throw) has already run — a swap that writes half a vibe is
+ * the failure this ordering exists to prevent.
+ */
+export function resolveVibeVoices(vibe: ResolvedVibe): VibeVoices {
+  return {
+    chord: resolveVibeSynthParams(vibe.chordPresetId, 'chord'),
+    bass: resolveVibeSynthParams(vibe.bassPresetId, 'bass'),
+    synth: resolveVibeSynthParams(vibe.synthPresetId, 'synth'),
+    fx: resolveVibeSynthParams(vibe.fxPresetId, 'fx'),
+    pad: vibe.pad ? { ...vibe.pad, params: resolveVibeSynthParams(vibe.pad.presetId, 'pad') } : null,
+  };
+}
+
+/**
  * A draft of the store threaded through the vibe's builders: `put` merges a
  * patch into both the accumulated output and the draft, so every builder sees
  * the effects of the ones before it exactly as the sequential setters did.
@@ -285,25 +301,40 @@ export function vibeContentPatch(
  * mirror is folded in here exactly as `createLoopMirroringSet` does it —
  * building on `patch.loops` when the patch carries one (the temp-name write).
  */
-function withMirror(state: AppStore, patch: Partial<AppStore>): Partial<AppStore> {
+export function withMirror(state: AppStore, patch: Partial<AppStore>): Partial<AppStore> {
   return { ...patch, ...(loopMirrorPartial(state, patch) ?? {}) };
+}
+
+/**
+ * Every key a vibe patch may write, plus `loops` (the temp name and the
+ * mirror) and `selectedVibeId`. The invariant test in vibePreview.test.ts
+ * fails on any key a vibe writes that is missing here (R338).
+ */
+const VIBE_TARGET_KEYS = [
+  'bpm', 'meterId', 'scaleRoot', 'scaleType', 'leadMelodySteps', 'fxMelodySteps', 'chords',
+  'reharmonizedIndicator', 'selectedVibeId', 'loops', 'beatParams', 'beatPattern',
+  'customChordRhythm', 'customChordHoldSteps', 'customChordLoopLength',
+  'customBassPattern', 'customBassHoldSteps', 'customBassLoopLength',
+  'chordRhythmId', 'chordRhythmMode', 'chordFeel', 'chordOctave', 'chordSynthParams', 'chordArpSettings',
+  'bassPatternId', 'bassPatternMode', 'bassFeel', 'bassOctave', 'bassSynthParams', 'bassArpSettings',
+  'padSynthParams', 'padArpSettings', 'padMode', 'padOctave', 'padVoicing', 'padDroneDegree',
+  'padDroneIntervals', 'padVolume', 'padMuted',
+  'synthParams', 'synthArpSettings', 'fxSynthParams', 'fxArpSettings', 'effects',
+] as const satisfies readonly (keyof AppStore)[];
+
+/**
+ * What Cancel restores (R338): the current value of every vibe target, BY
+ * REFERENCE. Safe because persisted values are replaced, never mutated (R210).
+ */
+export function captureVibeTargets(state: AppStore): Partial<AppStore> {
+  return Object.fromEntries(VIBE_TARGET_KEYS.map((key) => [key, state[key]])) as Partial<AppStore>;
 }
 
 export function applyVibeToStore(vibe: ResolvedVibe) {
   const store = useAppStore.getState();
 
-  // Resolve every preset id first. It no longer throws — an unknown id falls
-  // back to the target default — but resolving before any state is touched is
-  // still the rule: `resolveVibe` above DOES throw on an unknown progression,
-  // grid or effect chain, and a swap that writes half a vibe is the failure
-  // all of that ordering exists to prevent.
-  const voices: VibeVoices = {
-    chord: resolveVibeSynthParams(vibe.chordPresetId, 'chord'),
-    bass: resolveVibeSynthParams(vibe.bassPresetId, 'bass'),
-    synth: resolveVibeSynthParams(vibe.synthPresetId, 'synth'),
-    fx: resolveVibeSynthParams(vibe.fxPresetId, 'fx'),
-    pad: vibe.pad ? { ...vibe.pad, params: resolveVibeSynthParams(vibe.pad.presetId, 'pad') } : null,
-  };
+  // Resolve every preset id first — see resolveVibeVoices.
+  const voices = resolveVibeVoices(vibe);
 
   // 0. Atomic swap: cut everything still scheduled BEFORE writing the new
   //    chords and patterns, otherwise the old progression's queued voices
