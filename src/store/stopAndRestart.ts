@@ -38,7 +38,7 @@ import type { WasActivePlayers } from './transportSlice';
  *
  * @param scopeBefore  the scope captured BEFORE the caller's hardStopAll.
  * @param focusedLoopId  the loop the transport should own afterwards —
- *   loadLoop's incoming id, or the current loop for a vibe swap.
+ *   loadLoop's incoming id.
  * @param wasActive  the capture from `captureActivePlayers`, taken before the
  *   same hardStopAll.
  */

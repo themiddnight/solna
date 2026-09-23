@@ -46,7 +46,7 @@ describe('previewVibe writes the vibe in one atomic patch', () => {
     resetStore();
   });
 
-  test('applying a vibe notifies content subscribers exactly once', () => {
+  test('a preview notifies content subscribers exactly once', () => {
     // Guard against a vacuous pass: the vibe must actually change both.
     const vibe = RESOLVED_VIBES[0];
     const before = useAppStore.getState();

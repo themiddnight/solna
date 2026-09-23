@@ -323,7 +323,5 @@ export function captureVibeTargets(state: AppStore): Partial<AppStore> {
   return Object.fromEntries(VIBE_TARGET_KEYS.map((key) => [key, state[key]])) as Partial<AppStore>;
 }
 
-
-
 /** Every vibe's id, in table order — the identity set the invariant tests pin against. */
 export const VIBE_IDS: string[] = VIBES.map((v) => v.id);

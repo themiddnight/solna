@@ -35,10 +35,10 @@ import type { Layer } from '../types';
  * DEV Phase 3: loadLoop.ts's non-boundary branch hard-stops and restarts,
  * going through restartAfterStop + restartPlayersPatch, which decide whether
  * the players come back at all and write the scope with them in one set()
- * instead of leaving the `none` that hardStopAll wrote. songMode reads the scope alone
- * to decide what survives a navigation, so a restart that sets no scope
- * would make that decision act on a lie — silence where music should
- * continue, or a hard stop the user did not ask for.
+ * instead of leaving the `none` that hardStopAll wrote. songMode reads the
+ * scope alone to decide what survives a navigation, so a restart that sets
+ * no scope would make that decision act on a lie — silence where music
+ * should continue, or a hard stop the user did not ask for.
  *
  * A source-scan guard in playbackScope.test.ts keeps that true: the only
  * file allowed to reference play(module) is transportSlice.ts, which defines
