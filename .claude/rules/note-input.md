@@ -87,6 +87,7 @@ that needs store state — the melody recorder, for one — subscribes from
   arp and the sequencer; the voice manager skips releasing groups. <!-- R184 -->
 - Live keyboard backstop: `useInputDeck.ts` releases every held note on `window` blur and on
   `visibilitychange`. <!-- R202 -->
+- `noteInputSuspended` gates QWERTY notes, QWERTY drum pads and MIDI note-on/CC at their entry (note-off and keyup pass); its rising edge releases every held QWERTY note. <!-- R336 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 
 ([ADR-0019](../../docs/decisions/0019-polyphony-gain-and-voice-lifetime.md))
 
@@ -116,4 +117,5 @@ recorder reads `ctx.currentTime` itself, through
 - Sounding or announcing a melodic note under `drum` focus <!-- R167 -->
 - Routing external MIDI by focus <!-- R168 -->
 - Dropping the blur/`visibilitychange` release in `useInputDeck.ts` <!-- R202 -->
+- A note or drum-pad keydown, MIDI note-on or CC that ignores noteInputSuspended <!-- R336 -->
 - Persisting `midiActivityTimestamp` <!-- R018 -->

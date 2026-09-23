@@ -9,6 +9,7 @@ paths:
   - "src/store/playbackPlanSnapshots.ts"
   - "src/store/mixdownSnapshot.ts"
   - "src/store/loadLoop.ts"
+  - "src/store/vibePreview.ts"
   - "src/store/songMode.ts"
   - "src/components/**/use*Playback.ts"
   - "src/components/usePlayheadSync.ts"
@@ -56,8 +57,9 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - The metronome is a click only: `setMetronomeEnabled` arms the click `clockTick` emits; it never starts the clock or blocks idle suspend. To record to a click, press play on the lead. <!-- R221 -->
 - `src/store/engineSync.ts`: one `subscribeWithSelector` subscription per engine-settable value with `fireImmediately`, started once by `useEngineSync()` in `App.tsx`. <!-- R222 -->
 - The `AudioContext` is created on the first user click; `applyEngineSnapshot()` then re-applies persisted audio state. <!-- R223 -->
-- Direct `audioEngine` calls from `src/store/` are only for cuts, previews and lifecycle, each with a docblock reason. The set (`loadLoop`, `vibes`, `projectSlice`, `synthPatchPreview`, `effectsPreview`, `beatPreview`, `synthPresetInstall`, `audioRecovery`, `incidentReporter`, `sourceBuses`, `trackSendsPreview`) is a snapshot — re-derive with `grep -ln audioEngine src/store/*.ts`. <!-- R225 -->
+- Direct `audioEngine` calls from `src/store/` are only for cuts, previews and lifecycle, each with a docblock reason. The set (`loadLoop`, `vibePreview`, `projectSlice`, `synthPatchPreview`, `effectsPreview`, `beatPreview`, `synthPresetInstall`, `audioRecovery`, `incidentReporter`, `sourceBuses`, `trackSendsPreview`) is a snapshot — re-derive with `grep -ln audioEngine src/store/*.ts`. <!-- R225 -->
 - A persistent value (a MIDI CC patch edit included) reaches the engine only through its `engineSync` subscription. <!-- R226 -->
+- A vibe preview is stop → cut → one write → `soloLoop(activeLoopId)`; opening and closing the picker leave the transport stopped; vibes never restart after a stop. <!-- R337 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 
 ([ADR-0026](../../docs/decisions/0026-clock-and-engine-bridge.md))
 
@@ -101,6 +103,7 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - A metronome that starts the clock or blocks idle suspend <!-- R221 -->
 - A direct `audioEngine` call from `src/store/` without a cut/preview/lifecycle docblock reason <!-- R225 -->
 - A persistent value reaching the engine other than through `engineSync` <!-- R226 -->
+- playAll() from the vibe picker, or restarting the transport after a vibe write <!-- R337 -->
 - A store read, engine call, `AudioContext`, wall clock or timer in a planner <!-- R227 -->
 - A planner importing `chordPlayback.ts` <!-- R229 -->
 - One unified `PlaybackSnapshot` <!-- R231 -->

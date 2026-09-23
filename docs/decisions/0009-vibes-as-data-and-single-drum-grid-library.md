@@ -4,6 +4,8 @@
 
 Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425).
 
+**Amended by [ADR-0045](0045-vibe-picker-preview.md):** the strip is gone; vibes are written by `previewVibe` (R086) and the picker loads the preview module lazily (R095).
+
 ## Context
 
 An Instant Vibe (a genre chip in the top bar, plus the dice that rerolls it) sets chords, a drum

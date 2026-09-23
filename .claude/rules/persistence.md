@@ -37,6 +37,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - Pointer-, clock- or animation-frame-driven code never writes persisted state directly (each such write re-serialises everything). <!-- R212 -->
 - Tests and live reads call `flushPersistedWrites()` before asserting on `localStorage`. <!-- R213 -->
 - Storage access is guarded: `localStorage` can throw; `store.ts` falls back to an in-memory `StateStorage`; helpers take an injectable storage param read inside a `try`, never in a default-parameter expression (`header/useTheme.ts` theme functions). <!-- R244 -->
+- Only the vibe preview holds persisted writes (`holdPersistedWrites`/`releasePersistedWrites`); the hold flushes first; nothing is written while held, `pagehide`/hidden included; release writes once. <!-- R335 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 
 ([ADR-0022](../../docs/decisions/0022-persist-write-path-and-guarded-storage.md))
 
@@ -83,6 +84,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - Pointer-, clock- or frame-driven writes to persisted state <!-- R212 -->
 - Asserting on `localStorage` without `flushPersistedWrites()` <!-- R213 -->
 - Unguarded storage access, or a storage read in a default-parameter expression <!-- R244 -->
+- Holding persisted writes anywhere but the vibe preview, or a held writer that writes on flush/pagehide <!-- R335 -->
 - A version bump or migration step for a persisted shape change <!-- R035 --> <!-- R219 -->
 - Letting an invalid persisted key through `sanitizePersistedState`/`sanitizeContent` <!-- R214 -->
 - Logic in `migrate` beyond identity plus legacy-key adoption <!-- R215 -->

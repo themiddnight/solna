@@ -135,7 +135,7 @@ lands as a commit made directly on `main`. <!-- R262 -->
 <!-- R263 -->
 **Skills** (`.claude/skills/`, three): `dsp-audio` (effect chains, routing, `AudioContext`
 lifecycle, voices, Beat, clock, store→engine), `music-theory` (notes, scales, chords,
-bass/rhythm patterns, arp, keyboard map, drum-pad keys), `instant-vibes` (the vibe chips and the
+bass/rhythm patterns, arp, keyboard map, drum-pad keys), `instant-vibes` (the vibe picker and the
 dice). `squash-by-logical-change` is a **global** skill in `~/.claude/skills/`, not part of this repo.
 
 **Rules** (`.claude/rules/`, path-scoped — each loads when you open a file its `paths:` covers; each ends

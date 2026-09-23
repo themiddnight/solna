@@ -1,22 +1,23 @@
 ---
 name: instant-vibes
-description: Add, remove, retune or debug an Instant Vibe in solna — the genre chips in the top bar (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) and the dice that rerolls them. Carries a survey-first workflow, the eight library ids a vibe resolves, the per-vibe dice pools and the two invariants that guard them, and the three golden fixtures behind the tests. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in vibes / vibeVariation / instantVibesProgressions tests.
+description: Add, remove, retune or debug an Instant Vibe in solna — the genre cards in the Vibes picker (a Header tool) (Lo-Fi Chill, Synthwave 80s, Cyber EDM, Deep Ambient, Boom Bap, Zen Garden, Lo-Fi Waltz, Afro 6/8) and the dice that rerolls them. Carries a survey-first workflow, the eight library ids a vibe resolves, the per-vibe dice pools and the two invariants that guard them, and the three golden fixtures behind the tests. Also covers changing a vibe's chords, synth voices, drum decoration, key pool or BPM range, and failures in vibes / vibeVariation / instantVibesProgressions tests.
 ---
 
 # Instant Vibes (solna)
 
-A vibe is the genre chip in the top bar. Clicking it rewrites the whole project;
-the dice beside it rerolls into different music with the same identity.
+A vibe is a card in the Vibes picker. Picking one previews it on the current loop;
+Use keeps it, Cancel restores the loop; the dice on the previewed card rerolls it
+into different music with the same identity.
 
 **A vibe is pure data.** The table is `VIBES` in **`src/data/vibes.ts`** — eight
 `VibeSpec` literals that name library ids and nothing else. `src/data/` files
 import nothing at runtime, so that file has no dependencies at all, which is why
-the always-mounted top bar can import it eagerly.
+the picker can import it eagerly.
 
 **Resolution lives somewhere else.** `resolveVibe(spec)` in
 **`src/store/vibes.ts`** turns the ids into a `ResolvedVibe` — the spec plus
-`chords`, `drumPattern` and `effects` — and `applyVibeToStore(resolved)` writes
-it into the store.
+`chords`, `drumPattern` and `effects` — and `previewVibe`
+(`store/vibePreview.ts`) writes it through `vibeContentPatch`.
 
 **Every library id is written exactly once.** It used to be written twice (an id
 beside its resolved value), and the second copy was a documented typo hazard.
@@ -99,8 +100,8 @@ the user. Half of that still holds; the omission does not.
 
 - **Every vibe carries `arp`, and it names all five synth-capable tracks.**
   `VibeSpec.arp` is a required `Record<SynthControlTarget, ArpSettings>` —
-  `synth`, `fx`, `chord`, `bass`, `pad` — and `applyVibeToStore` writes all
-  five. Omitting a track is the bug the completeness is here to prevent: an
+  `synth`, `fx`, `chord`, `bass`, `pad` — and `previewVibe`
+  (`store/vibePreview.ts`) writes all five through `vibeContentPatch`. Omitting a track is the bug the completeness is here to prevent: an
   unwritten track would keep whatever the PREVIOUS vibe armed, so "apply Lo-Fi
   Chill" would mean different things depending on history. Same rule, same
   reason as a drum grid writing every row its origin group defines, empty or
@@ -122,18 +123,21 @@ the user. Half of that still holds; the omission does not.
 ## One thing a vibe must not carry
 
 - **No presentational fields.** `color`, `bgGradient`, `borderColor`, `textColor`
-  are forbidden; the chip's look comes from theme tokens in `InstantVibesBar`. An
+  are forbidden; the card's look comes from theme tokens in
+  `components/vibes/VibePickerModal.tsx`. An
   invariant test in `store/vibes.test.ts` pins this.
 
 ## `src/data/vibes.ts` may not import anything at runtime
 
 This is an eslint rule (`src/data/**`), not a convention, and it is what lets the
-always-mounted `InstantVibesBar` import `VIBES` eagerly. The bar used to read a
+vibe picker (`components/vibes/*`) import `VIBES` eagerly while the preview
+module, `store/vibePreview.ts`, which reaches the engine and the resolvers, loads
+lazily through a cached dynamic `import()`. The old vibe strip once read a
 hand-duplicated seven-field copy (`store/vibeChips.ts`) precisely because
 importing the real table dragged four library modules into the eager chunk.
 
 **If you find yourself wanting to call a resolver inside `src/data/vibes.ts`,
-stop.** That single call brings back the eager-chunk cost and the chip
+stop.** That single call brings back the eager-chunk cost and the
 duplication with it. Resolve in `store/vibes.ts` instead.
 
 ## Scale type is the vibe's identity — the dice never rerolls it
@@ -246,13 +250,15 @@ whose meter differs from the pooling vibe's. Cross-meter pooling is allowed on
 purpose — the grid is trimmed or looped to the transport's meter — so if your
 new pool adds one, update the number rather than deleting the test.
 
-## Never touch `applyVibeToStore`
+## Never reorder the preview commands
 
-It runs `store.hardStopAll()`, then a synchronous `audioEngine.stopSource('chord',
-0.02)` / `stopSource('bass', 0.02)` cut **before the first vibe-state write**,
-then restarts only the players that were active. Two real overlapping-audio bug
-fixes live in that ordering (`d8df714`, `c4a253a`). Adding a vibe is pure data —
-the function does not change. Non-regression tests pin the ordering.
+`store/vibePreview.ts` runs `hardStopAll()`, then the synchronous
+`audioEngine.stopSource('chord'|'bass'|'pad', 0.02)` cut **before the one content
+write**, then `soloLoop(activeLoopId)`. Two real overlapping-audio bug fixes live
+in that ordering (`d8df714`, `c4a253a`); `vibePreview.test.ts` pins it. Adding a
+vibe is pure data and touches none of it — but a vibe that writes a new store key
+must add it to `captureVibeTargets` (`store/vibes.ts`), or Cancel cannot restore
+it (R338); the snapshot invariant test fails first.
 
 ## Adding a vibe: three files under `src/data/`, plus four more
 

@@ -79,6 +79,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   meter and the master fader with its dB readout; its open state is local `useState` (R016); it
   closes on its toggles, its close button and Escape, and stays open while playing. The desktop
   bar keeps every control inline and does not change for the phone. <!-- R332 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
+- Vibes are reached only through the `vibes` `HEADER_TOOLS` row (`components/vibes/VibesButton.tsx`); no frame renders an always-visible vibe strip. <!-- R333 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
+- The vibe picker is a centred `Modal` on both frames: the card grid scrolls between Modal's pinned header and a pinned footer; **Use** (and Play) stay disabled until a vibe has been previewed. <!-- R334 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 
 ([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md), [ADR-0043](../../docs/decisions/0043-hint-text-on-desktop-only.md))
 
@@ -149,6 +151,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   a modal transport sheet; or a phone-driven change to the desktop bar <!-- R332 -->
 - A Loop/Song layer switch in either frame, or the desktop tab nav placed after a layer-gated tool run <!-- R322 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
+- An always-visible vibe strip, or a vibe entry point outside the `vibes` HEADER_TOOLS row <!-- R333 -->
+- A vibe picker that is a BottomSheet, a drawer or non-modal, or a Use enabled before a preview <!-- R334 -->
 - A new overlay built without picking one of the five kinds and its named primitive <!-- R325 -->
 - A non-centered `Modal`, or a bottom sheet built from anything but `BottomSheet` <!-- R326 -->
 - A non-modal `BottomSheet` with a backdrop, a feedback hold, its own offset or safe-area padding,

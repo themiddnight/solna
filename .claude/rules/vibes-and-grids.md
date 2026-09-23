@@ -4,15 +4,14 @@ paths:
   - "src/data/drumGrids.ts"
   - "src/audio/drumGrids.ts"
   - "src/store/vibe*.ts"
-  - "src/components/InstantVibesBar.tsx"
-  - "src/components/vibeActions.ts"
+  - "src/components/vibes/**"
 ---
 
 # Vibes and drum grids
 
 Instant Vibes as data, the one drum-grid library, and the dice. The `instant-vibes` skill carries the workflow.
 
-- `VIBES` (`src/data/vibes.ts`) are `VibeSpec` literals naming ids only; `resolveVibe` (`store/vibes.ts`) turns one into a `ResolvedVibe`; `applyVibeToStore` writes it. <!-- R086 -->
+- `VIBES` (`src/data/vibes.ts`) are `VibeSpec` literals naming ids only; `resolveVibe` (`store/vibes.ts`) turns one into a `ResolvedVibe`; `previewVibe` (`store/vibePreview.ts`) writes it through `vibeContentPatch`. <!-- R086 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 - One drum-grid library, `DRUM_GRIDS`, serves the sequencer's grid menu and the vibes; each entry carries its own `name`, `meter`, `kit`, `rows`. <!-- R087 -->
 - `replaceBeatPattern` looks rows up by Beat voice id and clears every voice no row names; never merge (a grid gives exactly that grid). <!-- R088 -->
 - Clearing goes through `writeStepWindow`, so only the active window clears and wider-meter padding survives. <!-- R089 -->
@@ -21,11 +20,12 @@ Instant Vibes as data, the one drum-grid library, and the dice. The `instant-vib
 - Every grid writes every row its origin group defines, empty or not. <!-- R092 -->
 - Every grid carries `provenance` (a source URL or `'authored'`); the `'authored'` set is an allowlist in `drumGrids.test.ts`. <!-- R093 -->
 - A URL-sourced grid may be re-voiced (a hit moved to another row) but never re-transcribed (a hit added or moved to another step); only `'authored'` grids gain or move hits. <!-- R094 -->
-- The vibes table resolves nothing at module scope, and `InstantVibesBar` makes no resolver call (it is eagerly loaded). <!-- R095 -->
+- The vibes table resolves nothing at module scope; the vibe picker (`components/vibes/*`) imports `VIBES` eagerly, makes no resolver call, and reaches `store/vibePreview.ts` only through a cached dynamic `import()`. <!-- R095 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 - Each vibe's dice pool is explicit arrays (`random.progressions`, …), never a filter over the shared library. <!-- R096 -->
 - All five reroll axes are id pools (`keys`, `progressions`, `chordRhythms`, `bassPatterns`, `drumGrids`); `progressions` and `drumGrids` use `pick` (no store `current` to exclude), the other three `pickDistinct`. <!-- R117 -->
 - A rerolled vibe's `drumGridId` names the grid actually playing. <!-- R118 -->
 - Do not reintroduce the density catalogue or the kick-collision filter; authored grids are curated. <!-- R119 -->
+- Cancel restores `captureVibeTargets` in one write; every key a vibe patch writes is in the snapshot, pinned by the invariant test in `vibePreview.test.ts`. <!-- R338 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 
 ([ADR-0009](../../docs/decisions/0009-vibes-as-data-and-single-drum-grid-library.md))
 
@@ -39,7 +39,8 @@ Instant Vibes as data, the one drum-grid library, and the dice. The `instant-vib
 - A grid row naming a voice the Beat instrument cannot play <!-- R091 -->
 - An unsourced grid outside the `'authored'` allowlist <!-- R093 -->
 - Re-transcribing a URL-sourced grid <!-- R094 -->
-- A resolver call at module scope or in `InstantVibesBar` <!-- R095 -->
+- A resolver call at module scope or in `components/vibes/*`, or a static import of `store/vibePreview` from a component <!-- R095 -->
 - A dice pool computed by filtering the shared library <!-- R096 -->
 - `pickDistinct` on `progressions`/`drumGrids` <!-- R117 -->
 - Reintroducing the density catalogue or kick-collision filter <!-- R119 -->
+- A vibe patch key missing from captureVibeTargets, or a Cancel that restores in more than one write <!-- R338 -->
