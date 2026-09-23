@@ -201,14 +201,28 @@ function ChordTriggerPad({
 /** Below `md` the fields read at a glance, so their captions stay for screen readers only. */
 const LABEL_BELOW_MD = 'max-md:sr-only';
 
-/** Below `md` a select gives its text the padding daisyUI keeps clear of the arrow's left (drawn 12–24px from the right edge). */
-const SELECT_BELOW_MD = 'max-md:ps-2 max-md:pe-6';
+/**
+ * The tight select padding daisyUI keeps clear of the arrow's left (drawn
+ * 12–24px from the right edge): below `md`, and on a one-row card.
+ */
+const SELECT_TIGHT = 'max-md:ps-2 max-md:pe-6 @3xs:ps-2 @3xs:pe-6';
 
 /**
- * Root, quality and duration, on two rows at every width: Root and Duration
- * share the first, Quality takes the whole second. One row of three clipped
- * the widest options at every width — a card is 230–330px from `md` up and
- * under 200px on a phone.
+ * Root, quality and duration. One row when the CARD has room for it: the card
+ * is an `@container`, and from `@3xs` (16rem) the three fit one row with
+ * Quality's longest picker label ("Minor Major 7th (mM7)", ~145px with the
+ * tight padding), because on that row Duration's closed face shows only its
+ * number under a "Bars" caption. A container query, not a viewport breakpoint:
+ * a card's width depends on the column count as much as on the screen (from
+ * `xl`, four columns leave ~261px; at `lg` they leave ~197px). A narrower card
+ * keeps two rows, Root and Duration first and Quality across the second, or
+ * the widest labels clip. The variants are written out whole: Tailwind only
+ * generates classes it finds in source.
+ *
+ * A closed face painted over (the quality token below `md`, the bar count on
+ * one row) keeps the select's value and its full option labels. The text is
+ * hidden through its fill colour, not `color`: daisyUI draws the arrow in
+ * `currentColor`.
  *
  * Root and quality are written back as `ROOTS`-spelled / union values — only
  * the root's LABEL is spelled for display, which is the same split KEY_OPTIONS
@@ -224,7 +238,7 @@ function ChordEditControls({
   updateChord: SortableChordCardProps['updateChord'];
 }) {
   return (
-    <div className="grid grid-cols-[3.125rem_minmax(0,1fr)] md:grid-cols-[4rem_minmax(0,1fr)] gap-1 md:gap-2 pt-1 border-t border-base-300/60">
+    <div className="grid grid-cols-[3.125rem_minmax(0,1fr)] md:grid-cols-[4rem_minmax(0,1fr)] @3xs:grid-cols-[3.25rem_minmax(0,1fr)_2.5rem] gap-1 md:gap-2 pt-1 border-t border-base-300/60">
       <div className="min-w-0">
         <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD}`} htmlFor={`select-chord-root-${chord.id}`}>
           Root
@@ -233,7 +247,7 @@ function ChordEditControls({
           id={`select-chord-root-${chord.id}`}
           value={chord.root}
           onChange={(e) => updateChord(chord.id, { root: e.target.value })}
-          className={`select select-xs w-full ${SELECT_BELOW_MD}`}
+          className={`select select-xs w-full ${SELECT_TIGHT}`}
         >
           {ROOTS.map((r) => (
             <option key={r} value={r}>
@@ -243,40 +257,19 @@ function ChordEditControls({
         </select>
       </div>
 
-      <div className="min-w-0">
-        <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD}`} htmlFor={`select-chord-bars-${chord.id}`}>
-          Duration (Bars)
-        </label>
-        <select
-          id={`select-chord-bars-${chord.id}`}
-          value={chord.bars || 1}
-          onChange={(e) =>
-            updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
-          }
-          className={`select select-xs w-full ${SELECT_BELOW_MD}`}
-        >
-          <option value={1}>1 Bar</option>
-          <option value={2}>2 Bars</option>
-          <option value={4}>4 Bars</option>
-        </select>
-      </div>
-
-      <div className="col-span-2 min-w-0">
+      <div className="col-span-2 order-last @3xs:col-span-1 @3xs:order-none min-w-0">
         <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD}`} htmlFor={`select-chord-quality-${chord.id}`}>
           Quality
         </label>
-        {/* Below `md` the closed select shows the quality token ("min7")
-            instead of its picker label ("Minor 7th (min7)"), which does not
-            fit a phone's half-width card. The select keeps its value and its
-            full option labels; only its closed face is painted over. The text
-            is hidden through its fill colour, not `color`: daisyUI draws the
-            arrow in `currentColor`. */}
+        {/* Below `md` the closed face shows the quality token ("min7"), not
+            its picker label ("Minor 7th (min7)"), which does not fit a
+            phone's half-width card. */}
         <div className="relative">
           <select
             id={`select-chord-quality-${chord.id}`}
             value={chord.quality}
             onChange={(e) => updateChord(chord.id, { quality: e.target.value as ChordQuality })}
-            className={`select select-xs w-full ${SELECT_BELOW_MD} max-md:[-webkit-text-fill-color:transparent] [&_optgroup]:[-webkit-text-fill-color:initial] [&_option]:[-webkit-text-fill-color:initial]`}
+            className={`select select-xs w-full ${SELECT_TIGHT} max-md:[-webkit-text-fill-color:transparent] [&_optgroup]:[-webkit-text-fill-color:initial] [&_option]:[-webkit-text-fill-color:initial]`}
           >
             {CHORD_QUALITY_GROUPS.map((group) => (
               <optgroup key={group.label} label={group.label}>
@@ -290,6 +283,31 @@ function ChordEditControls({
           </select>
           <span aria-hidden="true" className="md:hidden pointer-events-none absolute inset-y-0 left-0 right-6 flex items-center pl-2 text-[11px]">
             <span className="truncate">{chord.quality}</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="min-w-0">
+        <label className={`${FIELD_LABEL} ${LABEL_BELOW_MD} truncate`} htmlFor={`select-chord-bars-${chord.id}`}>
+          <span className="@3xs:hidden">Duration (Bars)</span>
+          <span className="hidden @3xs:inline">Bars</span>
+        </label>
+        {/* On one row the closed face shows the bar count alone ("2"). */}
+        <div className="relative">
+          <select
+            id={`select-chord-bars-${chord.id}`}
+            value={chord.bars || 1}
+            onChange={(e) =>
+              updateChord(chord.id, { bars: parseInt(e.target.value, 10) })
+            }
+            className={`select select-xs w-full ${SELECT_TIGHT} @3xs:[-webkit-text-fill-color:transparent] [&_option]:[-webkit-text-fill-color:initial]`}
+          >
+            <option value={1}>1 Bar</option>
+            <option value={2}>2 Bars</option>
+            <option value={4}>4 Bars</option>
+          </select>
+          <span aria-hidden="true" className="hidden @3xs:flex pointer-events-none absolute inset-y-0 left-0 right-6 items-center pl-2 text-[11px] tabular-nums">
+            {chord.bars || 1}
           </span>
         </div>
       </div>
@@ -342,7 +360,7 @@ export const SortableChordCard = React.memo(function SortableChordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`card bg-panel border border-base-300 p-2 sm:p-4 flex flex-col justify-between space-y-2 sm:space-y-3 transition-colors ${
+      className={`@container card bg-panel border border-base-300 p-2 sm:p-4 flex flex-col justify-between space-y-2 sm:space-y-3 transition-colors ${
         isActive
           ? "border-module-chord ring-2 ring-module-chord/50 bg-base-200"
           : "border-base-300 hover:border-base-content/30"
