@@ -60,6 +60,31 @@ interface PreviewSession {
   snapshot: Partial<AppStore>;
 }
 
+/**
+ * One open of the picker: load the preview module, then begin the session
+ * and hand it to `ready`. The returned disposer is the close — it runs `end`,
+ * which cancels whatever began and is a no-op when nothing did (or Use
+ * already ended it). A close before the module arrives begins nothing, so no
+ * hold and no suspension is left behind; StrictMode's mount → cleanup → mount
+ * therefore begins exactly once.
+ */
+export function startPickerSession<M, S>(
+  load: () => Promise<M>,
+  begin: (module: M) => S,
+  ready: (session: S) => void,
+  end: () => void,
+): () => void {
+  let live = true;
+  void load().then((module) => {
+    if (!live) return;
+    ready(begin(module));
+  });
+  return () => {
+    live = false;
+    end();
+  };
+}
+
 export interface UseVibePicker {
   /** The module is loaded and the session has begun; the cards are live. */
   ready: boolean;
@@ -105,17 +130,15 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
 
   useEffect(() => {
     if (!open) return;
-    let live = true;
-    void loadVibePreview().then((preview) => {
-      // Closed before the module arrived: nothing begins, so nothing is held.
-      if (!live) return;
-      sessionRef.current = { preview, snapshot: preview.beginVibePreview() };
-      setReady(true);
-    });
-    return () => {
-      live = false;
-      end(false); // a no-op after Use or Cancel already ended it
-    };
+    return startPickerSession(
+      loadVibePreview,
+      (preview): PreviewSession => ({ preview, snapshot: preview.beginVibePreview() }),
+      (session) => {
+        sessionRef.current = session;
+        setReady(true);
+      },
+      () => end(false), // a no-op after Use or Cancel already ended it
+    );
   }, [open, end]);
 
   useEffect(() => clearSpin, [clearSpin]);
