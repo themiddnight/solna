@@ -15,8 +15,9 @@ rows, the Loop/Song switch plus two tabs cost a row of their own, and the tools 
   `<main>`, input dock, update banner, transport, tab bar.
 - `MobileTabBar` over `VIEW_ORDER` → `setActiveTab`; the daisyUI `dock` is made `relative` so it
   rejoins the frame's flex column instead of floating fixed.
-- The top bar is a static mark plus the layer's field tools inline, split by
-  `MOBILE_BAR_TOOL_IDS`, and a 44px menu button.
+- The top bar is a static wordmark (mark and "solna") plus the layer's field tools inline, split
+  by `MOBILE_BAR_TOOL_IDS`, and a 44px menu button. The field tools keep their desktop heights,
+  so the bar is no taller than it needs to be.
 - The sheet is a `Modal` with `placement="bottom"`, always rendered, closed only by dismissal;
   tool rows render via `variant="row"`/`MenuRowButton` in a plain column, project rows render
   inline from `useProjectMenu` with `ProjectMenuEffects` in `afterBox`.

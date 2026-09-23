@@ -46,7 +46,7 @@ export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) 
 }
 
 /**
- * The phone's top bar: the mark, the layer's field tools (loop picker + key,
+ * The phone's top bar: the wordmark, the layer's field tools (loop picker + key,
  * or the project name), and the menu button. Replaces the desktop Header's
  * layer switch and tab nav, which the bottom tab bar covers.
  */
@@ -54,10 +54,9 @@ export const MobileTopBar = React.memo(function MobileTopBar() {
   const { bar, menu, menuOpen, openMenu, closeMenu } = useMobileTopBar();
   return (
     <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2 py-1.5 gap-2 select-none sticky top-0 z-40 flex items-center text-sm">
-      <Wordmark markOnly interactive={false} />
-      {/* The shared field tools keep their compact sizes; this cell lifts
-          their controls to a 44px touch height without touching them. */}
-      <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5 [&_select]:min-h-11 [&_summary]:min-h-11 [&_input]:min-h-11">
+      <Wordmark interactive={false} />
+      {/* The field tools keep their desktop heights, so the bar stays short. */}
+      <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5">
         {bar.map(({ id, Component }) => (
           <Component key={id} />
         ))}

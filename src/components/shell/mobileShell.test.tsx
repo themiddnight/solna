@@ -110,4 +110,10 @@ describe('the mobile frame', () => {
     expect(html).not.toContain('id="layer-loop"');
     expect(html).not.toContain('id="layer-song"');
   });
+
+  test('the top bar shows the full wordmark, and its field tools keep their desktop heights', () => {
+    const html = renderToString(createElement(MobileShell, SHELL_PROPS));
+    expect(html).toContain('solna</span>');
+    expect(html).not.toContain('[&amp;_select]:min-h-11');
+  });
 });
