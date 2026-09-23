@@ -451,6 +451,24 @@ export function flushBeforeHide(): void {
   flushPersistedWrites();
 }
 
+/**
+ * Hold both persisted writers — the localStorage blob and the project
+ * autosave — for the vibe preview (R335). Flushes both first, so disk holds
+ * the pre-preview state; while held nothing is written, pagehide included,
+ * so a tab closed mid-preview reloads as if Cancel had been pressed.
+ */
+export function holdPersistedWrites(): void {
+  flushBeforeHide();
+  persistStorage.hold();
+  projectAutosave.hold();
+}
+
+/** End the hold: each writer schedules one write if anything changed meanwhile. */
+export function releasePersistedWrites(): void {
+  persistStorage.release();
+  projectAutosave.release();
+}
+
 // `pagehide` (not `beforeunload`) is the event that actually fires on iOS
 // Safari and on bfcache navigations; `visibilitychange` covers a tab that is
 // backgrounded and then killed by the OS without ever firing pagehide.

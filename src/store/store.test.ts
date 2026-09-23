@@ -532,6 +532,24 @@ describe('persist serialisation is skipped when no persisted key changed', () =>
     expect(stored.state.metronomeActive).toBe(next);
   });
 
+  test('holding flushes first, then nothing reaches storage until release (R335)', async () => {
+    const { useAppStore, flushBeforeHide, flushPersistedWrites, holdPersistedWrites, releasePersistedWrites } = await getStore();
+    const read = () => JSON.parse(fakeLocalStorage.getItem('musibox_project_state_v1') ?? '{}').state?.metronomeActive;
+    const opened = !useAppStore.getState().metronomeActive;
+    useAppStore.setState({ metronomeActive: opened }); // buffered, not yet written
+    holdPersistedWrites();
+    try {
+      expect(read()).toBe(opened); // flushed by the hold itself
+      useAppStore.setState({ metronomeActive: !opened });
+      flushBeforeHide(); // what pagehide / hidden run
+      expect(read()).toBe(opened);
+    } finally {
+      releasePersistedWrites();
+    }
+    flushPersistedWrites();
+    expect(read()).toBe(!opened);
+  });
+
   // The dedupe compares top-level values by reference, so it is only correct
   // while every writer of a persisted value replaces it rather than mutating.
   // The table names EVERY persisted key: an object-valued key lists a probe

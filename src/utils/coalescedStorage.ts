@@ -37,12 +37,20 @@ export const idleWriteScheduler: WriteScheduler = {
 };
 
 export interface CoalescedStorage extends StateStorage {
-  /** Writes every buffered value through to the base storage, synchronously. */
+  /** Writes every buffered value through to the base storage, synchronously. A no-op while held. */
   flush(): void;
   /** Drops every buffered value without writing it. */
   discard(): void;
   /** Names with a write still buffered. Test/diagnostic use only. */
   pendingNames(): string[];
+  /**
+   * Stop writing (R335): `setItem` still buffers but schedules nothing, a
+   * flush already scheduled is cancelled, and `flush()` writes nothing — so
+   * pagehide/hidden leave the base storage as it was. A flag, not a count.
+   */
+  hold(): void;
+  /** End a hold; schedules ONE flush if anything is buffered. A no-op when not held. */
+  release(): void;
 }
 
 /**
@@ -75,6 +83,7 @@ export function createCoalescedStorage(
 ): CoalescedStorage {
   const pending = new Map<string, string>();
   let handle: number | null = null;
+  let held = false;
 
   const cancelScheduled = (): void => {
     if (handle !== null) {
@@ -84,6 +93,7 @@ export function createCoalescedStorage(
   };
 
   const flush = (): void => {
+    if (held) return;
     cancelScheduled();
     if (pending.size === 0) return;
     // Drain BEFORE writing: a throwing setItem must not leave the entry
@@ -111,7 +121,7 @@ export function createCoalescedStorage(
     },
     setItem: (name, value) => {
       pending.set(name, value);
-      if (handle === null) handle = scheduler.schedule(flush);
+      if (!held && handle === null) handle = scheduler.schedule(flush);
     },
     removeItem: (name) => {
       pending.delete(name);
@@ -128,5 +138,14 @@ export function createCoalescedStorage(
       cancelScheduled();
     },
     pendingNames: () => [...pending.keys()],
+    hold: () => {
+      held = true;
+      cancelScheduled();
+    },
+    release: () => {
+      if (!held) return;
+      held = false;
+      if (pending.size > 0 && handle === null) handle = scheduler.schedule(flush);
+    },
   };
 }

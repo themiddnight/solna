@@ -169,3 +169,59 @@ describe('every PROJECT_CONTENT_KEYS key schedules a write', () => {
     });
   }
 });
+
+describe('hold / release (R335)', () => {
+  test('a content change while held marks a write but schedules none', () => {
+    const { scheduler, pending } = manualScheduler();
+    const { api, setState } = fakeApi({ bpm: 120 });
+    const autosave = createProjectAutosave(api, { scheduler });
+    autosave.arm();
+    autosave.hold();
+    setState({ bpm: 130 });
+    expect(autosave.isScheduled()).toBe(false);
+    expect(pending()).toBe(0);
+  });
+
+  test('flush() is a no-op while held', () => {
+    const { scheduler, drain } = manualScheduler();
+    const { api, setState, saves } = fakeApi({ bpm: 120 });
+    const autosave = createProjectAutosave(api, { scheduler });
+    autosave.arm();
+    autosave.hold();
+    setState({ bpm: 130 });
+    autosave.flush();
+    drain();
+    expect(saves).toHaveLength(0);
+  });
+
+  test('holding cancels a write already scheduled, and release brings it back once', () => {
+    const { scheduler, drain } = manualScheduler();
+    const { api, setState, saves } = fakeApi({ bpm: 120 });
+    const autosave = createProjectAutosave(api, { scheduler });
+    autosave.arm();
+    setState({ bpm: 130 });
+    autosave.hold();
+    expect(autosave.isScheduled()).toBe(false);
+    setState({ bpm: 131 });
+    setState({ bpm: 132 });
+    autosave.release();
+    expect(autosave.isScheduled()).toBe(true);
+    drain();
+    expect(saves).toHaveLength(1);
+  });
+
+  test('release with no change schedules nothing; disarm drops a held change', () => {
+    const { scheduler } = manualScheduler();
+    const { api, setState } = fakeApi({ bpm: 120 });
+    const autosave = createProjectAutosave(api, { scheduler });
+    autosave.arm();
+    autosave.hold();
+    autosave.release();
+    expect(autosave.isScheduled()).toBe(false);
+    autosave.hold();
+    setState({ bpm: 140 });
+    autosave.disarm();
+    autosave.release();
+    expect(autosave.isScheduled()).toBe(false);
+  });
+});

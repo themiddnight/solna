@@ -191,3 +191,60 @@ describe('createCoalescedStorage', () => {
     expect(base.calls).toEqual(['set:k']);
   });
 });
+
+describe('hold / release (R335)', () => {
+  test('while held, setItem buffers and schedules nothing', () => {
+    const { base, sched, storage } = fixture();
+    storage.hold();
+    storage.setItem('k', 'v');
+    expect(sched.size()).toBe(0);
+    expect(base.calls).toEqual([]);
+    expect(storage.getItem('k')).toBe('v');
+  });
+
+  test('flush() is a no-op while held, so pagehide writes nothing', () => {
+    const { base, storage } = fixture();
+    storage.hold();
+    storage.setItem('k', 'v');
+    storage.flush();
+    expect(base.calls).toEqual([]);
+  });
+
+  test('a flush scheduled before the hold never fires during it', () => {
+    const { base, sched, storage } = fixture();
+    storage.setItem('k', 'v');
+    storage.hold();
+    sched.run();
+    expect(base.calls).toEqual([]);
+  });
+
+  test('release schedules exactly one flush, of the latest value', () => {
+    const { base, sched, storage } = fixture();
+    storage.hold();
+    storage.setItem('k', 'v1');
+    storage.setItem('k', 'v2');
+    storage.release();
+    expect(sched.size()).toBe(1);
+    sched.run();
+    expect(base.calls).toEqual(['set:k']);
+    expect(base.data.get('k')).toBe('v2');
+  });
+
+  test('two holds, one release: the hold is a flag, not a count', () => {
+    const { base, sched, storage } = fixture();
+    storage.hold();
+    storage.hold();
+    storage.setItem('k', 'v');
+    storage.release();
+    sched.run();
+    expect(base.calls).toEqual(['set:k']);
+  });
+
+  test('release with nothing buffered, or without a hold, schedules nothing', () => {
+    const { sched, storage } = fixture();
+    storage.release();
+    storage.hold();
+    storage.release();
+    expect(sched.size()).toBe(0);
+  });
+});
