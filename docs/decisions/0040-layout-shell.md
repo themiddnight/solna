@@ -20,7 +20,7 @@ the dialogs; the Header's tools were inline JSX with two kinds of layer gate (in
   `TransportBar`; `LayerPages` is the shared layer gate. `MobileShell` is a deliberate copy until
   DEV-431.
 - `HEADER_TOOLS` — seven rows with `id`, `Component`, `layers`, `group` (`subject` before the tab
-  nav, `actions` after). `ProjectMenu`, the layer switch and the tab nav are structural. The tools
+  nav, `actions` after). `ProjectMenu`, the layer switch and the tab nav are structural (the layer switch is removed by [ADR-0042](0042-flat-view-nav.md)). The tools
   and the theme moved to `components/header/`.
 - No breakpoint class removed.
 

@@ -126,8 +126,8 @@ Typography is shared with murva, and solna is **single-face**: one sans stack fo
     (the synth's five signal stages, the master rack's four FX units — nine
     copies), and `HEADER_BADGE` is the badge `ViewHeader` sets beside a title,
     which ChordView's chord-count chip is a second instance of. `HEADER_GROUP` is
-    the join shell every group in the header chrome sits in — the layer switcher,
-    the tab bar, Pattern's segment row, Sound's Simple/Pro — and is deliberately
+    the join shell every group in the header chrome sits in — the two tab-nav
+    joins, Pattern's segment row, Sound's Simple/Pro — and is deliberately
     not `JOIN_LANE`: that one composes `FIELD_LANE` to drop `btn-xs` toggles onto a
     labelled field's baseline, and a header has no field baseline to join.
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import React from 'react';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { TabButton, LAYER_META, layerToggleTarget } from './Header';
+import { TabButton } from './Header';
 import { persistTheme, readStoredTheme, resolveInitialTheme } from './header/useTheme';
 import { projectDisplayName, ProjectNameLabel, UNTITLED_PROJECT_LABEL } from './header/ProjectNameLabel';
 import { FollowPlayheadToggle } from './header/FollowPlayheadToggle';
@@ -11,7 +11,6 @@ import { HEADER_TOOLS } from './header/headerTools';
 import { ExportButton } from './export/ExportButton';
 import { PatternSegmentRow } from './ui/SegmentedControl';
 import { LOOP_TABS, SONG_TABS } from '../types';
-import { defaultTabForLayer, tabsForLayer } from '../routing/tabRouting';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
@@ -181,74 +180,21 @@ describe('PatternSegmentRow', () => {
   });
 });
 
-describe('layer toggle', () => {
-  test('lists the two layers in order with stable labels', () => {
-    expect(LAYER_META.map((l) => l.layer)).toEqual(['loop', 'song']);
-    expect(LAYER_META.map((l) => l.label)).toEqual(['Loop', 'Song']);
-  });
-
-  test('clicking a different layer navigates to that layer default tab', () => {
-    expect(layerToggleTarget('loop', 'song')).toBe('arrange');
-    expect(layerToggleTarget('song', 'loop')).toBe('sound');
-  });
-
-  test('clicking the current layer is a no-op', () => {
-    expect(layerToggleTarget('loop', 'loop')).toBeNull();
-    expect(layerToggleTarget('song', 'song')).toBeNull();
-  });
-
-  test('every toggle target is a tab inside that layer', () => {
-    for (const { layer } of LAYER_META) {
-      expect(tabsForLayer(layer)).toContain(defaultTabForLayer(layer));
+describe('TabButton rendering', () => {
+  test('every tab shows its label from lg up, its icon alone below', () => {
+    for (const view of VIEW_ORDER) {
+      const html = renderToString(<TabButton view={view} activeTab="sound" onSelect={() => {}} />);
+      expect(html).toContain(`id="tab-${view}"`);
+      expect(html).toContain('class="truncate hidden lg:inline"');
     }
   });
-});
 
-describe('TabButton rendering', () => {
-  test('renders with default class (hidden xl:inline) for loop tabs', () => {
-    const html = renderToString(
-      <TabButton view="sound" activeTab="sound" onSelect={() => {}} />
-    );
-    expect(html).toContain('id="tab-sound"');
-    expect(html).toContain('Sound');
-    expect(html).toContain('class="truncate hidden xl:inline"');
-  });
-
-  test('renders song mode tabs (Arrange & Master FX) with tablet-visible sm:inline label', () => {
-    const arrangeHtml = renderToString(
-      <TabButton
-        view="arrange"
-        activeTab="arrange"
-        onSelect={() => {}}
-        labelClassName="truncate sm:inline"
-      />
-    );
-    expect(arrangeHtml).toContain('id="tab-arrange"');
-    expect(arrangeHtml).toContain('Arrange');
-    expect(arrangeHtml).toContain('class="truncate sm:inline"');
-
-    const fxHtml = renderToString(
-      <TabButton
-        view="master"
-        activeTab="arrange"
-        onSelect={() => {}}
-        labelClassName="truncate sm:inline"
-      />
-    );
-    expect(fxHtml).toContain('id="tab-master"');
-    expect(fxHtml).toContain('Master FX');
-    expect(fxHtml).toContain('class="truncate sm:inline"');
-  });
-
-  /* The tab group is the SUBSET of the layer already chosen, so its active
-     fill is lighter than the layer switch's solid one. Pinned because the two
-     groups sit in the same bar and the regression is a one-word edit that
-     makes them identical again — at which point the bar shows a parent and
-     its child as peers, with nothing else on screen saying otherwise. */
-  test('the active tab is soft-filled, never the layer switch\'s solid primary', () => {
+  /* The four tabs are the frame's top navigation now that no layer switch
+     sits above them, so the active one takes the solid segmented-control
+     fill PatternSegmentRow uses. */
+  test('the active tab is solid primary, the others are ghosts', () => {
     const active = renderToString(<TabButton view="sound" activeTab="sound" onSelect={() => {}} />);
-    expect(active).toContain('btn-primary btn-soft');
-    expect(active).not.toContain('btn-active');
+    expect(active).toContain('btn-active btn-primary');
     const idle = renderToString(<TabButton view="pattern" activeTab="sound" onSelect={() => {}} />);
     expect(idle).toContain('btn-ghost');
     expect(idle).not.toContain('btn-primary');
@@ -362,21 +308,28 @@ describe('export lives in its own feature folder', () => {
  * the arrangement belongs to — comes before the tabs that view it, on both
  * layers. It used to be tabs first, which read as "this view → of some loop".
  */
-describe('the header cluster leads with the subject, not the tabs', () => {
+describe('the tabs lead the header, the subject run follows', () => {
   const src = readFileSync(new URL('./Header.tsx', import.meta.url), 'utf8');
-  const navAt = src.indexOf('<nav className={`${HEADER_GROUP}');
+  const navAt = src.indexOf('<ViewNav ');
   const subject = HEADER_TOOLS.filter((tool) => tool.group === 'subject').map((tool) => tool.id);
 
-  test('the Header renders the subject tools, then the tab nav, then the actions', () => {
+  // The subject run changes with the layer, so tabs placed after it would
+  // slide sideways on every layer crossing.
+  test('the Header renders the tab nav, then the subject tools, then the actions', () => {
     expect(navAt).toBeGreaterThan(-1);
-    expect(src.indexOf('<HeaderToolRun layer={layer} group="subject" />')).toBeLessThan(navAt);
-    expect(src.indexOf('<HeaderToolRun layer={layer} group="actions" />')).toBeGreaterThan(navAt);
+    expect(src.indexOf('<HeaderToolRun layer={layer} group="subject" />')).toBeGreaterThan(navAt);
+    expect(src.indexOf('<HeaderToolRun layer={layer} group="actions" />')).toBeGreaterThan(
+      src.indexOf('<HeaderToolRun layer={layer} group="subject" />'),
+    );
+  });
+
+  test('there is no layer switch', () => {
+    expect(src).not.toContain('id={`layer-');
   });
 
   // Subject, then what Arrange does with it while it plays, then export, then
-  // the key it is in — all before the tabs, which then stay anchored beside
-  // the theme toggle on both layers.
-  test('loop picker, project name, follow toggle, export and key/scale all precede the tabs', () => {
+  // the key it is in.
+  test('the subject run is loop picker, project name, follow toggle, export, key/scale', () => {
     expect(subject).toEqual(['loop-copy', 'loop-selector', 'project-name', 'follow-playhead', 'export', 'scale']);
   });
 
@@ -386,11 +339,10 @@ describe('the header cluster leads with the subject, not the tabs', () => {
 });
 
 /**
- * `viewMeta.VIEW_ORDER` exists for coverage, not for rendering — the nav is
- * driven by `LOOP_TABS` and `SONG_TABS`, so the two can only be kept
- * in step by hand. This is that hand: the tabs the header actually renders,
- * loop layer then song layer, must be VIEW_ORDER's four views, each exactly
- * once. A view added to one and forgotten in the other fails here rather than
+ * The header nav is driven by `LOOP_TABS` and `SONG_TABS` (one join each),
+ * MobileTabBar by `VIEW_ORDER`, so the two frames can only be kept in step by
+ * hand. This is that hand: the tabs the header renders, loop layer then song
+ * layer, must be VIEW_ORDER's four views, each exactly once. A view added to one and forgotten in the other fails here rather than
  * going missing from the nav.
  */
 describe('the header tabs cover every view', () => {

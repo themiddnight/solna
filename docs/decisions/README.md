@@ -56,6 +56,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0039](0039-playback-host.md) | PlaybackHost — transport controllers out of the grids | One memoized PlaybackHost mounts every transport controller in clock-listener order; the chord controller split into clock and audition halves, the playing chord on a pub/sub; no react under src/audio/. |
 | [0040](0040-layout-shell.md) | Layout shell and one layout-mode switch | useLayoutMode picks DesktopShell or MobileShell by width at Tailwind md; Workspace keeps the coordinators, PlaybackHost and dialogs; the Header's tools are HEADER_TOOLS rows gated by layer. |
 | [0041](0041-mobile-frame.md) | Mobile frame — bottom tabs, top bar, menu sheet | Below md, MobileShell renders a four-tab bottom dock over setActiveTab, a top bar with the field tools inline and a bottom-sheet Modal holding the other HEADER_TOOLS as rows plus the project actions; the tab bar owns the bottom inset. |
+| [0042](0042-flat-view-nav.md) | Flat view nav — no layer switch on desktop | The desktop Header shows all four views as two joins (loop tabs, song tabs) beside ProjectMenu, the tab implies the layer as on the phone, and no frame renders a Loop/Song switch. |
 
 ## Adding or changing a decision
 

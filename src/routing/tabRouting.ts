@@ -12,7 +12,7 @@ export function defaultTabForLayer(layer: Layer): ViewMode {
   return layer === 'song' ? 'arrange' : 'sound';
 }
 
-export function tabsForLayer(layer: Layer): readonly ViewMode[] {
+function tabsForLayer(layer: Layer): readonly ViewMode[] {
   return layer === 'song' ? SONG_TABS : LOOP_TABS;
 }
 

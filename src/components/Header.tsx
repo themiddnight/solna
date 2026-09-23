@@ -1,32 +1,15 @@
 import React from "react";
-import { Layer, layerForTab, ViewMode } from "../types";
-import { defaultTabForLayer, tabsForLayer } from "../routing/tabRouting";
+import { Layer, layerForTab, LOOP_TABS, SONG_TABS, ViewMode } from "../types";
 import { useAppStore } from "../store/store";
 import { HEADER_GROUP } from "./ui/fieldClasses";
 import { ProjectMenu } from "./project/ProjectMenu";
 import { VIEW_META } from "./viewMeta";
 import { headerToolsFor } from "./header/headerTools";
 
-/** The two layers in toggle order. Labels are user-facing copy. */
-export const LAYER_META: ReadonlyArray<{ layer: Layer; label: string }> = [
-  { layer: 'loop', label: 'Loop' },
-  { layer: 'song', label: 'Song' },
-];
-
-/**
- * The tab to navigate to when the user clicks the layer toggle for `target`
- * while on `current`. Returns `null` when already on `target` — clicking the
- * active layer is a no-op (it must not reset the layer's current sub-tab).
- */
-export function layerToggleTarget(current: Layer, target: Layer): ViewMode | null {
-  return current === target ? null : defaultTabForLayer(target);
-}
-
 interface TabButtonProps {
   view: ViewMode;
   activeTab: ViewMode;
   onSelect: (view: ViewMode) => void;
-  labelClassName?: string;
 }
 
 /**
@@ -38,7 +21,7 @@ interface TabButtonProps {
  *
  * Icon and label come from VIEW_META, never from a local literal.
  */
-export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButtonProps) {
+export function TabButton({ view, activeTab, onSelect }: TabButtonProps) {
   const isActive = activeTab === view;
   const { icon: Icon, tabLabel } = VIEW_META[view];
 
@@ -49,57 +32,36 @@ export function TabButton({ view, activeTab, onSelect, labelClassName }: TabButt
       aria-current={isActive ? 'page' : undefined}
       aria-label={tabLabel}
       onClick={() => onSelect(view)}
-      /* `btn-soft`, where the LAYER switch beside it is solid: this group is
-         the SUBSET of the layer the user has already chosen — Loop offers
-         Sound and Pattern, Song offers Arrange and Master — and two identical
-         solid-primary groups in one bar read as peers when one is the other's
-         child. The subordinate cue is WEIGHT, not hue: a second colour would
-         say "a different kind of control", which is the opposite of true
-         here, and `btn-secondary` already means "selected" inside a panel
-         (the Beat bus filter's LPF/BPF/HPF). Same hue, lighter fill. */
+      // Solid primary, the segmented-control idiom PatternSegmentRow shares:
+      // these four are the frame's top navigation, with no parent control
+      // above them to defer to.
       className={`btn btn-sm join-item min-w-0 px-2 sm:px-2.5 xl:px-3 gap-1 xl:gap-1.5 text-xs font-bold ${
-        isActive ? 'btn-primary btn-soft' : 'btn-ghost'
+        isActive ? 'btn-active btn-primary' : 'btn-ghost'
       }`}
       title={tabLabel}
     >
       <Icon className="w-4 h-4 shrink-0" />
-      <span className={labelClassName ?? 'truncate hidden xl:inline'}>{tabLabel}</span>
+      <span className="truncate hidden lg:inline">{tabLabel}</span>
     </button>
   );
 }
 
-
-/** The Loop/Song toggle; clicking the layer already shown is a no-op. */
-function LayerSwitcher({
-  layer,
-  onSelectTab,
-}: {
-  layer: Layer;
-  onSelectTab: (tab: ViewMode) => void;
-}) {
+/**
+ * Every view, one click away: the loop layer's tabs and the song layer's as
+ * two joins side by side, in MobileTabBar's order. The layer is what the tab
+ * implies (`layerForTab`), exactly as on the phone — there is no layer switch.
+ */
+function ViewNav({ activeTab, onSelect }: { activeTab: ViewMode; onSelect: (view: ViewMode) => void }) {
   return (
-    <div className={HEADER_GROUP}>
-      {LAYER_META.map(({ layer: l, label }) => {
-        const isActive = layer === l;
-        return (
-          <button
-            key={l}
-            id={`layer-${l}`}
-            type="button"
-            aria-current={isActive ? 'page' : undefined}
-            onClick={() => {
-              const target = layerToggleTarget(layer, l);
-              if (target) onSelectTab(target);
-            }}
-            className={`btn btn-sm join-item text-xs font-bold ${
-              isActive ? 'btn-active btn-primary' : 'btn-ghost'
-            }`}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
+    <nav aria-label="Views" className="flex items-center gap-1.5">
+      {[LOOP_TABS, SONG_TABS].map((tabs) => (
+        <div key={tabs[0]} className={`${HEADER_GROUP} flex items-center`}>
+          {tabs.map((view) => (
+            <TabButton key={view} view={view} activeTab={activeTab} onSelect={onSelect} />
+          ))}
+        </div>
+      ))}
+    </nav>
   );
 }
 
@@ -121,49 +83,26 @@ export const Header = React.memo(function Header() {
 
   return (
     <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-4 py-2 select-none sticky top-0 z-40 flex flex-nowrap items-center justify-between gap-x-3 text-sm">
-      {/* Brand & Layer Switcher */}
+      {/* Brand & navigation. The tabs sit here, not in the right cluster,
+          because that cluster changes with the layer (loop picker and key on
+          one, project name, follow and export on the other): tabs placed after
+          it would slide sideways on every layer crossing, and a one-click nav
+          is only one click if the target stays where the hand expects it. */}
       <div className="flex items-center gap-2.5 shrink-0">
         {/* The desktop frame only: the phone has its own top bar
             (`shell/MobileTopBar.tsx`). */}
         <ProjectMenu />
-        <LayerSwitcher layer={layer} onSelectTab={setActiveTab} />
+        <ViewNav activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
-      {/* Subject, Key/Scale, Tabs & Theme Actions, in that order — broad to
-          specific, left to right: WHAT is being edited (loop picker or project
-          name), the key it is in, then WHICH view of it (Sound/Pattern or
-          Arrange/Master FX) as one `join`, per the loop/song layer switcher's
-          own idiom, so the whole right-hand cluster reads as one row. */}
+      {/* WHAT is being edited, then what you do with it: the subject run (the
+          loop picker on the loop layer, the project name on the song layer,
+          exactly one of the two per layer), then what Arrange does with it
+          while it plays and export (song layer only), then the key it is in
+          (loop layer only), per `HEADER_TOOLS`' order; then the actions. This
+          run is what tells the two layers apart at a glance. */}
       <div className="flex items-center gap-1.5 shrink-0">
-        {/* What the tabs are editing leads the cluster, ahead of the tabs
-            themselves — the loop picker on the loop layer, the project name on
-            the song layer, exactly one of the two per layer. Reading the row
-            left to right now says "this loop → this view of it" rather than
-            the other way round, and the two layers open the same way: subject,
-            then what Arrange does with it while it plays (song layer only),
-            then export (song layer only), then the key it is in (loop layer
-            only) — all before the tabs, per `HEADER_TOOLS`' order, which then
-            stay anchored beside the theme toggle on both layers. */}
         <HeaderToolRun layer={layer} group="subject" />
-        {/* Primary navigation: the active layer's tabs.
-            ONE branch over `tabsForLayer`, the same function the router
-            validates a URL with, so the nav and the routes cannot name
-            different tabs. The two layers rendered identical markup for
-            everything except the song tabs' `labelClassName`, and keeping
-            them apart meant restyling a tab button in two places. */}
-        <nav className={`${HEADER_GROUP} flex items-center`}>
-          {tabsForLayer(layer).map((view) => (
-            <TabButton
-              key={view}
-              view={view}
-              activeTab={activeTab}
-              onSelect={setActiveTab}
-              labelClassName={layer === 'song' ? 'truncate hidden lg:inline' : undefined}
-            />
-          ))}
-        </nav>
-
-
         <HeaderToolRun layer={layer} group="actions" />
       </div>
     </header>

@@ -53,7 +53,7 @@ describe('the shells', () => {
   test('the desktop shell renders the whole frame', () => {
     for (const marker of [
       '<header class="navbar',
-      'id="layer-loop"',
+      '<nav aria-label="Views" class="flex',
       'id="btn-vibe-',
       // LoopPage's SoundView and SongPage's EffectsRackView: only reachable
       // through <LayerPages />, so these fail if it is ever removed.

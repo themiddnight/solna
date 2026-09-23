@@ -66,9 +66,10 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - Mobile navigation is `MobileTabBar` (`components/shell/MobileTabBar.tsx`): the `VIEW_ORDER` tabs, each calling `setActiveTab`; the tab implies the layer (`layerForTab`); the mobile frame has no layer switch, no second navigation state and no route logic of its own. <!-- R318 -->
 - The mobile top bar splits `HEADER_TOOLS` by id (`MOBILE_BAR_TOOL_IDS`, `components/shell/useMobileTopBar.ts`): field tools inline, every other available tool in the menu sheet as `variant="row"`; a tool that can reach the menu renders a `MenuRowButton` for `row`; the descriptor gains no placement or label field. <!-- R319 -->
 - The mobile menu sheet is a `Modal` with `placement="bottom"`, always rendered and closed only by dismissal; what a row opens renders inside the sheet's dialog — a nested dialog, or `afterBox` for a fixed overlay — never inside a daisyUI `menu` item. <!-- R320 -->
+- Desktop navigation is `ViewNav` in the Header's left group, beside `ProjectMenu`: every view as a `LOOP_TABS` join and a `SONG_TABS` join, each tab calling `setActiveTab`; the tab implies the layer, as on the phone. No frame renders a layer switch, and the tab nav never sits after a layer-gated tool run, where it would shift as the layer changes. <!-- R322 -->
 - Exactly one element per frame consumes `env(safe-area-inset-bottom)`: `TransportBar` on desktop, `MobileTabBar` on mobile (`TransportBar bottomInset={false}`). <!-- R321 -->
 
-([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md))
+([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md))
 
 ## Prohibited
 
@@ -92,3 +93,4 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A placement or label field on a `HEADER_TOOLS` row, or a menu tool without a `row` rendering <!-- R319 -->
 - Closing the mobile menu sheet on a row tap, or a dialog rendered inside a daisyUI `menu` item <!-- R320 -->
 - Two elements of one frame both consuming the bottom safe-area inset <!-- R321 -->
+- A Loop/Song layer switch in either frame, or the desktop tab nav placed after a layer-gated tool run <!-- R322 -->
