@@ -18,7 +18,7 @@ paths:
 
 # Pattern grids
 
-Step storage width, the three step layouts, span-resize mechanics and custom Chord/Bass patterns.
+Step storage width, the three step layouts, span-resize mechanics, custom Chord/Bass patterns and the melody-grid touch gestures.
 
 - Sequencer, chord-rhythm and bass grids store every bar at `MAX_STEPS_PER_BAR` and window it to the active `stepsPerBar`. <!-- R120 -->
 - Lead and FX store at `LEAD_TICKS_PER_BAR` (`utils/stepResolution.ts`) and stride to the active resolution; a `leadMelodySteps`/`fxMelodySteps` index is a tick and `LeadNote.len` counts ticks. <!-- R121 -->
@@ -35,6 +35,8 @@ Step storage width, the three step layouts, span-resize mechanics and custom Cho
 
 ([ADR-0012](../../docs/decisions/0012-pattern-storage-and-step-layouts.md))
 
+- The Lead/FX pitch matrix is `LEAD_CELL_SIZE` square on every screen, and a touch pointer never edits on `pointerdown`: `leadTouchReduce` (`loop/lead/leadTouchGesture.ts`) rules tap (edit the cell on `pointerup`), swipe (the browser scrolls, nothing is written) and long-press (a draw stroke from an empty cell, a resize from a note, where an unmoved lift keeps the note); `pointercancel` writes nothing; mouse and pen keep paint-on-`pointerdown`. <!-- R343 --> ([ADR-0050](../../docs/decisions/0050-melody-grid-touch-gestures.md))
+
 ## Prohibited
 
 - Storing a sequencer, chord-rhythm or bass bar at the active width <!-- R120 -->
@@ -49,3 +51,4 @@ Step storage width, the three step layouts, span-resize mechanics and custom Cho
 - A custom span crossing a folded chord boundary or its cycle end <!-- R129 -->
 - A custom pattern using the full-hold fast path <!-- R130 -->
 - A producer folding the published Chord step <!-- R131 -->
+- A touch pointer that edits a melody-grid cell on `pointerdown`, a swipe or `pointercancel` that writes, or a melody-grid row height not read from `LEAD_CELL_SIZE` <!-- R343 -->

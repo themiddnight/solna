@@ -149,7 +149,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `music-domain.md` | Music Core, tonal confinement, chord-quality registry, spelling, derived chord notes, reharmonization, Roman numerals, key change |
 | `vibes-and-grids.md` | Vibes as data, the one drum-grid library, provenance, the dice |
 | `beat.md` | The Beat instrument's three fields, voices, presets, `check:drums` |
-| `pattern-grids.md` | Fixed-width storage, the three step layouts, span editing, custom Chord/Bass patterns |
+| `pattern-grids.md` | Fixed-width storage, the three step layouts, span editing, custom Chord/Bass patterns, melody-grid touch gestures |
 | `melody-tracks.md` | Lead/FX via `MELODY_TRACKS`, record arm, key changes, borrowed rows |
 | `loops-and-solo.md` | Loop content and defaults, atomic loop delete + undo, batch key change, session-only solo, audibility |
 | `synth-voices.md` | `VoiceId`/owner, the frequency boundary, polyphony gain, voice lifetime, shared live/offline render, per-track master sends |

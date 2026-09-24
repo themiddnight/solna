@@ -79,8 +79,9 @@ New pure file `src/components/loop/lead/leadTouchGesture.ts`, with no DOM, React
 ### Paint handlers: the touch branch
 
 `createLeadPaintHandlers` (`leadPaint.ts`) gets a third dependency object: `now()`,
-`schedule(ms, fn) → cancel`, `cellAt(x, y)` and `startNoteResize(pointer, col, note)`. Tests can
-drive the touch path with a fake clock. `LeadPaintPointerLike` gains optional `pointerType`,
+`schedule(ms, fn) → cancel`, `measure()`, `rowNote(row)`, `resolveStepIndex(col)`,
+`startNoteResize(pointer, col, note)` and `cancelNoteResize()`, all in `leadTouchSession.ts`. It
+replaces the earlier per-point cell lookup. Tests can drive the touch path with a fake clock. `LeadPaintPointerLike` gains optional `pointerType`,
 `clientX` and `clientY`. An absent `pointerType` takes the mouse path, so the existing tests keep
 their meaning.
 
@@ -109,10 +110,11 @@ A touch pointer is implicitly captured to its pointerdown target, so `pointerent
 other cells during a touch drag. The touch paint path finds the cell under the finger with
 arithmetic:
 
-- New pure `leadCellAtPoint(rect, visibleLeft, x, y, size, columns, rowCount)` returns
-  `{ col, row }`, or `null` outside the matrix. It also returns `null` left of `visibleLeft`, the
-  right edge of the sticky note-name column, so a stroke never paints cells hidden under that
-  column. The caller maps `row` to `rows[row]` and `col` through `resolveStepIndex`.
+- New pure `leadCellAtPoint(geometry, x, y)`, in `leadTouchGesture.ts`, where `geometry` is
+  `{ left, top, clipLeft, clipRight, columns, rowCount }`. It returns `{ col, row }`, or `null`
+  outside the matrix. It also returns `null` left of `clipLeft`, the right edge of the sticky
+  note-name column, so a stroke never paints cells hidden under that column. The caller maps `row`
+  to `rows[row]` and `col` through `resolveStepIndex`.
 - The rect is read once, when the long-press fires. Scrolling is blocked for the rest of the
   session (see Scroll), so the rect cannot go stale.
 
@@ -126,12 +128,11 @@ fixed square cells, which the cell-size change guarantees. Releasing the implici
 - The `overflow-x-auto` scroller in `LeadMelodyGrid.tsx` gets `touch-pan-x touch-pan-y`
   (`touch-action: pan-x pan-y`). If the browser takes the pan first, it sends `pointercancel`,
   which is classified `cancelled`, so nothing is written.
-- On a touch pointerdown, `useLeadNotePaint` adds a **non-passive** `touchmove` listener to the
-  matrix element. It calls `preventDefault()` only while a long-press session is active, so
-  nothing scrolls mid-paint or mid-resize. It is added at pointerdown so the browser knows it is
-  non-passive before committing to a pan, and it is removed at session end, on cancel and on
-  unmount. It is not a lifetime listener, because that would make every swipe over the grid wait
-  on the main thread.
+- The matrix holds a **lifetime, non-passive** `touchmove` listener (added in `useLeadNotePaint`'s
+  effect) that calls `preventDefault()` only while a long-press session is active, so nothing
+  scrolls mid-paint or mid-resize. It is lifetime rather than per gesture: a browser fixes whether a
+  touch sequence can be cancelled when the sequence begins, so a listener registered only once the
+  gesture starts cannot stop the pan. The cost is that a swipe waits on one cheap main-thread check.
 - While a touch session is open, `contextmenu` is prevented (Android long-press menu). Mouse
   right-click is unchanged. The matrix gets `select-none` and `[-webkit-touch-callout:none]`
   (iOS).
@@ -179,7 +180,7 @@ fixed square cells, which the cell-size change guarantees. Releasing the implici
   `pending`; the edges at exactly 299, 300 and 301ms and exactly 7 and 8px; a diagonal slop
   measured as Euclidean distance; a late `timer` or `move` after 300ms resolving to `long-press`;
   and terminal states that ignore further events.
-- `leadCellAtPoint` tests cover cell boundaries, outside the matrix, and left of `visibleLeft`.
+- `leadCellAtPoint` tests cover cell boundaries, outside the matrix, and left of `clipLeft`.
 - `leadPaint.test.ts`, touch branch with a fake scheduler:
   - A tap commits on `up` only, with nothing at pointerdown.
   - A swipe commits nothing, and neither does `pointercancel`.
