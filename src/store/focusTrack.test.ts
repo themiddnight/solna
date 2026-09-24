@@ -6,6 +6,7 @@ import {
   isMelodicFocus,
   isMixLayerId,
   focusSynthTarget,
+  inputTargetOf,
   melodyTrackForFocus,
   segmentForFocus,
   type MelodicFocus,
@@ -192,3 +193,21 @@ describe('focusSynthTarget', () => {
   });
 });
 
+
+describe('inputTargetOf', () => {
+  test('linked (no pin) follows focus', () => {
+    for (const focus of MIX_LAYER_IDS) {
+      expect(inputTargetOf({ focusTrack: focus, inputTargetPin: null, recordingTrack: null })).toBe(focus);
+    }
+  });
+
+  test('pinned ignores focus', () => {
+    expect(inputTargetOf({ focusTrack: 'drum', inputTargetPin: 'synth', recordingTrack: null })).toBe('synth');
+    expect(inputTargetOf({ focusTrack: 'synth', inputTargetPin: 'chord', recordingTrack: null })).toBe('chord');
+  });
+
+  test('armed follows focus despite a pin, so a recorded note is the note that sounded', () => {
+    expect(inputTargetOf({ focusTrack: 'synth', inputTargetPin: 'chord', recordingTrack: 'lead' })).toBe('synth');
+    expect(inputTargetOf({ focusTrack: 'fx', inputTargetPin: 'drum', recordingTrack: 'fx' })).toBe('fx');
+  });
+});

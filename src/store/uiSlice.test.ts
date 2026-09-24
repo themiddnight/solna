@@ -177,6 +177,20 @@ describe('input deck dock state', () => {
     expect(applied).toEqual({ isInputPanelOpen: true });
   });
 
+  test('the input target starts linked (no pin)', () => {
+    const slice = createUiSlice((() => {}) as never);
+    expect(slice.inputTargetPin).toBeNull();
+  });
+
+  test('setInputTargetPin pins and unpins', () => {
+    let applied: Record<string, unknown> | undefined;
+    const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);
+    slice.setInputTargetPin('chord');
+    expect(applied).toEqual({ inputTargetPin: 'chord' });
+    slice.setInputTargetPin(null);
+    expect(applied).toEqual({ inputTargetPin: null });
+  });
+
   test('setInputPanelMode updates the mode', () => {
     let applied: Record<string, unknown> | undefined;
     const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);

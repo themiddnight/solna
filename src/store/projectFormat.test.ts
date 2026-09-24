@@ -52,6 +52,7 @@ describe('buildProjectContent', () => {
     const content = buildProjectContent(liveState as never) as unknown as Record<string, unknown>;
     for (const key of [
       'focusTrack',
+      'inputTargetPin',
       'activeLoopId',
       'metronomeActive',
       'selectedVibeId',

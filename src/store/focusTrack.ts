@@ -152,6 +152,28 @@ export function synthTargetForFocus(focus: MixLayerId): SynthControlTarget | nul
   return isMelodicFocus(focus) ? controlTargetForFocus(focus) : null;
 }
 
+/** The three fields the input target is derived from. */
+export interface InputTargetSource {
+  focusTrack: MixLayerId;
+  inputTargetPin: MixLayerId | null;
+  recordingTrack: MelodyTrackId | null;
+}
+
+/**
+ * The track the keyboard, the on-screen keyboard and the arp play (R341): the
+ * pin when the dock's link is off, otherwise the selected track.
+ *
+ * Record arm overrides the pin. The recorder writes every performed note into
+ * the armed track whatever bus sounded it (notes carry no bus), so a pin to
+ * Chord with Lead armed would sound Chord and write Lead. The arm can only be
+ * set on the focused track and disarms when focus leaves it
+ * (`startRecordArmSync`), so while armed "follow focus" is "play the armed
+ * track". The pin itself is kept and resumes on disarm.
+ */
+export function inputTargetOf(s: InputTargetSource): MixLayerId {
+  return s.recordingTrack !== null ? s.focusTrack : (s.inputTargetPin ?? s.focusTrack);
+}
+
 /**
  * The bridge into MELODY_TRACKS. `null` for the four focuses that are not a
  * melody track, so a caller has to handle "there is no track here" rather than

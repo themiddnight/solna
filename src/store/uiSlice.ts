@@ -63,7 +63,8 @@ export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 
  * own localStorage key (like the theme), since an input mode has no business
  * travelling with a saved/exported song.
  *
- * `focusTrack` is the exception in this slice: it IS persisted, top-level,
+ * `focusTrack` (and its companion `inputTargetPin`, R341) is the exception
+ * in this slice: it IS persisted, top-level,
  * in the place `controlTarget` used to occupy — which track you were working
  * on is a preference worth surviving a reload, and it is validated on read
  * (sanitizePersistedState) rather than carried through a migration chain. The
@@ -74,6 +75,7 @@ export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'sound',
     focusTrack: 'synth',
+    inputTargetPin: null,
     soloTracks: [],
     recordingTrack: null,
     loopCopySelection: [],
@@ -92,6 +94,7 @@ export function createUiSlice(set: Set): UiSlice {
 
     setActiveTab: (activeTab) => set({ activeTab }),
     setFocusTrack: (focusTrack) => set({ focusTrack }),
+    setInputTargetPin: (inputTargetPin) => set({ inputTargetPin }),
     toggleSoloTrack: (track) =>
       set((state) => ({ soloTracks: toggleSolo(state.soloTracks, track) })),
     // Guarded on emptiness so the array reference is stable: a fresh [] would

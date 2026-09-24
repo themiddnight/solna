@@ -55,3 +55,24 @@ describe('focusTrack persistence', () => {
     expect(out.focusTrack).toBe('synth');
   });
 });
+
+describe('inputTargetPin persistence', () => {
+  test('a valid pin is kept, including drum', () => {
+    expect(sanitizePersistedState({ inputTargetPin: 'chord' }).inputTargetPin).toBe('chord');
+    expect(sanitizePersistedState({ inputTargetPin: 'drum' }).inputTargetPin).toBe('drum');
+  });
+
+  test('missing, null or junk reads back as linked (null)', () => {
+    for (const bad of [undefined, null, 7, 'lead', [], {}]) {
+      expect(sanitizePersistedState({ inputTargetPin: bad }).inputTargetPin).toBeNull();
+    }
+    expect(sanitizePersistedState({}).inputTargetPin).toBeNull();
+  });
+
+  test('is persisted beside focusTrack', () => {
+    const before = useAppStore.getState().inputTargetPin;
+    useAppStore.getState().setInputTargetPin('bass');
+    expect(partializeAppState(useAppStore.getState()).inputTargetPin).toBe('bass');
+    useAppStore.getState().setInputTargetPin(before);
+  });
+});

@@ -478,6 +478,15 @@ export interface UiSlice {
    */
   focusTrack: MixLayerId;
   /**
+   * The input target's pin (R341): `null` = linked, so the keyboard plays
+   * `focusTrack`; a track id = unlinked, so the keyboard stays on that track
+   * while the user looks elsewhere. One field holds both the link state and
+   * the pinned track, so the two cannot drift apart. Read it through
+   * `inputTargetOf` (store/focusTrack.ts), never directly: record arm
+   * overrides it. Persisted beside `focusTrack`, validated on read.
+   */
+  inputTargetPin: MixLayerId | null;
+  /**
    * Track solo — the five source buses that are being monitored alone.
    *
    * Session-only and NEVER persisted: it is absent from partializeAppState and
@@ -563,6 +572,7 @@ export interface UiSlice {
   selectedMidiInputId: string;
   setActiveTab: (tab: ViewMode) => void;
   setFocusTrack: (focus: MixLayerId) => void;
+  setInputTargetPin: (pin: MixLayerId | null) => void;
   toggleSoloTrack: (track: SoloTrack) => void;
   clearSoloTracks: () => void;
   setRecordingTrack: (track: MelodyTrackId | null) => void;
@@ -824,6 +834,7 @@ export interface PersistedState {
   metronomeActive: boolean;
   selectedVibeId: string | null;
   focusTrack: MixLayerId;
+  inputTargetPin: MixLayerId | null;
   customSynthPresets: SynthPreset[];
   customChordProgressions: CustomChordProgressionItem[];
   customBeatPresets: BeatPreset[];

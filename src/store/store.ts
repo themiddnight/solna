@@ -186,6 +186,7 @@ export function partializeAppState(state: AppStore): PersistedState {
     metronomeActive: state.metronomeActive,
     selectedVibeId: state.selectedVibeId,
     focusTrack: state.focusTrack,
+    inputTargetPin: state.inputTargetPin,
     customSynthPresets: state.customSynthPresets,
     customChordProgressions: state.customChordProgressions,
     customBeatPresets: state.customBeatPresets,
@@ -224,6 +225,7 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   const sanitized: Record<string, unknown> = {
     metronomeActive: input.metronomeActive,
     focusTrack: input.focusTrack,
+    inputTargetPin: input.inputTargetPin,
     selectedVibeId: input.selectedVibeId,
     customSynthPresets: input.customSynthPresets,
     customChordProgressions: input.customChordProgressions,
@@ -238,6 +240,9 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   // path is not an error and not a visible mis-render, it silently points
   // every Sound-page knob at the Lead patch.
   sanitized.focusTrack = isMixLayerId(sanitized.focusTrack) ? sanitized.focusTrack : 'synth';
+  // The input target's pin (R341): a roster member or `null` (linked). Junk
+  // reads back as linked, never as a pin to a track nobody chose.
+  sanitized.inputTargetPin = isMixLayerId(sanitized.inputTargetPin) ? sanitized.inputTargetPin : null;
   if (typeof sanitized.selectedVibeId !== 'string' && sanitized.selectedVibeId !== null) {
     delete sanitized.selectedVibeId;
   }

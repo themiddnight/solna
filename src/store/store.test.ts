@@ -327,6 +327,7 @@ const PERSISTED_KEYS = [
   'metronomeActive',
   'selectedVibeId',
   'focusTrack',
+  'inputTargetPin',
   'customSynthPresets',
   'customChordProgressions',
   // The user's Beat library: app-level beside the synth one, and deliberately
@@ -561,6 +562,7 @@ describe('persist serialisation is skipped when no persisted key changed', () =>
       metronomeActive: [],
       selectedVibeId: [],
       focusTrack: [],
+      inputTargetPin: [],
       activeLoopId: [],
       customSynthPresets: [
         () => s().saveCustomPreset('Probe', s().synthParams),
