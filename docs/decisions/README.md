@@ -64,7 +64,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0047](0047-drum-pads-take-the-beat-mix-level.md) | Drum pads take their level from the Beat mix | A pad has no level control: every pad strikes at the Beat audition velocity and its voice's level is the current loop's Beat-mix fader; the persisted `drumPadVelocities` is gone. |
 | [0048](0048-input-target-link.md) | Input target link | The keys play an input target that follows the selection unless the dock's link toggle pins it (`inputTargetPin`, `null` = linked); record arm overrides the pin; the dock panel is derived from the target, so the Keyboard / Drums tabs are gone; `kbd` keycaps show only on a desktop screen. |
 | [0049](0049-per-view-scroll-memory.md) | Per-view scroll memory | The frame's one scroll container remembers its position per visible view (tab, plus Pattern segment) and restores it before paint on a switch; first visit starts at the top; positions stay in the hook, never a slice. |
-| [0050](0050-melody-grid-touch-gestures.md) | Melody grid touch gestures | Lead/FX cells are square from one constant on every screen; by touch a tap edits on pointerup, a swipe scrolls and writes nothing, a long-press paints from an empty cell or resizes a note; mouse and pen keep paint-on-pointerdown. |
+| [0050](0050-melody-grid-touch-gestures.md) | Pattern-grid touch gestures | One shared classifier and session rule touch on the Lead/FX matrix and the custom Chord/Bass lane: a tap edits on pointerup, a swipe scrolls and writes nothing, a long-press paints (Lead) or resizes a note or event; mouse and pen are unchanged. |
 
 ## Adding or changing a decision
 

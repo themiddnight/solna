@@ -11,6 +11,9 @@ paths:
   - "src/components/ui/spanResize.ts"
   - "src/components/ui/useSpanResize.ts"
   - "src/components/playbackStep.ts"
+  - "src/components/touchGesture.ts"
+  - "src/components/touchGestureSession.ts"
+  - "src/components/useTouchGestureListeners.ts"
   - "src/components/loop/chord/**"
   - "src/components/loop/lead/**"
   - "src/components/loop/sequencer/**"
@@ -18,7 +21,7 @@ paths:
 
 # Pattern grids
 
-Step storage width, the three step layouts, span-resize mechanics, custom Chord/Bass patterns and the melody-grid touch gestures.
+Step storage width, the three step layouts, span-resize mechanics, custom Chord/Bass patterns and the pattern-grid touch gestures.
 
 - Sequencer, chord-rhythm and bass grids store every bar at `MAX_STEPS_PER_BAR` and window it to the active `stepsPerBar`. <!-- R120 -->
 - Lead and FX store at `LEAD_TICKS_PER_BAR` (`utils/stepResolution.ts`) and stride to the active resolution; a `leadMelodySteps`/`fxMelodySteps` index is a tick and `LeadNote.len` counts ticks. <!-- R121 -->
@@ -35,7 +38,7 @@ Step storage width, the three step layouts, span-resize mechanics, custom Chord/
 
 ([ADR-0012](../../docs/decisions/0012-pattern-storage-and-step-layouts.md))
 
-- The Lead/FX pitch matrix is `LEAD_CELL_SIZE` square on every screen, and a touch pointer never edits on `pointerdown`: `leadTouchReduce` (`loop/lead/leadTouchGesture.ts`) rules tap (edit the cell on `pointerup`), swipe (the browser scrolls, nothing is written) and long-press (a draw stroke from an empty cell, a resize from a note, where an unmoved lift keeps the note); `pointercancel` writes nothing; mouse and pen keep paint-on-`pointerdown`. On touch the whole note is one target: a touch on its resize handle goes to the same touch session as the note body, and the handle sets no `touch-action`, so a swipe from it scrolls; only mouse and pen drag the handle. <!-- R343 --> ([ADR-0050](../../docs/decisions/0050-melody-grid-touch-gestures.md))
+- On the Lead/FX pitch matrix and on the custom Chord/Bass lane a touch pointer never edits on `pointerdown`. One shared classifier (`touchGestureReduce`, `components/touchGesture.ts`) and one session (`createTouchGestureSession`, `components/touchGestureSession.ts`) rule tap (on `pointerup`: Lead edits the cell, the lane activates the column), swipe (the browser scrolls, nothing is written) and long-press (Lead draws from an empty cell; on both grids a note or event resizes, and an unmoved lift keeps it). `pointercancel` writes nothing. A long-press then a lift adds on an empty cell and changes nothing on a note or event. Each grid supplies only an adapter (`loop/lead/leadTouchSession.ts`, `loop/chord/patternTouch.ts`) that says what a tap and a hold mean there, and the element and window listeners are `useTouchGestureListeners`. Mouse and pen are unchanged: Lead paints on `pointerdown`, the lane activates on `click`. On touch the whole note or event is one target: a touch on its resize handle goes to the same session, the handle sets no `touch-action`, and only mouse and pen drag it. The lane drops the click a browser synthesizes after a touch, and always honours a `detail === 0` click. The Lead matrix is `LEAD_CELL_SIZE` square on every screen; a Chord/Bass column never shrinks below `PATTERN_CELL_MIN_WIDTH`. <!-- R343 --> ([ADR-0050](../../docs/decisions/0050-melody-grid-touch-gestures.md))
 
 ## Prohibited
 
@@ -51,4 +54,4 @@ Step storage width, the three step layouts, span-resize mechanics, custom Chord/
 - A custom span crossing a folded chord boundary or its cycle end <!-- R129 -->
 - A custom pattern using the full-hold fast path <!-- R130 -->
 - A producer folding the published Chord step <!-- R131 -->
-- A touch pointer that edits a melody-grid cell on `pointerdown`, a swipe or `pointercancel` that writes, a touch on a note's resize handle that starts the handle's own drag or erases on a hold-and-lift, a `touch-action` on the handle that blocks the pan, or a melody-grid row height not read from `LEAD_CELL_SIZE` <!-- R343 -->
+- A touch pointer that edits either grid on `pointerdown`, a swipe or `pointercancel` that writes, a custom-lane touch that activates on `pointerdown` or twice through the synthesized click, a touch on a handle that starts the handle's own drag or erases on a hold-and-lift, a `touch-action` on either grid's handle, a per-grid copy of the classifier or the session, a melody-grid row height not read from `LEAD_CELL_SIZE`, or a Chord/Bass column narrower than `PATTERN_CELL_MIN_WIDTH` <!-- R343 -->
