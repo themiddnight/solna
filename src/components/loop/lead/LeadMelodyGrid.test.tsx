@@ -381,3 +381,16 @@ describe('the resize handle', () => {
     );
   });
 });
+
+describe('touch markup', () => {
+  test('the scroller lets the browser pan both ways and is findable for the hit test', () => {
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
+    expect(html).toContain('data-lead-scroller="" class="overflow-x-auto touch-pan-x touch-pan-y');
+    expect(html).toContain('data-lead-labels=""');
+  });
+
+  test('the cell matrix blocks text selection and the iOS callout', () => {
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
+    expect(html).toContain('class="grid shrink-0 select-none [-webkit-touch-callout:none]"');
+  });
+});

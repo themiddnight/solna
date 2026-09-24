@@ -1,5 +1,6 @@
 import type { LeadNotePaintMode } from '@/store/types';
 import type { LeadCellKind } from './melodyGrid';
+import type { LeadTouchSession } from './leadTouchSession';
 
 /** A stroke can only draw or erase — 'toggle' is the click's business. */
 type LeadPaintMode = Exclude<LeadNotePaintMode, 'toggle'>;
@@ -120,6 +121,10 @@ export function createLeadPaintController(
 interface LeadPaintPointerLike {
   pointerId: number;
   button?: number;
+  /** 'touch' goes to the touch session; absent, 'mouse' or 'pen' paint at once. */
+  pointerType?: string;
+  clientX?: number;
+  clientY?: number;
 }
 
 /** The part of a click event that says whether a keyboard produced it. */
@@ -135,29 +140,47 @@ export interface LeadPaintHandlers {
     note: string,
     covered: boolean,
   ) => void;
-  onCellPointerEnter: (
-    e: LeadPaintPointerLike,
-    stepIndex: number,
-    col: number,
-    note: string,
-  ) => void;
+  onCellPointerEnter: (e: LeadPaintPointerLike, stepIndex: number, col: number, note: string) => void;
   onCellClick: (e: LeadPaintClickLike, stepIndex: number, note: string) => void;
+  /** A window pointermove: only a touch session reads it. */
+  onWindowPointerMove: (e: LeadPaintPointerLike) => void;
+  /** A window pointerup/pointercancel: the touch session's when it owns the
+   * pointer, otherwise the end of a mouse or pen stroke. */
+  onWindowPointerEnd: (e: LeadPaintPointerLike, type: 'pointerup' | 'pointercancel') => void;
+  /** A touch long-press holds the finger: block scrolling. */
+  touchHolding: () => boolean;
+  /** A touch gesture is open: swallow contextmenu. */
+  touchOpen: () => boolean;
+  /** Unmount: drop a touch session without writing. */
+  dispose: () => void;
 }
+
+const touchPointer = (e: LeadPaintPointerLike) => ({
+  pointerId: e.pointerId,
+  clientX: e.clientX ?? 0,
+  clientY: e.clientY ?? 0,
+});
 
 /**
  * Turns pointer and click events into controller calls. Kept out of the hook
- * so the event filtering — which button may paint, which click may toggle —
- * is testable; a rule that only exists inside a JSX callback is a rule this
- * repo cannot check at all.
+ * so the event filtering — which button may paint, which pointer goes to the
+ * touch session, which click may toggle — is testable.
  */
 export function createLeadPaintHandlers(
   controller: LeadPaintController,
   toggle: (stepIndex: number, note: string) => void,
+  touch?: LeadTouchSession,
 ): LeadPaintHandlers {
   return {
     onCellPointerDown: (e, stepIndex, col, note, covered) => {
       // Only the primary button draws. `button` is 0 for touch and pen too.
       if ((e.button ?? 0) !== 0) return;
+      // Touch never paints on pointerdown (R343): the finger may be starting
+      // a scroll. The session decides on tap, swipe or long-press.
+      if (touch && e.pointerType === 'touch') {
+        touch.down(touchPointer(e), { stepIndex, col, note, covered });
+        return;
+      }
       controller.begin(e.pointerId, stepIndex, col, note, covered);
     },
     onCellPointerEnter: (e, stepIndex, col, note) => {
@@ -166,6 +189,18 @@ export function createLeadPaintHandlers(
     onCellClick: (e, stepIndex, note) => {
       if (!leadPaintClickIsKeyboard(e.detail)) return;
       toggle(stepIndex, note);
+    },
+    onWindowPointerMove: (e) => {
+      touch?.move(touchPointer(e));
+    },
+    onWindowPointerEnd: (e, type) => {
+      if (touch?.end(touchPointer(e), type)) return;
+      controller.end(e.pointerId);
+    },
+    touchHolding: () => touch?.holding() ?? false,
+    touchOpen: () => touch?.isOpen() ?? false,
+    dispose: () => {
+      touch?.dispose();
     },
   };
 }

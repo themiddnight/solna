@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { leadStoredIndexAt, type LeadNote } from '@/audio/playback/leadMelody';
 import type { StepCell } from '@/components/sequencerGrid';
 import type { Meter } from '@/utils/timeSignature';
 import type { MelodyTrackId } from '@/store/melodyTracks';
+import type { SpanResizePointer } from '@/components/ui/useSpanResize';
 import {
   LEAD_CELL_SIZE,
   isBlackKey,
@@ -58,14 +59,14 @@ function useLeadCellPaint(
   },
 ) {
   const { melody, rows, columns, stepsPerBar, stride } = grid;
-  const { preview, startResize } = useLeadNoteResize(trackId);
+  const { preview, startResize, cancelResize } = useLeadNoteResize(trackId);
+  const matrixRef = useRef<HTMLDivElement>(null);
   // Column → stored index. Stored indices are bar-major at MAX_STEPS_PER_BAR,
   // so this is not the identity and a skipped-cell fill must go through it.
   const resolveStepIndex = useCallback(
     (col: number) => leadStoredIndexAt(col, stepsPerBar, stride),
     [stepsPerBar, stride],
   );
-  const controller = useLeadNotePaint(trackId, resolveStepIndex);
   // The drag preview is applied here, in local render state — the store is
   // written once, on pointerup (see useLeadNoteResize).
   const previewed = useMemo(() => {
@@ -81,8 +82,38 @@ function useLeadCellPaint(
     () => leadCellKinds(previewed, rows, columns, stepsPerBar, stride),
     [previewed, rows, columns, stepsPerBar, stride],
   );
+  // A touch long-press on a note resizes the span it sits in. clickErases
+  // false: a hold and lift is not a tap, so the note survives it.
+  const startNoteResize = useCallback(
+    (pointer: SpanResizePointer, col: number, note: string) => {
+      const { spanStartIdx, spanCells, startCol } = resolveLeadCellSpan(
+        kinds.get(note) ?? [],
+        col,
+        stepsPerBar,
+        stride,
+        note,
+        previewed,
+      );
+      startResize(pointer, {
+        stepIndex: spanStartIdx,
+        note,
+        startLen: spanCells,
+        maxLen: columns - startCol,
+        stride,
+        clickErases: false,
+      });
+    },
+    [kinds, stepsPerBar, stride, previewed, startResize, columns],
+  );
+  const controller = useLeadNotePaint(trackId, resolveStepIndex, {
+    matrixRef,
+    rows,
+    columns,
+    startNoteResize,
+    cancelNoteResize: cancelResize,
+  });
 
-  return { controller, startResize, resolveStepIndex, previewed, kinds };
+  return { controller, startResize, resolveStepIndex, previewed, kinds, matrixRef };
 }
 
 interface LeadMelodyRowProps {
@@ -286,7 +317,10 @@ export const LeadMelodyCells = React.memo(function LeadMelodyCells(props: LeadMe
 
   return (
     <div
-      className="grid shrink-0"
+      ref={paint.matrixRef}
+      // select-none and the callout: a long-press is a gesture here, never a
+      // text selection or the iOS link/image menu.
+      className="grid shrink-0 select-none [-webkit-touch-callout:none]"
       style={{
         gridTemplateColumns: `repeat(${columns}, ${LEAD_CELL_SIZE}px)`,
         gridAutoRows: `${LEAD_CELL_SIZE}px`,

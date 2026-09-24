@@ -272,7 +272,13 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
 
         <LeadGridSettings trackId={trackId} model={model} />
 
-        <div className="overflow-x-auto bg-base-200 p-3 rounded">
+        <div
+          data-lead-scroller=""
+          // pan-x pan-y: the browser scrolls a swipe natively (and then
+          // pointercancels it, which writes nothing); double-tap zoom is off,
+          // so a tap is a tap.
+          className="overflow-x-auto touch-pan-x touch-pan-y bg-base-200 p-3 rounded"
+        >
           <div className="w-fit mx-auto relative">
             <LeadMelodyHeaders
               cursor={transport.cursor}
@@ -285,7 +291,11 @@ export function LeadMelodyGrid({ trackId }: LeadMelodyGridProps) {
 
             {/* Body: note column + cells + marker */}
             <div className="flex">
-              <div className="sticky left-0 z-10 shrink-0 bg-panel" style={{ width: LABEL_WIDTH }}>
+              <div
+                data-lead-labels=""
+                className="sticky left-0 z-10 shrink-0 bg-panel"
+                style={{ width: LABEL_WIDTH }}
+              >
                 <LeadRowLabels
                   rows={model.rows}
                   rowLabels={model.rowLabels}

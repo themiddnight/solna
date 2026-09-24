@@ -8,6 +8,7 @@ import {
   type LeadPaintCommit,
 } from './leadPaint';
 import { leadNoteCells } from '@/utils/stepResolution';
+import type { LeadTouchSession } from './leadTouchSession';
 
 function collector(): { commits: LeadPaintCommit[]; ctl: ReturnType<typeof createLeadPaintController> } {
   const commits: LeadPaintCommit[] = [];
@@ -237,5 +238,83 @@ describe('which cell activation may audition', () => {
       expect(leadClickShouldPreview(1, 'none')).toBe(false);
       expect(leadClickShouldPreview(1, 'start')).toBe(false);
     });
+  });
+});
+
+describe('createLeadPaintHandlers — pointer routing', () => {
+  function withTouch(owns = false) {
+    const commits: LeadPaintCommit[] = [];
+    const calls: string[] = [];
+    const ctl = createLeadPaintController((c) => commits.push(c), (col) => col);
+    const touch: LeadTouchSession = {
+      down: (p, cell) => {
+        calls.push(`down ${p.pointerId} ${cell.col} ${cell.note} ${cell.covered}`);
+      },
+      move: (p) => {
+        calls.push(`move ${p.pointerId}`);
+      },
+      end: (p, type) => {
+        calls.push(`end ${p.pointerId} ${type}`);
+        return owns;
+      },
+      holding: () => true,
+      isOpen: () => true,
+      dispose: () => {
+        calls.push('dispose');
+      },
+    };
+    const h = createLeadPaintHandlers(ctl, () => {}, touch);
+    return { commits, calls, h };
+  }
+
+  test('a touch pointerdown opens the touch session and paints nothing', () => {
+    const { commits, calls, h } = withTouch();
+    h.onCellPointerDown({ pointerId: 3, button: 0, pointerType: 'touch', clientX: 10, clientY: 20 }, 4, 4, 'C4', true);
+    expect(calls).toEqual(['down 3 4 C4 true']);
+    expect(commits).toEqual([]);
+  });
+
+  test('mouse and pen still paint on pointerdown, touch session or not', () => {
+    for (const pointerType of ['mouse', 'pen', undefined]) {
+      const { commits, calls, h } = withTouch();
+      h.onCellPointerDown({ pointerId: 1, button: 0, pointerType }, 4, 4, 'C4', false);
+      expect(commits).toEqual([{ stepIndex: 4, note: 'C4', mode: 'draw' }]);
+      expect(calls).toEqual([]);
+    }
+  });
+
+  test('a window end the touch session owns stops there', () => {
+    const { calls, h } = withTouch(true);
+    h.onWindowPointerEnd({ pointerId: 3 }, 'pointercancel');
+    expect(calls).toEqual(['end 3 pointercancel']);
+  });
+
+  test('a window end the touch session does not own closes the mouse stroke', () => {
+    const { commits, h } = withTouch(false);
+    h.onCellPointerDown({ pointerId: 1, button: 0 }, 4, 4, 'C4', false);
+    h.onWindowPointerEnd({ pointerId: 1 }, 'pointerup');
+    h.onCellPointerEnter({ pointerId: 1 }, 5, 5, 'C4');
+    expect(commits).toHaveLength(1);
+  });
+
+  test('moves, queries and dispose reach the touch session', () => {
+    const { calls, h } = withTouch();
+    h.onWindowPointerMove({ pointerId: 3, clientX: 1, clientY: 2 });
+    h.dispose();
+    expect(calls).toEqual(['move 3', 'dispose']);
+    expect(h.touchHolding()).toBe(true);
+    expect(h.touchOpen()).toBe(true);
+  });
+
+  test('with no touch session, a window end still closes the stroke and nothing holds', () => {
+    const commits: LeadPaintCommit[] = [];
+    const ctl = createLeadPaintController((c) => commits.push(c), (col) => col);
+    const h = createLeadPaintHandlers(ctl, () => {});
+    h.onCellPointerDown({ pointerId: 1, button: 0, pointerType: 'touch' }, 4, 4, 'C4', false);
+    h.onWindowPointerEnd({ pointerId: 1 }, 'pointerup');
+    h.onCellPointerEnter({ pointerId: 1 }, 5, 5, 'C4');
+    expect(commits).toHaveLength(1);
+    expect(h.touchHolding()).toBe(false);
+    expect(h.touchOpen()).toBe(false);
   });
 });
