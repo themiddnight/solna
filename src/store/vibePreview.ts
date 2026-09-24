@@ -93,15 +93,32 @@ export function stopPreview(): void {
   stopAndCut();
 }
 
-/** Use: keep what the store holds. */
+/**
+ * Use: keep what the store holds. The preview ends even if the stop throws:
+ * the picker has already dropped its session, so nothing would release the
+ * hold or the suspension later (R335, R336).
+ */
 export function commitVibePreview(): void {
-  stopAndCut();
-  endPreview();
+  try {
+    stopAndCut();
+  } finally {
+    endPreview();
+  }
 }
 
-/** Cancel (and Esc, ✕, the backdrop, unmount): the snapshot back in one write. */
+/**
+ * Cancel (and Esc, ✕, the backdrop, unmount): the snapshot back in one write.
+ * A stop that throws still restores the snapshot and ends the preview, for
+ * the same reason Use does.
+ */
 export function cancelVibePreview(snapshot: Partial<AppStore>): void {
-  stopAndCut();
-  useAppStore.setState((s) => withMirror(s, snapshot));
-  endPreview();
+  try {
+    stopAndCut();
+  } finally {
+    try {
+      useAppStore.setState((s) => withMirror(s, snapshot));
+    } finally {
+      endPreview();
+    }
+  }
 }

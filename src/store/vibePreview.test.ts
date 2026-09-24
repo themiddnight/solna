@@ -144,6 +144,44 @@ describe('an open that throws undoes itself', () => {
   });
 });
 
+describe('a close that throws still ends the preview', () => {
+  const throwingStop = () => spyOn(audioEngine, 'stopSource').mockImplementation(() => {
+    throw new Error('engine gone');
+  });
+
+  test('Cancel restores the snapshot, releases writes and turns input back on', () => {
+    const before = s().chords;
+    const snap = beginVibePreview();
+    previewVibe(VIBES[1]);
+    const stopSource = throwingStop();
+    const release = spyOn(store, 'releasePersistedWrites');
+    try {
+      expect(() => cancelVibePreview(snap)).toThrow('engine gone');
+      expect(s().chords).toBe(before);
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(s().noteInputSuspended).toBe(false);
+    } finally {
+      stopSource.mockRestore();
+      release.mockRestore();
+    }
+  });
+
+  test('Use releases writes and turns input back on', () => {
+    beginVibePreview();
+    previewVibe(VIBES[1]);
+    const stopSource = throwingStop();
+    const release = spyOn(store, 'releasePersistedWrites');
+    try {
+      expect(() => commitVibePreview()).toThrow('engine gone');
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(s().noteInputSuspended).toBe(false);
+    } finally {
+      stopSource.mockRestore();
+      release.mockRestore();
+    }
+  });
+});
+
 describe('a new pick cuts the old voices before its content lands', () => {
   test('silences chord, bass and pad at the hard-stop release', () => {
     const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {});

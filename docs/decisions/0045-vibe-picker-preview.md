@@ -38,6 +38,11 @@ undo after it, so a curious click overwrote a loop the user had built.
   throws releases the hold and the input suspension before rethrowing. Either failure shows one
   error message under the `vibe` key and closes the picker, instead of leaving it open with every
   card disabled.
+- **A close that throws still ends the preview.** The picker drops its session before it calls
+  `commitVibePreview` or `cancelVibePreview`, so nothing would release the hold later. Both end
+  the preview in a `finally`, and Cancel restores the snapshot before it does. Without that, a
+  stop that threw on close would leave every persisted write held and note input suspended for
+  the rest of the session.
 - **The card of the vibe the loop was loaded from is marked Current.** The picker labels the card
   whose id is `selectedVibeId` "Current", restoring the readout the strip's selected chip gave.
   The label is separate from the pressed state, which marks the previewed card, so a card can show
@@ -121,8 +126,8 @@ change and would drop the cue the strip gave, so it was not done here.
   label survives a reload.
 - **R335** — Only the vibe preview holds persisted writes
   (`holdPersistedWrites`/`releasePersistedWrites`); the hold flushes first; nothing is written
-  or removed while held, `pagehide`/hidden included; release writes once; an open that throws
-  releases the hold and input before rethrowing.
+  or removed while held, `pagehide`/hidden included; release writes once; an open, Use or Cancel
+  that throws releases the hold and input before rethrowing (Cancel restores the snapshot first).
 - **R336** — `noteInputSuspended` gates QWERTY notes, QWERTY drum pads and MIDI note-on/CC at
   their entry (note-off and keyup pass); its rising edge releases every held QWERTY note.
 - **R337** — A vibe preview is stop → cut → one write → `soloLoop(activeLoopId)`; opening and
