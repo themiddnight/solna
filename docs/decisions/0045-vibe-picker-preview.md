@@ -21,6 +21,9 @@ undo after it, so a curious click overwrote a loop the user had built.
   Modal's own header, a list that scrolls, and a pinned footer holding the preview summary,
   Play/Stop, Cancel and Use. The layout comes from `boxClassName` making the box a flex column;
   no footer prop is added to `Modal`. Use and Play stay disabled until a vibe has been previewed.
+  The summary is the name line (name · key · BPM) and one detail line (progression · comp rhythm
+  · bass pattern · drum grid), shown from the first pick. A reroll changes both lines in place
+  and marks the name line with the dice icon, so the name is never printed twice.
 - **The vibes stack one per row, and every row carries its own dice.** A row is the vibe's card,
   then a square dice button. The dice previews a fresh variant of its row's vibe at once, so a
   reroll does not need a pick first. A single column reads as a list that grows downward, so a new

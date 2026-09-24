@@ -112,37 +112,36 @@ export function resolveVibeVariation(
   // grid, at the same odds the progression axis already accepts.
   const drumGridId = draw.pick(rule.drumGrids);
 
-  // Display lookups only — an id that resolves to nothing falls back to the id
-  // itself, the way the rhythm and bass names below already do, because the
-  // caller's `resolveVibe` is the one place an unknown id is an error. A second
-  // throw site here would report the same fault in a second message format.
-  const progression = progressionById(progressionId);
+  const spec = { ...vibe, scaleRoot, bpm, chordRhythmId, bassPatternId, progressionId, drumGridId };
+  return { spec, summary: summarizeVibe(spec) };
+}
 
+/**
+ * What a vibe's ids resolve to for display — the authored vibe and a dice
+ * variant alike, so the picker describes both the same way.
+ *
+ * Display lookups only — an id that resolves to nothing falls back to the id
+ * itself, because the caller's `resolveVibe` is the one place an unknown id is
+ * an error. A second throw site here would report the same fault in a second
+ * message format.
+ */
+export function summarizeVibe(spec: VibeSpec): VariationSummary {
+  const { progressionId, chordRhythmId, bassPatternId, drumGridId } = spec;
+  const progression = progressionById(progressionId);
   return {
-    spec: {
-      ...vibe,
-      scaleRoot,
-      bpm,
-      chordRhythmId,
-      bassPatternId,
-      progressionId,
-      drumGridId,
-    },
-    summary: {
-      vibeName: vibe.name,
-      scaleRoot,
-      scaleType: vibe.scaleType,
-      bpm,
-      progressionId,
-      progressionName: progression?.name ?? progressionId,
-      progressionRoman: progression?.roman ?? progressionId,
-      rhythmName: CHORD_RHYTHMS.find((p) => p.id === chordRhythmId)?.name ?? chordRhythmId,
-      bassPatternName: BASS_PATTERNS.find((p) => p.id === bassPatternId)?.name ?? bassPatternId,
-      drumGridId,
-      // The table directly, not drumGridById: that helper deep-copies every row
-      // on the way out, and the toast wants one string.
-      drumGridName: DRUM_GRIDS[drumGridId]?.name ?? drumGridId,
-    },
+    vibeName: spec.name,
+    scaleRoot: spec.scaleRoot,
+    scaleType: spec.scaleType,
+    bpm: spec.bpm,
+    progressionId,
+    progressionName: progression?.name ?? progressionId,
+    progressionRoman: progression?.roman ?? progressionId,
+    rhythmName: CHORD_RHYTHMS.find((p) => p.id === chordRhythmId)?.name ?? chordRhythmId,
+    bassPatternName: BASS_PATTERNS.find((p) => p.id === bassPatternId)?.name ?? bassPatternId,
+    drumGridId,
+    // The table directly, not drumGridById: that helper deep-copies every row
+    // on the way out, and the picker wants one string.
+    drumGridName: DRUM_GRIDS[drumGridId]?.name ?? drumGridId,
   };
 }
 

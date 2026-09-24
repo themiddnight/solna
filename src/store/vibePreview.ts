@@ -18,7 +18,7 @@ import { ACCOMPANIMENT_SOURCES } from '../audio/playback/playbackEngine';
 import { holdPersistedWrites, releasePersistedWrites, useAppStore } from './store';
 import type { AppStore } from './types';
 import { captureVibeTargets, resolveVibe, resolveVibeVoices, vibeContentPatch, withMirror } from './vibes';
-import { createDraw, formatVariationSummary, resolveVibeVariation } from './vibeVariation';
+import { createDraw, formatVariationSummary, resolveVibeVariation, summarizeVibe } from './vibeVariation';
 
 /** Same instant-but-clickless release the hard-stop button uses. */
 const VIBE_SWAP_RELEASE = 0.02;
@@ -55,13 +55,17 @@ export function beginVibePreview(): Partial<AppStore> {
   }
 }
 
-/** Audition `spec`: everything resolved before any state is touched, then one write, then play. */
-export function previewVibe(spec: VibeSpec): void {
+/**
+ * Audition `spec`: everything resolved before any state is touched, then one
+ * write, then play. Returns the detail line the picker shows under the name.
+ */
+export function previewVibe(spec: VibeSpec): string {
   const vibe = resolveVibe(spec);
   const voices = resolveVibeVoices(vibe);
   stopAndCut();
   useAppStore.setState((s) => withMirror(s, vibeContentPatch(s, vibe, voices)));
   playActiveLoop();
+  return formatVariationSummary(summarizeVibe(spec)).detail;
 }
 
 /**

@@ -63,17 +63,15 @@ interface VibeFooterProps {
 }
 
 /** Pinned below the grid: what is previewing, Play/Stop on the left, Cancel/Use on the right. */
-function VibeFooter({ previewed, playing, onTogglePlay, onCancel, onUse }: VibeFooterProps) {
+export function VibeFooter({ previewed, playing, onTogglePlay, onCancel, onUse }: VibeFooterProps) {
   return (
     <div className="shrink-0 border-t border-base-300 pt-3 flex flex-col gap-2">
       <div aria-live="polite">
-        <p id="vibes-summary" className="text-sm font-semibold">{vibeSummaryLine(previewed)}</p>
-        {previewed?.reroll && (
-          <>
-            <p className="text-xs">{previewed.reroll.headline}</p>
-            <p className="text-xs text-base-content/70">{previewed.reroll.detail}</p>
-          </>
-        )}
+        <p id="vibes-summary" className="flex items-center gap-1.5 text-sm font-semibold">
+          {previewed?.reroll && <Dices id="vibes-rerolled-mark" className="w-4 h-4 shrink-0" aria-label="Rerolled" />}
+          {vibeSummaryLine(previewed)}
+        </p>
+        {previewed && <p id="vibes-detail" className="text-xs text-base-content/70">{previewed.detail}</p>}
       </div>
       <div className="flex items-center gap-2">
         <button id="btn-vibes-play" type="button" className="btn btn-ghost min-h-11 gap-1"

@@ -15,7 +15,7 @@ import {
   beginVibePreview, cancelVibePreview, commitVibePreview, playPreview, previewVibe, rerollPreview, stopPreview,
 } from './vibePreview';
 import { captureVibeTargets, resolveVibe, resolveVibeVoices, vibeContentPatch, withMirror } from './vibes';
-import { createDraw, resolveVibeVariation } from './vibeVariation';
+import { createDraw, formatVariationSummary, resolveVibeVariation, summarizeVibe } from './vibeVariation';
 
 const resetStore = () => {
   const loop = createDefaultLoop();
@@ -112,6 +112,18 @@ describe('vibe preview commands (R337)', () => {
     cancelVibePreview(snap);
     expect(s().chords).toEqual(before);
     expect(s().noteInputSuspended).toBe(false);
+  });
+});
+
+describe('what the picker shows under the name', () => {
+  test('a pick returns the authored vibe\'s detail line, the same shape a reroll gives', () => {
+    const vibe = VIBES[0];
+    const summary = summarizeVibe(vibe);
+    const detail = previewVibe(vibe);
+    expect(detail).toBe(formatVariationSummary(summary).detail);
+    expect(detail).toContain(summary.progressionRoman);
+    expect(detail).toContain(`drums: ${summary.drumGridName}`);
+    expect(rerollPreview(vibe).detail.split(' · ')).toHaveLength(detail.split(' · ').length);
   });
 });
 

@@ -14,14 +14,14 @@ describe('the picker footer and its Use toast', () => {
 
   test('a preview reads name · key · BPM, from what is sounding', () => {
     const spec = { ...vibe, bpm: vibe.bpm + 7 };
-    expect(vibeSummaryLine({ base: vibe, spec })).toBe(`${vibe.name} · ${key} · ${vibe.bpm + 7} BPM`);
+    expect(vibeSummaryLine({ base: vibe, spec, detail: 'D' })).toBe(`${vibe.name} · ${key} · ${vibe.bpm + 7} BPM`);
   });
 
   test('Use confirms under the one vibe key; a dice variant adds its headline', () => {
-    expect(vibeLoadedFeedback({ base: vibe, spec: vibe })).toEqual({
+    expect(vibeLoadedFeedback({ base: vibe, spec: vibe, detail: 'D' })).toEqual({
       key: 'vibe', message: `Loaded ${vibe.name} (${vibe.bpm} BPM · Key ${key})`, tone: 'success',
     });
-    const rolled = vibeLoadedFeedback({ base: vibe, spec: vibe, reroll: { headline: 'H', detail: 'D' } });
+    const rolled = vibeLoadedFeedback({ base: vibe, spec: vibe, detail: 'D', reroll: { headline: 'H' } });
     expect(rolled.detail).toBe('H');
   });
 });

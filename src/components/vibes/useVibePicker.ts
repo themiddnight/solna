@@ -49,8 +49,10 @@ export interface VibePreviewed {
   base: VibeSpec;
   /** What is sounding: `base`, or the dice's variant of it. */
   spec: VibeSpec;
-  /** Present after a reroll: what the dice changed. Shown in the footer, never a toast (R329). */
-  reroll?: { headline: string; detail: string };
+  /** What is sounding, under its name: progression · comp rhythm · bass pattern · drum grid. */
+  detail: string;
+  /** Present after a reroll; the footer marks the name with the dice, and Use's toast carries the headline. */
+  reroll?: { headline: string };
 }
 
 export function vibeSummaryLine(previewed: VibePreviewed | null): string {
@@ -191,8 +193,7 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
   const pick = useCallback((vibe: VibeSpec) => {
     const session = sessionRef.current;
     if (!session) return;
-    session.preview.previewVibe(vibe);
-    setPreviewed({ base: vibe, spec: vibe });
+    setPreviewed({ base: vibe, spec: vibe, detail: session.preview.previewVibe(vibe) });
   }, []);
 
   const reroll = useCallback((vibe: VibeSpec) => {
@@ -201,7 +202,7 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
     setRolling(true);
     try {
       const { spec, headline, detail } = session.preview.rerollPreview(vibe);
-      setPreviewed({ base: vibe, spec, reroll: { headline, detail } });
+      setPreviewed({ base: vibe, spec, detail, reroll: { headline } });
     } finally {
       // The spin stops even if the reroll throws.
       scheduleTimeout(spinRef, () => setRolling(false), ROLLING_MS);

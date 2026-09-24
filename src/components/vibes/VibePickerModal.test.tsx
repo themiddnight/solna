@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { VIBES } from '@/data/vibes';
 import { useAppStore } from '@/store/store';
-import { VibePickerModal } from './VibePickerModal';
+import { VibeFooter, VibePickerModal } from './VibePickerModal';
 import { VibesButton } from './VibesButton';
 
 // Rendered from the store's initial state; nothing here is seeded, so the R257
@@ -75,5 +75,27 @@ describe('the current-vibe mark', () => {
     useAppStore.setState({ selectedVibeId: null });
     const html = renderToString(<VibePickerModal open={false} onClose={() => {}} />);
     expect(html).not.toContain('id="vibes-current-mark"');
+  });
+});
+
+describe('the footer under a preview', () => {
+  const [vibe] = VIBES;
+  const footer = (reroll?: { headline: string }) => renderToString(
+    <VibeFooter previewed={{ base: vibe, spec: vibe, detail: 'ii – V – I · Push · Legato · drums: Kit', reroll }}
+      playing={false} onTogglePlay={() => {}} onCancel={() => {}} onUse={() => {}} />,
+  );
+
+  test('a pick shows the name line and its detail at once, with no dice mark', () => {
+    const html = footer();
+    expect(html).toContain('id="vibes-summary"');
+    expect(html).toContain('id="vibes-detail"');
+    expect(html).toContain('drums: Kit');
+    expect(html).not.toContain('vibes-rerolled-mark');
+  });
+
+  test('a reroll marks the name line with the dice and never repeats the name', () => {
+    const html = footer({ headline: `🎲 ${vibe.name}` });
+    expect(html).toContain('id="vibes-rerolled-mark"');
+    expect(html.split(vibe.name)).toHaveLength(2);
   });
 });
