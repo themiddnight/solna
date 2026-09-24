@@ -1,9 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import type React from 'react';
 import { useAppStore } from '@/store/store';
 import { type MelodyTrackId } from '@/store/melodyTracks';
 import { MELODY_ACTIONS } from '@/store/leadSlice';
 import type { SpanResizePointer } from '@/components/ui/useSpanResize';
+import {
+  browserTouchClock,
+  useTouchGestureListeners,
+  type TouchGestureListeners,
+} from '@/components/useTouchGestureListeners';
 import {
   createLeadPaintController,
   createLeadPaintHandlers,
@@ -43,11 +48,7 @@ function leadTouchDeps(
   resolveRef: React.RefObject<(col: number) => number>,
 ): LeadTouchDeps {
   return {
-    now: () => performance.now(),
-    schedule: (ms, fn) => {
-      const id = window.setTimeout(fn, ms);
-      return () => window.clearTimeout(id);
-    },
+    ...browserTouchClock,
     measure: () => {
       const { matrixRef, columns, rows } = wiringRef.current;
       return matrixRef.current ? measureLeadGrid(matrixRef.current, columns, rows.length) : null;
@@ -62,7 +63,7 @@ function leadTouchDeps(
 /**
  * Wires the paint state machine and the touch session to the DOM. Every
  * decision lives in leadPaint.ts and leadTouchSession.ts; this file forwards
- * events and owns the listeners, all of them for the component's whole life.
+ * events.
  *
  * Each committed cell is written to the store on its own, rather than
  * batched to pointerup like the resize drag: a stroke visits at most one new
@@ -71,11 +72,9 @@ function leadTouchDeps(
  * would mean reimplementing the covering-note rules outside the slice that
  * owns them. A resize, touch or mouse, still commits once, on pointerup.
  *
- * The matrix's touchmove listener is NON-PASSIVE and lifetime on purpose: a
- * browser decides whether a touch sequence may be cancelled when it begins,
- * so a listener added at pointerdown is too late to stop the pan under a
- * long-press. It calls preventDefault only while a hold owns the finger, so a
- * swipe still scrolls natively.
+ * The window and matrix listeners are the shared useTouchGestureListeners,
+ * attached for the component's whole life; its doc says why the matrix's
+ * touchmove listener is lifetime and non-passive.
  */
 export function useLeadNotePaint(
   trackId: MelodyTrackId,
@@ -83,7 +82,7 @@ export function useLeadNotePaint(
   wiring: LeadTouchWiring,
 ): LeadPaintHandlers {
   const actions = MELODY_ACTIONS[trackId];
-  const ref = useRef<LeadPaintHandlers | null>(null);
+  const ref = useRef<{ handlers: LeadPaintHandlers; listeners: TouchGestureListeners } | null>(null);
   // The controller is built once, but the column-to-stored-index mapping
   // moves with the meter — so it reads the CURRENT one on every gap it fills.
   const resolveRef = useRef(resolveStepIndex);
@@ -99,42 +98,27 @@ export function useLeadNotePaint(
       (col) => resolveRef.current(col),
     );
     const touch = createLeadTouchSession(controller, leadTouchDeps(wiringRef, resolveRef));
-    ref.current = createLeadPaintHandlers(
+    const handlers = createLeadPaintHandlers(
       controller,
       (stepIndex, note) => {
         useAppStore.getState()[actions.toggleNote](stepIndex, note);
       },
       touch,
     );
+    ref.current = {
+      handlers,
+      // A window end the touch session does not own closes the mouse
+      // stroke: onWindowPointerEnd asks the session first (leadPaint.ts).
+      listeners: {
+        move: (p) => handlers.onWindowPointerMove(p),
+        end: (p, type) => handlers.onWindowPointerEnd(p, type),
+        holding: () => handlers.touchHolding(),
+        isOpen: () => handlers.touchOpen(),
+        dispose: () => handlers.dispose(),
+      },
+    };
   }
 
-  useEffect(() => {
-    const handlers = ref.current;
-    const matrix = wiringRef.current.matrixRef.current;
-    const onMove = (ev: PointerEvent): void => handlers?.onWindowPointerMove(ev);
-    const onUp = (ev: PointerEvent): void => handlers?.onWindowPointerEnd(ev, 'pointerup');
-    const onCancel = (ev: PointerEvent): void => handlers?.onWindowPointerEnd(ev, 'pointercancel');
-    const onTouchMove = (ev: TouchEvent): void => {
-      if (ev.cancelable && handlers?.touchHolding()) ev.preventDefault();
-    };
-    const onContextMenu = (ev: MouseEvent): void => {
-      if (handlers?.touchOpen()) ev.preventDefault();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onCancel);
-    matrix?.addEventListener('touchmove', onTouchMove, { passive: false });
-    matrix?.addEventListener('contextmenu', onContextMenu);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onCancel);
-      matrix?.removeEventListener('touchmove', onTouchMove);
-      matrix?.removeEventListener('contextmenu', onContextMenu);
-      // Unmount mid-gesture (a layout switch): cancel the timer, write nothing.
-      handlers?.dispose();
-    };
-  }, []);
-
-  return ref.current;
+  useTouchGestureListeners(wiring.matrixRef, ref.current.listeners);
+  return ref.current.handlers;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type React from 'react';
-import type { TouchGesturePointer } from './touchGestureSession';
+import type { TouchGestureDeps, TouchGesturePointer } from './touchGestureSession';
 
 /** `window` and the grid element in the app; bare EventTargets in tests. */
 type ListenerTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
@@ -21,6 +21,15 @@ export interface TouchGestureListeners {
 const pointerOf = (event: Event): TouchGesturePointer => {
   const ev = event as Event & TouchGesturePointer;
   return { pointerId: ev.pointerId, clientX: ev.clientX, clientY: ev.clientY };
+};
+
+/** The real clock and timer for a touch session in the browser. */
+export const browserTouchClock: TouchGestureDeps = {
+  now: () => performance.now(),
+  schedule: (ms, fn) => {
+    const id = window.setTimeout(fn, ms);
+    return () => window.clearTimeout(id);
+  },
 };
 
 /**
