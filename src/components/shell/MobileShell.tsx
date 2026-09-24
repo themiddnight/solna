@@ -24,8 +24,15 @@ export const MobileShell = React.memo(function MobileShell(props: ShellProps) {
           bar; the desktop frame's sits above the input dock instead. */}
       <FeedbackHost edge="top" />
 
-      {/* The one-row transport; its settings open in a sheet above it (R332). */}
-      <ShellBody {...props} bottomInset={false} transportVariant="mobile" feedbackSlot={false} />
+      {/* The one-row transport; its settings open in a sheet above it (R332).
+          The dock's keys fit the width and never scroll (R340). */}
+      <ShellBody
+        {...props}
+        bottomInset={false}
+        transportVariant="mobile"
+        keyboardVariant="mobile"
+        feedbackSlot={false}
+      />
 
       {/* Bottom navigation, last: the thumb's reach, and the frame's one
           consumer of the bottom safe-area inset. */}

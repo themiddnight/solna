@@ -60,6 +60,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0043](0043-hint-text-on-desktop-only.md) | Hint text on the desktop frame only | Prose that describes or teaches a surface wears `HINT_TEXT` and is hidden below `md`; state, feedback and warnings stay on every frame. |
 | [0044](0044-secondary-canvas-taxonomy.md) | Secondary-canvas taxonomy | Every overlay is one of five kinds with one primitive each (Dock, Drawer, Bottom sheet, Modal, Popup), plus quick pick and three feedback kinds (Toast, Snackbar, Banner); one fixed z-scale; feedback queues and holds its timers while a dialog is open. |
 | [0045](0045-vibe-picker-preview.md) | Vibe picker with preview | Vibes open from a Header tool into a centred Modal that auditions a vibe on the current loop (stop, cut, one write, soloLoop); Use keeps it, every other exit restores a one-write snapshot; persisted writes are held and note input suspended while it is open. |
+| [0046](0046-mobile-keyboard-fits-the-width.md) | The mobile keyboard fits the width | Below `md` the dock's keys share the width and never scroll, asked for by the frame: chromatic one octave, scale one octave of the scale per row, chord the chords only. |
 
 ## Adding or changing a decision
 

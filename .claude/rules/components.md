@@ -81,6 +81,12 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   bar keeps every control inline and does not change for the phone. <!-- R332 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 - Vibes are reached only through the `vibes` `HEADER_TOOLS` row (`components/vibes/VibesButton.tsx`), which leads the list, so it is the first tool in the Header and in the menu sheet; no frame renders an always-visible vibe strip. <!-- R333 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
 - The vibe picker is a centred `Modal` on both frames: the vibes stack one per row, each a card then its own dice, and the list scrolls between Modal's pinned header and a pinned footer; a row's dice previews a variant of that row's vibe whether or not it was being previewed; **Use** (and Play) stay disabled until a vibe has been previewed; the card of the vibe the active loop was loaded from (`selectedVibeId`, as captured at open) carries a "Current" label, never the pressed state, which belongs to the previewed card; boot keeps `selectedVibeId` when it resumes the loop it was set for, so the label survives a reload. <!-- R334 --> ([ADR-0045](../../docs/decisions/0045-vibe-picker-preview.md))
+- Below `md` the input dock's keyboard fits the width and never scrolls: the frame asks for it
+  (`MobileShell` passes `keyboardVariant="mobile"` through `ShellBody` to `BottomInputDock`),
+  never a media query in the keyboard. Chromatic shows one octave, C to C; scale shows one octave
+  of the scale per row, tonic's octave on top (`getScaleLockedTouchRows`), each key keeping its
+  shortcut; chord shows the chords only. The range moves by the octave buttons. The desktop
+  surface keeps its QWERTY layout and scrolls, centred with `justify-center-safe`. <!-- R340 --> ([ADR-0046](../../docs/decisions/0046-mobile-keyboard-fits-the-width.md))
 
 ([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md), [ADR-0043](../../docs/decisions/0043-hint-text-on-desktop-only.md))
 
@@ -157,6 +163,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   row; a media query choosing the transport variant; the transport sheet's open state in a slice;
   a modal transport sheet; or a phone-driven change to the desktop bar <!-- R332 -->
 - A Loop/Song layer switch in either frame, or the desktop tab nav placed after a layer-gated tool run <!-- R322 -->
+- A mobile keyboard surface that scrolls, a media query choosing the keyboard variant, or a
+  plain `justify-center` on a keyboard row that can overflow <!-- R340 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
 - An always-visible vibe strip, or a vibe entry point outside the `vibes` HEADER_TOOLS row <!-- R333 -->
 - A vibe picker that is a BottomSheet, a drawer or non-modal, or a Use enabled before a preview <!-- R334 -->

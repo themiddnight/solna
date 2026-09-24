@@ -1,6 +1,7 @@
 import React from 'react';
 import { TransportBar, type TransportVariant } from '@/components/TransportBar';
 import { BottomInputDock } from '@/components/ui/BottomInputDock';
+import type { KeyboardVariant } from '@/components/ui/Keyboard';
 import { FeedbackHost } from '@/components/ui/FeedbackHost';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
 import { ProjectNotice } from '@/components/project/ProjectNotice';
@@ -13,6 +14,8 @@ import type { ShellProps } from './shellProps';
  * mobile frame hands the bottom safe-area inset to its tab bar (R321).
  * `transportVariant` is the frame's choice of transport bar (R316, R332): the
  * mobile frame asks for the one-row bar with its settings sheet.
+ * `keyboardVariant` is the same kind of choice for the input dock (R340): the
+ * mobile frame asks for keys that fit the width and never scroll.
  * `feedbackSlot` puts the frame's one feedback host (R330) above the input
  * dock; the mobile frame passes `false` and hangs its own under the top bar.
  */
@@ -24,8 +27,14 @@ export function ShellBody({
   onDismissUpdate,
   bottomInset,
   transportVariant,
+  keyboardVariant,
   feedbackSlot,
-}: ShellProps & { bottomInset?: boolean; transportVariant?: TransportVariant; feedbackSlot: boolean }) {
+}: ShellProps & {
+  bottomInset?: boolean;
+  transportVariant?: TransportVariant;
+  keyboardVariant?: KeyboardVariant;
+  feedbackSlot: boolean;
+}) {
   return (
     <>
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity.
@@ -46,7 +55,7 @@ export function ShellBody({
       {feedbackSlot && <FeedbackHost edge="bottom" />}
 
       {/* Bottom Input Dock — Keyboard | Drums, reachable from any page */}
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />
+      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} keyboardVariant={keyboardVariant} />
 
       {/* Persistent banners, above the transport bar: a waiting service worker,
           and any project storage problem (unavailable/failed/quota, or a

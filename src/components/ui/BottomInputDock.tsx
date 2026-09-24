@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react'
 // reference implementation, so a fix to the snapshot contract that skipped the
 // dock would skip the component the rule was written for.
 import { useLiveStore } from './useLiveStore';
-import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard } from './Keyboard';
+import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard, type KeyboardVariant } from './Keyboard';
 import { DrumPadGrid } from './DrumPadGrid';
 import { SECTION_HEADER } from './fieldClasses';
 import { IconButton } from './IconButton';
@@ -36,6 +36,8 @@ const KEYBOARD_MODE_TITLES = {
 interface BottomInputDockProps {
   keyboardProps: InputDeckKeyboardProps;
   drumProps: InputDeckDrumProps;
+  /** The frame's choice of keyboard surface (R340); the mobile frame asks for `mobile`. */
+  keyboardVariant?: KeyboardVariant;
 }
 
 /**
@@ -247,6 +249,7 @@ interface KeyboardSurfaceProps {
   activeNotes: InputDeckKeyboardProps['activeNotes'];
   onNoteOn: InputDeckKeyboardProps['handleNoteOn'];
   onNoteOff: InputDeckKeyboardProps['handleNoteOff'];
+  variant: KeyboardVariant;
 }
 
 /** The playable surface under the toolbar, in whichever mode is active. */
@@ -258,6 +261,7 @@ function KeyboardSurface({
   activeNotes,
   onNoteOn,
   onNoteOff,
+  variant,
 }: KeyboardSurfaceProps) {
   return (
     <div
@@ -271,7 +275,10 @@ function KeyboardSurface({
       // `shrink-0`, so at 180px this box plus its toolbar overran
       // 390px of screen and the overflow was clipped off the top of
       // the app. See KeyCap for the matching row height.
-      className={`flex justify-center-safe relative h-45 [@media(max-height:560px)]:h-36 select-none bg-base-300 p-2 rounded-box border border-base-300 overflow-x-auto ${
+      // The mobile surface never scrolls: its keys share the width (R340).
+      className={`flex justify-center-safe relative h-45 [@media(max-height:560px)]:h-36 select-none bg-base-300 p-2 rounded-box border border-base-300 ${
+        variant === 'mobile' ? 'overflow-hidden' : 'overflow-x-auto'
+      } ${
         keyboardMode === 'scale-locked' || keyboardMode === 'chord'
           ? 'flex-col gap-1.5'
           : ''
@@ -283,6 +290,7 @@ function KeyboardSurface({
           activeNotes={activeNotes}
           onNoteOn={onNoteOn}
           onNoteOff={onNoteOff}
+          variant={variant}
         />
       ) : keyboardMode === 'scale-locked' ? (
         <ScaleLockedKeyboard
@@ -290,6 +298,7 @@ function KeyboardSurface({
           activeNotes={activeNotes}
           onNoteOn={onNoteOn}
           onNoteOff={onNoteOff}
+          variant={variant}
         />
       ) : (
         <ChromaticKeyboard
@@ -297,13 +306,18 @@ function KeyboardSurface({
           activeNotes={activeNotes}
           onNoteOn={onNoteOn}
           onNoteOff={onNoteOff}
+          variant={variant}
         />
       )}
     </div>
   );
 }
 
-export const BottomInputDock = React.memo(function BottomInputDock({ keyboardProps, drumProps }: BottomInputDockProps) {
+export const BottomInputDock = React.memo(function BottomInputDock({
+  keyboardProps,
+  drumProps,
+  keyboardVariant = 'desktop',
+}: BottomInputDockProps) {
   const isOpen = useLiveStore((s) => s.isInputPanelOpen);
   const setIsOpen = useLiveStore((s) => s.setIsInputPanelOpen);
   const mode = useLiveStore((s) => s.inputPanelMode);
@@ -382,6 +396,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({ keyboardPro
                 activeNotes={activeNotes}
                 onNoteOn={handleNoteOn}
                 onNoteOff={handleNoteOff}
+                variant={keyboardVariant}
               />
             </div>
           )}

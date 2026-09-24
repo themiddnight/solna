@@ -8,10 +8,19 @@ import {
   formatChordLabel,
   generateBlockChordNotes,
 } from '@/utils/musicTheory';
-import { midiToSharpName, octaveOfNote, pitchClassOfNote, scaleEntry } from '@/musicCore';
+import { midiToSharpName, noteMidi, octaveOfNote, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import { shortcutLabel } from '@/utils/keyboard';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import { GROUP_LABEL } from './fieldClasses';
+
+/**
+ * Which keyboard surface the frame asks for (R340: the frame decides, never a
+ * media query here). `desktop` lays the keys out like the QWERTY rows and may
+ * scroll; `mobile` fits every key to the width and never scrolls — the range
+ * moves by the octave buttons instead, because a swipe that starts on a key
+ * plays it.
+ */
+export type KeyboardVariant = 'desktop' | 'mobile';
 
 const KEYBOARD_OCTAVE_MIN = -2;
 const KEYBOARD_OCTAVE_MAX = 2;
@@ -126,6 +135,29 @@ export function getScaleLockedKeyboardNotesFlat(
   return [...homeRow, ...topRow];
 }
 
+// The phone's scale-locked rows (R340): one octave of the scale per row, the
+// tonic's octave above the octave under it, so both rows start on the tonic
+// and line up degree over degree. Picked out of the QWERTY rows rather than
+// recomputed, so every key keeps the shortcut it has on the desktop — the home
+// row always holds the octave under the tonic (it starts 2n-3 steps below it
+// and runs 11 keys, which covers -n..-1 for every n <= 7).
+export function getScaleLockedTouchRows(rows: {
+  homeRow: ScaleKeyboardNote[];
+  topRow: ScaleKeyboardNote[];
+}): { upper: ScaleKeyboardNote[]; lower: ScaleKeyboardNote[] } {
+  const tonicClass = pitchClassOfNote(rows.topRow[0]?.note ?? '');
+  const octaveEnd = rows.topRow.findIndex(
+    (k, i) => i > 0 && pitchClassOfNote(k.note) === tonicClass,
+  );
+  const upper = rows.topRow.slice(0, octaveEnd === -1 ? rows.topRow.length : octaveEnd);
+  const lower = upper.flatMap((k) => {
+    const midi = noteMidi(k.note);
+    const below = midi === null ? undefined : rows.homeRow.find((h) => noteMidi(h.note) === midi - 12);
+    return below ? [below] : [];
+  });
+  return { upper, lower };
+}
+
 export const KEYBOARD_NOTES = [
   { note: "C3", label: "C3", key: "KeyA", isBlack: false },
   { note: "C#3", label: "C#", key: "KeyW", isBlack: true },
@@ -169,6 +201,7 @@ function KeyCap({
   shortcutKey,
   onPress,
   onRelease,
+  fill = false,
 }: {
   id: string;
   ariaLabel: string;
@@ -177,6 +210,8 @@ function KeyCap({
   shortcutKey: string;
   onPress: () => void;
   onRelease: () => void;
+  /** Share the row's width with its siblings instead of the fixed desktop width (R340). */
+  fill?: boolean;
 }) {
   return (
     <button
@@ -208,7 +243,7 @@ function KeyCap({
         onRelease();
       }}
       onTouchCancel={onRelease}
-      className={`w-12 h-19.5 [@media(max-height:560px)]:h-15 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
+      className={`${fill ? 'flex-1 min-w-0' : 'w-12'} h-19.5 [@media(max-height:560px)]:h-15 rounded-b-field border border-base-300 cursor-pointer flex flex-col justify-end pb-2 items-center transition-all select-none ${
         isActive
           ? "bg-primary text-primary-content shadow-inner scale-[0.99]"
           : "bg-key-white text-key-white-content hover:brightness-105"
@@ -225,11 +260,13 @@ export function ScaleLockedKey({
   isActive,
   onNoteOn,
   onNoteOff,
+  fill,
 }: {
   k: ScaleKeyboardNote;
   isActive: boolean;
   onNoteOn: (note: string) => void;
   onNoteOff: (note: string) => void;
+  fill?: boolean;
 }) {
   return (
     <KeyCap
@@ -240,47 +277,64 @@ export function ScaleLockedKey({
       shortcutKey={k.key}
       onPress={() => onNoteOn(k.note)}
       onRelease={() => onNoteOff(k.note)}
+      fill={fill}
     />
   );
 }
 
-// Two QWERTY rows for scale-locked mode: top row (Q..]) above the home row
-// (A..'), staggered like a physical keyboard.
+function ScaleLockedRow({
+  keys,
+  activeNotes,
+  onNoteOn,
+  onNoteOff,
+  fill,
+}: {
+  keys: ScaleKeyboardNote[];
+  activeNotes: Set<string>;
+  onNoteOn: (note: string) => void;
+  onNoteOff: (note: string) => void;
+  fill: boolean;
+}) {
+  return (
+    <div className="flex flex-1 w-full gap-0.5 justify-center-safe">
+      {keys.map((k) => (
+        <ScaleLockedKey
+          key={k.note}
+          k={k}
+          isActive={activeNotes.has(k.note)}
+          onNoteOn={onNoteOn}
+          onNoteOff={onNoteOff}
+          fill={fill}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Two rows for scale-locked mode. Desktop: the two QWERTY rows, top row (Q..])
+// above the home row (A..'), staggered like a physical keyboard. Mobile: one
+// octave of the scale per row, each key sharing the width (R340).
 export function ScaleLockedKeyboard({
   rows,
   activeNotes,
   onNoteOn,
   onNoteOff,
+  variant = 'desktop',
 }: {
   rows: { homeRow: ScaleKeyboardNote[]; topRow: ScaleKeyboardNote[] };
   activeNotes: Set<string>;
   onNoteOn: (note: string) => void;
   onNoteOff: (note: string) => void;
+  variant?: KeyboardVariant;
 }) {
+  const isMobile = variant === 'mobile';
+  const { upper, lower } = isMobile
+    ? getScaleLockedTouchRows(rows)
+    : { upper: rows.topRow, lower: rows.homeRow };
   return (
     <>
-      <div className="flex flex-1 w-full gap-0.5 justify-center-safe">
-        {rows.topRow.map((k) => (
-          <ScaleLockedKey
-            key={k.note}
-            k={k}
-            isActive={activeNotes.has(k.note)}
-            onNoteOn={onNoteOn}
-            onNoteOff={onNoteOff}
-          />
-        ))}
-      </div>
-      <div className="flex flex-1 w-full gap-0.5 justify-center-safe">
-        {rows.homeRow.map((k) => (
-          <ScaleLockedKey
-            key={k.note}
-            k={k}
-            isActive={activeNotes.has(k.note)}
-            onNoteOn={onNoteOn}
-            onNoteOff={onNoteOff}
-          />
-        ))}
-      </div>
+      <ScaleLockedRow keys={upper} activeNotes={activeNotes} onNoteOn={onNoteOn} onNoteOff={onNoteOff} fill={isMobile} />
+      <ScaleLockedRow keys={lower} activeNotes={activeNotes} onNoteOn={onNoteOn} onNoteOff={onNoteOff} fill={isMobile} />
     </>
   );
 }
@@ -371,11 +425,13 @@ function ChordRowButton({
   isActive,
   onNoteOn,
   onNoteOff,
+  fill,
 }: {
   btn: ChordKeyboardButton;
   isActive: boolean;
   onNoteOn: (note: string) => void;
   onNoteOff: (note: string) => void;
+  fill?: boolean;
 }) {
   const heldNotesRef = useRef<string[] | null>(null);
 
@@ -399,6 +455,7 @@ function ChordRowButton({
       shortcutKey={btn.key}
       onPress={press}
       onRelease={release}
+      fill={fill}
     />
   );
 }
@@ -408,11 +465,15 @@ function ChordRowButton({
 // single-note buttons (bound to MELODY_KEYS) as two internal rows — the lower
 // four (k l ; ') and the upper five (i o p [ ]) — preserving ascending pitch
 // order left-to-right then upward, mirroring the physical keyboard.
+// Mobile keeps the chords only, one row sharing the width (R340): both groups
+// side by side are far wider than a phone. The melody keys stay playable from
+// a computer keyboard, which the dock never gates.
 export function ChordKeyboard({
   rows,
   activeNotes,
   onNoteOn,
   onNoteOff,
+  variant = 'desktop',
 }: {
   rows: {
     triadRow: ChordKeyboardButton[];
@@ -421,14 +482,34 @@ export function ChordKeyboard({
   activeNotes: Set<string>;
   onNoteOn: (note: string) => void;
   onNoteOff: (note: string) => void;
+  variant?: KeyboardVariant;
 }) {
   const isRowActive = (btn: ChordKeyboardButton) =>
     btn.notes.every((n) => activeNotes.has(n));
   const topMelody = rows.melodyRow.slice(4);
   const homeMelody = rows.melodyRow.slice(0, 4);
 
+  if (variant === 'mobile') {
+    return (
+      <div className="flex flex-1 w-full items-center gap-0.5">
+        {rows.triadRow.map((btn) => (
+          <ChordRowButton
+            key={btn.key}
+            btn={btn}
+            isActive={isRowActive(btn)}
+            onNoteOn={onNoteOn}
+            onNoteOff={onNoteOff}
+            fill
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center justify-center gap-14">
+    // `justify-center-safe`: see KeyboardSurface — the plain keyword pushed
+    // the Chords group off the left edge, out of scroll reach.
+    <div className="flex items-center justify-center-safe gap-14">
       <div className="flex flex-col items-center gap-1">
         <span className={GROUP_LABEL}>
           Chords
@@ -531,18 +612,24 @@ export function ChromaticKeyboard({
   activeNotes,
   onNoteOn,
   onNoteOff,
+  variant = 'desktop',
 }: {
   octaveOffset: number;
   activeNotes: Set<string>;
   onNoteOn: (note: string) => void;
   onNoteOff: (note: string) => void;
+  variant?: KeyboardVariant;
 }) {
+  const isMobile = variant === 'mobile';
   // A regex match, parseInt and an object spread per key (25 keys) — cheap
   // once, but this component re-renders at pointer/clock rate elsewhere in
   // the dock, so recomputing on every render was measurable.
-  const notes = useMemo(() => getChromaticKeyboardNotes(octaveOffset), [octaveOffset]);
+  const notes = useMemo(() => {
+    const all = getChromaticKeyboardNotes(octaveOffset);
+    return isMobile ? all.slice(0, MOBILE_OCTAVE_NOTE_COUNT) : all;
+  }, [octaveOffset, isMobile]);
   return (
-    <div className={CHROMATIC_KEYBOARD_CLASS}>
+    <div className={isMobile ? CHROMATIC_KEYBOARD_MOBILE_CLASS : CHROMATIC_KEYBOARD_CLASS}>
       {notes.map((k, noteIndex) => {
         const isActive = activeNotes.has(k.note);
         if (k.isBlack) {
@@ -611,24 +698,32 @@ export function ChromaticKeyboard({
  * its container (see CHROMATIC_KEYBOARD_CLASS).
  *
  * They are custom properties rather than TypeScript constants because the
- * phone value has to differ from the desktop one and only CSS can answer a
- * media query: at the desktop 68px stride a 390px screen fits under five white
- * keys, so half an octave was always off-screen. Black keys are absolutely
- * positioned against white-key boundaries, so their offsets are `calc()` over
- * the same two properties and stay correct at either size — and at any octave
- * offset or container width.
+ * phone value is a share of the container's width, which only CSS knows.
+ * Black keys are absolutely positioned against white-key boundaries, so their
+ * offsets are `calc()` over the same two properties and stay correct at
+ * either size — and at any octave offset or container width.
  */
 const KEY_STRIDE_VAR = '--chromatic-key-stride';
 const KEY_BLACK_WIDTH_VAR = '--chromatic-key-black-w';
 
 /**
- * 46px stride fits a full octave (7 white keys) across a 375px phone; 68px is
- * the original desktop size. `mx-0.5` on each white key eats 4px of the stride,
- * hence the `-4px` in its width.
+ * The desktop frame is never narrower than `md`, so its keys keep the fixed
+ * 68px stride and scroll when the dock is narrower than all of them. `mx-0.5`
+ * on each white key eats 4px of the stride, hence the `-4px` in its width.
  */
 const CHROMATIC_KEYBOARD_CLASS =
-  'relative flex [--chromatic-key-stride:46px] [--chromatic-key-black-w:26px] ' +
-  'sm:[--chromatic-key-stride:68px] sm:[--chromatic-key-black-w:36px]';
+  'relative flex [--chromatic-key-stride:68px] [--chromatic-key-black-w:36px]';
+
+/**
+ * The phone shows one octave, C to C — the first 13 of KEYBOARD_NOTES, eight
+ * white keys — and shares the width among them (R340): the stride is 1/8 of
+ * the container, so the keys fill any phone without scrolling, and the octave
+ * buttons move the range. A percentage in a custom property resolves where it
+ * is used, and `left` and `width` both resolve against this container.
+ */
+const MOBILE_OCTAVE_NOTE_COUNT = 13;
+const CHROMATIC_KEYBOARD_MOBILE_CLASS =
+  'relative flex w-full [--chromatic-key-stride:12.5%] [--chromatic-key-black-w:7.5%]';
 
 /**
  * How many white keys precede `noteIndex` — the black key's offset in stride

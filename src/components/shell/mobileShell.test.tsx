@@ -5,6 +5,8 @@ import { layerForTab, type ViewMode } from '@/types';
 import { TransportBar } from '@/components/TransportBar';
 import { HEADER_TOOLS } from '@/components/header/headerTools';
 import { MobileShell } from './MobileShell';
+import { DesktopShell } from './DesktopShell';
+import { useAppStore } from '@/store/store';
 import { MOBILE_TABS, MobileTabBar } from './MobileTabBar';
 import { MobileMenuSheet } from './MobileTopBar';
 import { mobileHeaderTools } from './useMobileTopBar';
@@ -140,5 +142,32 @@ describe('the mobile frame', () => {
     const html = renderToString(createElement(MobileShell, SHELL_PROPS));
     expect(html).toContain('solna</span>');
     expect(html).not.toContain('[&amp;_select]:min-h-11');
+  });
+});
+
+/** R340, R316: the frame picks the keyboard surface, as it picks the transport bar. */
+describe('the input dock keyboard follows the frame', () => {
+  const chromatic = {
+    ...SHELL_PROPS,
+    keyboardProps: { ...SHELL_PROPS.keyboardProps, keyboardMode: 'chromatic' as const },
+  };
+  const renderOpen = (shell: typeof MobileShell) => {
+    const before = useAppStore.getState();
+    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    try {
+      return renderToString(createElement(shell, chromatic));
+    } finally {
+      useAppStore.setState({ isInputPanelOpen: before.isInputPanelOpen, inputPanelMode: before.inputPanelMode });
+    }
+  };
+
+  test('the mobile frame asks for keys that share the width', () => {
+    expect(renderOpen(MobileShell)).toContain('[--chromatic-key-stride:12.5%]');
+  });
+
+  test('the desktop frame keeps the fixed-stride keyboard', () => {
+    const html = renderOpen(DesktopShell);
+    expect(html).toContain('[--chromatic-key-stride:68px]');
+    expect(html).not.toContain('[--chromatic-key-stride:12.5%]');
   });
 });

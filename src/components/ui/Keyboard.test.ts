@@ -7,9 +7,12 @@ import {
   clampKeyboardOctave,
   getScaleLockedKeyboardNotes,
   getScaleLockedKeyboardNotesFlat,
+  getScaleLockedTouchRows,
   getChordKeyboardRows,
   getChromaticKeyboardNotes,
   ChromaticKeyboard,
+  ChordKeyboard,
+  ScaleLockedKeyboard,
   KEYBOARD_NOTES,
   MELODY_KEYS,
   HOME_ROW_KEYS,
@@ -330,7 +333,7 @@ describe('ChromaticKeyboard renders byte-identically once getChromaticKeyboardNo
         onNoteOff: () => {},
       }),
     );
-    expect(html.length).toBe(8090);
+    expect(html.length).toBe(8023);
   });
 });
 
@@ -346,5 +349,109 @@ describe('scale-locked captions spell in the key', () => {
     // scripts/check-key-bindings.ts pins. It does not change when the key does.
     expect(KEYBOARD_NOTES.map((k) => k.note)).toContain('C#3');
     expect(KEYBOARD_NOTES.every((k) => !k.note.includes('b'))).toBe(true);
+  });
+});
+
+describe('getScaleLockedTouchRows — one octave of the scale per row (R340)', () => {
+  const cases: [string, string, number][] = [
+    ['C', 'Major', 7],
+    ['A', 'Blues', 6],
+    ['E', 'Hirajoshi', 5],
+    ['F#', 'Minor Pentatonic', 5],
+  ];
+  for (const [root, scaleType, length] of cases) {
+    test(`${root} ${scaleType}: both rows are ${length} keys, starting on the tonic`, () => {
+      const rows = getScaleLockedKeyboardNotes(root, scaleType, 0);
+      const { upper, lower } = getScaleLockedTouchRows(rows);
+      expect(upper).toHaveLength(length);
+      expect(lower).toHaveLength(length);
+      expect(upper[0].note).toBe(rows.topRow[0].note);
+    });
+
+    test(`${root} ${scaleType}: the lower row is the upper row an octave down, key for key`, () => {
+      const { upper, lower } = getScaleLockedTouchRows(getScaleLockedKeyboardNotes(root, scaleType, 0));
+      expect(lower.map((k) => pitchOf(k.note) + 12)).toEqual(upper.map((k) => pitchOf(k.note)));
+    });
+  }
+
+  test('every key keeps its desktop shortcut, and no shortcut repeats', () => {
+    const rows = getScaleLockedKeyboardNotes('E', 'Hirajoshi', 0);
+    const { upper, lower } = getScaleLockedTouchRows(rows);
+    const desktop = byKey(rows);
+    for (const k of [...upper, ...lower]) expect(desktop[k.key]).toBe(k.note);
+    const keys = [...upper, ...lower].map((k) => k.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('the mobile keyboard variant fits the width (R340)', () => {
+  const noop = () => {};
+  const idle = new Set<string>();
+
+  test('mobile chromatic shows one octave, C to C, on a width-relative stride', () => {
+    const html = renderToString(
+      React.createElement(ChromaticKeyboard, {
+        octaveOffset: 0,
+        activeNotes: idle,
+        onNoteOn: noop,
+        onNoteOff: noop,
+        variant: 'mobile',
+      }),
+    );
+    expect(html).toContain('id="key-C3"');
+    expect(html).toContain('id="key-C4"');
+    expect(html).not.toContain('id="key-C#4"');
+    expect(html).toContain('[--chromatic-key-stride:12.5%]');
+  });
+
+  test('desktop chromatic keeps every KEYBOARD_NOTES key', () => {
+    const html = renderToString(
+      React.createElement(ChromaticKeyboard, {
+        octaveOffset: 0,
+        activeNotes: idle,
+        onNoteOn: noop,
+        onNoteOff: noop,
+      }),
+    );
+    for (const k of KEYBOARD_NOTES) expect(html).toContain(`id="key-${k.note}"`);
+  });
+
+  test('mobile chord mode renders the chords only, no melody key', () => {
+    const rows = getChordKeyboardRows('C', 'Major', 0);
+    const props = { rows, activeNotes: idle, onNoteOn: noop, onNoteOff: noop };
+    const mobile = renderToString(React.createElement(ChordKeyboard, { ...props, variant: 'mobile' }));
+    const desktop = renderToString(React.createElement(ChordKeyboard, props));
+    for (const btn of rows.triadRow) expect(mobile).toContain(`id="chord-key-${btn.key}"`);
+    for (const key of MELODY_KEYS) {
+      expect(mobile).not.toContain(`id="chord-key-${key}"`);
+      expect(desktop).toContain(`id="chord-key-${key}"`);
+    }
+  });
+
+  test('the desktop chord keyboard centres safely, so overflow stays reachable', () => {
+    const html = renderToString(
+      React.createElement(ChordKeyboard, {
+        rows: getChordKeyboardRows('C', 'Major', 0),
+        activeNotes: idle,
+        onNoteOn: noop,
+        onNoteOff: noop,
+      }),
+    );
+    expect(html).not.toMatch(/justify-center(?!-safe)/);
+  });
+
+  test('mobile scale-locked mode renders exactly the touch rows', () => {
+    const rows = getScaleLockedKeyboardNotes('C', 'Major', 0);
+    const html = renderToString(
+      React.createElement(ScaleLockedKeyboard, {
+        rows,
+        activeNotes: idle,
+        onNoteOn: noop,
+        onNoteOff: noop,
+        variant: 'mobile',
+      }),
+    );
+    const { upper, lower } = getScaleLockedTouchRows(rows);
+    expect(html.match(/<button/g)).toHaveLength(upper.length + lower.length);
   });
 });

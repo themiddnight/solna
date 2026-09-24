@@ -4,7 +4,7 @@ import { BottomInputDock } from './BottomInputDock';
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
 import { useAppStore } from '@/store/store';
 import { DEFAULT_PADS } from './DrumPadGrid';
-import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './Keyboard';
+import { getChordKeyboardRows, getScaleLockedKeyboardNotes, MELODY_KEYS } from './Keyboard';
 
 // Same helper as Header.test.tsx / SoundMixer.test.tsx: ties an attribute
 // assertion to ONE element's opening tag rather than to a substring whose
@@ -166,5 +166,27 @@ describe('the dock focus chip', () => {
     } finally {
       useAppStore.setState({ focusTrack: 'synth' });
     }
+  });
+});
+
+/** R340: the mobile surface fits the width and never scrolls. */
+describe('the mobile keyboard surface', () => {
+  const chord = { ...keyboardProps, keyboardMode: 'chord' as const };
+
+  test('chord mode on mobile shows the chords only, in a surface that does not scroll', () => {
+    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    const html = renderToString(
+      <BottomInputDock keyboardProps={chord} drumProps={drumProps} keyboardVariant="mobile" />,
+    );
+    for (const key of MELODY_KEYS) expect(html).not.toContain(`id="chord-key-${key}"`);
+    expect(html).toContain('id="chord-key-KeyA"');
+    expect(html).not.toContain('overflow-x-auto');
+  });
+
+  test('chord mode on desktop keeps the melody keys and the scrolling surface', () => {
+    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    const html = renderToString(<BottomInputDock keyboardProps={chord} drumProps={drumProps} />);
+    for (const key of MELODY_KEYS) expect(html).toContain(`id="chord-key-${key}"`);
+    expect(html).toContain('overflow-x-auto');
   });
 });
