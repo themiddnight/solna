@@ -133,7 +133,6 @@ export interface DrumPad {
   note: string;
   color: string;
   shortcut: string;
-  volume: number;
   pitch: number;
   decay: number;
 }

@@ -93,7 +93,7 @@ test('a write that throws synchronously is not remembered, so the same value is 
 // this catches a NEW one that mutates an object-valued key in place anywhere
 // in src/, which no probe would reach and the dedupe would silently skip.
 test('no source file mutates an object-valued persisted key in place', () => {
-  const keys = 'customSynthPresets|customChordProgressions|customBeatPresets|drumPadVelocities';
+  const keys = 'customSynthPresets|customChordProgressions|customBeatPresets';
   const mutation = new RegExp(
     `\\b(${keys})(\\.(push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin)\\(|\\[[^\\]]+\\]\\s*=[^=])`,
   );

@@ -13,7 +13,7 @@ export const SHELL_PROPS: ShellProps = {
     chordKeyboardRows: getChordKeyboardRows('C', 'Major', 0),
     handleNoteOn: noop, handleNoteOff: noop,
   },
-  drumProps: { pads: [], activePadId: null, onTriggerPad: noop, onPadVolumeChange: noop, onPadVolumeCommit: noop },
+  drumProps: { pads: [], activePadId: null, onTriggerPad: noop },
   updateReady: false,
   onApplyUpdate: noop,
   onDismissUpdate: noop,

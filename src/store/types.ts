@@ -545,16 +545,6 @@ export interface UiSlice {
    * survives a reload without travelling with a saved/exported song.
    */
   followPlayhead: boolean;
-  /**
-   * Drum-pad strike velocities the user has moved off the pad's default,
-   * keyed by pad id — which IS the Beat voice id. Only overrides are stored;
-   * `DEFAULT_PADS.volume` stays the source of defaults. Persisted (a UI
-   * preference that survives a reload, never project content), and written
-   * once per slider release, never per pointer move.
-   */
-  drumPadVelocities: Partial<Record<BeatVoiceId, number>>;
-  /** Clamped to 0..1. */
-  setDrumPadVelocity: (id: BeatVoiceId, velocity: number) => void;
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
@@ -838,7 +828,6 @@ export interface PersistedState {
   customChordProgressions: CustomChordProgressionItem[];
   customBeatPresets: BeatPreset[];
   activeLoopId: string;
-  drumPadVelocities: Partial<Record<BeatVoiceId, number>>;
   /** The Drive account a previous page connected. Identity only — never a token (R037). */
   driveUser: DriveUserProfile | null;
 }

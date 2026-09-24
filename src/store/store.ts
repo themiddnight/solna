@@ -37,8 +37,6 @@ import { createCoalescedStorage } from '../utils/coalescedStorage';
 import { loadGapi, loadGis } from '../utils/googleScriptLoader';
 import type { GapiRoot } from '../utils/googleScriptLoader';
 import type { AppStore, PersistedState } from './types';
-import { BEAT_VOICE_IDS } from '@/data/beatPresets';
-import type { BeatVoiceId } from '@/types';
 import { asBoolean, sanitizeCustomChordProgressions, sanitizeCustomSynthPresets } from './sanitize';
 import { sanitizeCustomBeatPresets } from './sanitizeBeat';
 
@@ -180,9 +178,8 @@ let storeApi: StoreApi<AppStore> | undefined;
  * no longer here — IndexedDB is its home now, written by the autosave path
  * below. What is left is exactly what must survive a reload but is not a
  * project: which track/loop the user was on, the metronome, the vibe the loop
- * was loaded from, the drum-pad velocity overrides, and the cross-project
- * preset/progression/Beat library (never project content — the 2026-09-03
- * "excluded — user library" rule).
+ * was loaded from, and the cross-project preset/progression/Beat library
+ * (never project content — the 2026-09-03 "excluded — user library" rule).
  */
 export function partializeAppState(state: AppStore): PersistedState {
   return {
@@ -193,29 +190,8 @@ export function partializeAppState(state: AppStore): PersistedState {
     customChordProgressions: state.customChordProgressions,
     customBeatPresets: state.customBeatPresets,
     activeLoopId: state.activeLoopId,
-    drumPadVelocities: state.drumPadVelocities,
     driveUser: state.driveUser,
   };
-}
-
-/**
- * The drum-pad velocity overrides, VALIDATED rather than migrated (the "no
- * migration chains" rule): a plain object keeps only the entries whose key is
- * a Beat voice id and whose value is a finite number in 0..1; anything else
- * is dropped, and a value that is not a plain object yields `undefined` so the
- * slice default (`{}`) stands.
- */
-function sanitizeDrumPadVelocities(
-  value: unknown,
-): Partial<Record<BeatVoiceId, number>> | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-  const raw = value as Record<string, unknown>;
-  const out: Partial<Record<BeatVoiceId, number>> = {};
-  for (const id of BEAT_VOICE_IDS) {
-    const v = raw[id];
-    if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1) out[id] = v;
-  }
-  return out;
 }
 
 /**
@@ -254,8 +230,6 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
     customBeatPresets: input.customBeatPresets,
     activeLoopId: input.activeLoopId,
   };
-  const drumPadVelocities = sanitizeDrumPadVelocities(input.drumPadVelocities);
-  if (drumPadVelocities) sanitized.drumPadVelocities = drumPadVelocities;
   sanitized.driveUser = sanitizeDriveUser(input.driveUser);
 
   sanitized.metronomeActive = asBoolean(sanitized.metronomeActive);

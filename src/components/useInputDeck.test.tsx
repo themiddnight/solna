@@ -24,6 +24,7 @@ import { getChordKeyboardRows, getScaleLockedKeyboardNotes } from './ui/Keyboard
 import { MIX_LAYER_IDS } from '@/store/focusTrack';
 import { noteFrequency } from '@/utils/musicTheory';
 import { audioEngine } from '../audio/engine';
+import { BEAT_PREVIEW_VELOCITY } from '../audio/playback/drumPlayback';
 import { subscribeNoteInput, resetNoteInputListeners, type NoteInputEvent } from '../audio/playback/noteInputBus';
 import type { VoiceId } from '../audio/synth/voiceId';
 import type { ActiveSynth } from '../types/synth';
@@ -92,8 +93,22 @@ describe('useInputDeck', () => {
       'scaleType', 'setKeyboardMode', 'setKeyboardOctave',
     ]);
     expect(Object.keys(captured!.drumProps).sort()).toEqual([
-      'activePadId', 'onPadVolumeChange', 'onPadVolumeCommit', 'onTriggerPad', 'pads',
+      'activePadId', 'onTriggerPad', 'pads',
     ]);
+  });
+
+  /** R105: the voice's level is its Beat mix fader, so every pad strikes alike. */
+  test('every pad strikes at the Beat audition velocity', () => {
+    const initSpy = spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
+    const drumSpy = spyOn(audioEngine, 'triggerDrum').mockImplementation(() => {});
+    try {
+      renderToString(<Probe />);
+      for (const pad of DEFAULT_PADS) captured!.drumProps.onTriggerPad(pad);
+      expect(drumSpy.mock.calls).toEqual(DEFAULT_PADS.map((pad) => [pad.note, BEAT_PREVIEW_VELOCITY, undefined]));
+    } finally {
+      initSpy.mockRestore();
+      drumSpy.mockRestore();
+    }
   });
 });
 

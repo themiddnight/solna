@@ -11,7 +11,7 @@ paths:
   - "src/audio/drumSynth.ts"
   - "src/components/loop/beat/**"
   - "src/components/ui/DrumPadGrid.tsx"
-  - "src/components/drumPadVelocity.ts"
+  - "src/components/useInputDeck.ts"
   - "scripts/check-drum-kit-separation.ts"
   - "scripts/check-levels.ts"
   - "scripts/calibration/**"
@@ -31,7 +31,7 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 - `applyBeatParams` (`src/audio/beatAdapter.ts`) is the one patch → DSP hop for live, preview and offline. <!-- R102 -->
 - Voice order `kick snare rimshot clap hihat openhat hitom lowtom ride crash bell` is declared once in `BEAT_VOICE_IDS`; `BeatVoices`, `DEFAULT_BEAT_VOICES`, `BEAT_PRESETS`, `DEFAULT_PADS` and `triggerDrum` follow it. <!-- R103 -->
 - `bell` has no pad (`PADLESS_VOICES`). <!-- R104 -->
-- A pad velocity override is `drumPadVelocities` in the ui slice keyed by voice id, committed once on slider release, never per drag frame. <!-- R105 -->
+- A drum pad has no level control: it strikes at `BEAT_PREVIEW_VELOCITY`, and its voice's level is the current loop's Beat-mix fader. <!-- R105 -->
 - `BeatVoices` has no `reference` field; provenance lives on `FactoryBeatPreset`, so `keyof BeatVoices` is exactly the roster. <!-- R106 -->
 - `DRUM_ALIASES` is exactly `{ closedhat: 'hihat' }`, asserted with `toEqual` (an alias resolved before dispatch silently shadows a real case). <!-- R107 -->
 - A Beat patch is complete: every voice states every field; no `Partial` over a default, no `mergeDrumKit`. <!-- R108 -->
@@ -39,7 +39,7 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 - A Beat preset is installed whole (`structuredClone`), never merged. <!-- R110 -->
 - A voice's `reverbSend` multiplies the Beat track's reverb send; it is not a direct send to the master reverb. The effective drum reverb is `reverbSend × voice track gain × Beat bus level × Beat track reverb send`. <!-- R305 -->
 
-([ADR-0010](../../docs/decisions/0010-beat-instrument-three-fields.md), [ADR-0037](../../docs/decisions/0037-per-track-sends.md))
+([ADR-0010](../../docs/decisions/0010-beat-instrument-three-fields.md), [ADR-0047](../../docs/decisions/0047-drum-pads-take-the-beat-mix-level.md), [ADR-0037](../../docs/decisions/0037-per-track-sends.md))
 
 ## Grids and mute
 
@@ -70,7 +70,7 @@ The per-loop Beat instrument: its three fields, voice roster, complete patches, 
 - A second patch → DSP path beside `applyBeatParams` <!-- R102 -->
 - A voice list in any order other than `BEAT_VOICE_IDS`' <!-- R103 -->
 - A pad for `bell` <!-- R104 -->
-- Writing `drumPadVelocities` per drag frame <!-- R105 -->
+- A per-pad level, velocity slider or persisted pad velocity; a pad striking at any velocity but `BEAT_PREVIEW_VELOCITY` <!-- R105 -->
 - A `reference` field on `BeatVoices` <!-- R106 -->
 - Any `DRUM_ALIASES` entry beyond `closedhat`, or a subset assertion on it <!-- R107 -->
 - A `Partial` Beat patch merged over a default, or `mergeDrumKit` <!-- R108 -->

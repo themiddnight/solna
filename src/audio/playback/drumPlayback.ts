@@ -8,7 +8,8 @@ import { audioEngine } from '../engine';
  */
 /**
  * The velocity an AUDITION tap plays a Beat voice at — the Sound tab's
- * per-voice Preview button and the Pattern tab's per-track Play button.
+ * per-voice Preview button, the Pattern tab's per-track Play button and the
+ * input dock's drum pads, which carry no level of their own (R105).
  *
  * ONE constant, because both buttons exist to compare a voice against its
  * siblings while tuning: the two surfaces used to pass 0.9 and a bare literal

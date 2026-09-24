@@ -102,8 +102,7 @@ import type { AppStore, Loop } from './types';
  * What this contract does NOT cover, and never will: the internal voicing
  * constants nested inside `synthParams` / `chordSynthParams` / `bassSynthParams`
  * / `padSynthParams` (`SynthParams.subOscVolume`, `noiseVolume`), each
- * Beat voice's `gain`, a vibe's authored `pad.volume` and `DEFAULT_PADS`'
- * pad `volume` are all still LINEAR gain and are never converted. They are
+ * Beat voice's `gain` and a vibe's authored `pad.volume` are all still LINEAR gain and are never converted. They are
  * voicing constants, not bus faders: the dB half of this contract is the MIXER
  * — the source-bus levels and `beatMix` — and a voice `gain` is a term inside
  * a patch, which is why `beatControlSchema.ts` gives it a 0..1 percent knob

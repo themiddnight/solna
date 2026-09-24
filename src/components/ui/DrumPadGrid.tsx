@@ -1,8 +1,6 @@
 import React from 'react';
-import { Volume2 } from 'lucide-react';
 import { shortcutLabel } from '@/utils/keyboard';
 import type { DrumPad } from '@/types';
-import { Slider } from './Slider';
 
 /**
  * Exported under this name because scripts/check-key-bindings.ts imports
@@ -21,24 +19,21 @@ import { Slider } from './Slider';
  * across the three semantic ramps, so adjacency always guarantees a colour
  * change.
  */
-// NOTE (DEV-386): `volume` here is a VELOCITY, not a level — a per-pad strike
-// strength that goes to triggerDrum as a performance attribute. It keeps its
-// authored values (kick 0.9, hihat 0.75, …); flattening them would be an
-// audible regression. `DEFAULT_PADS.volume` is the default a pad falls back
-// to; a velocity the user moves persists per pad in the ui slice
-// (`drumPadVelocities`), keyed by pad id — the Beat voice id — and committed
-// once on slider release. See utils/gainUnits.ts for the velocity-vs-level rule.
+// A pad carries no level of its own: every pad strikes at the Beat page's
+// audition velocity (`BEAT_PREVIEW_VELOCITY`), and what sets how loud a voice
+// sounds is that voice's fader in the current loop's Beat mix, which the pad
+// hit already passes through (R105).
 export const DEFAULT_PADS: DrumPad[] = [
-  { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-drum-kick to-drum-kick/60 text-drum-kick-content', shortcut: 'KeyZ', volume: 0.9, pitch: 0, decay: 0.3 },
-  { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-drum-snare to-drum-snare/60 text-drum-snare-content', shortcut: 'KeyX', volume: 0.85, pitch: 0, decay: 0.2 },
-  { id: 'rimshot', name: 'Rim Shot', note: 'rimshot', color: 'from-drum-rimshot to-drum-rimshot/60 text-drum-rimshot-content', shortcut: 'KeyC', volume: 0.8, pitch: 0, decay: 0.12 },
-  { id: 'clap', name: 'Hand Clap', note: 'clap', color: 'from-drum-clap to-drum-clap/60 text-drum-clap-content', shortcut: 'KeyV', volume: 0.85, pitch: 0, decay: 0.2 },
-  { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-drum-hihat to-drum-hihat/60 text-drum-hihat-content', shortcut: 'KeyB', volume: 0.75, pitch: 0, decay: 0.05 },
-  { id: 'openhat', name: 'Open Hat', note: 'openhat', color: 'from-drum-openhat to-drum-openhat/60 text-drum-openhat-content', shortcut: 'KeyN', volume: 0.8, pitch: 0, decay: 0.35 },
-  { id: 'hitom', name: 'Hi Tom', note: 'hitom', color: 'from-drum-hitom to-drum-hitom/60 text-drum-hitom-content', shortcut: 'KeyM', volume: 0.8, pitch: 0, decay: 0.2 },
-  { id: 'lowtom', name: 'Low Tom', note: 'lowtom', color: 'from-drum-lowtom to-drum-lowtom/60 text-drum-lowtom-content', shortcut: 'Comma', volume: 0.8, pitch: 0, decay: 0.25 },
-  { id: 'ride', name: 'Ride Cymbal', note: 'ride', color: 'from-drum-ride to-drum-ride/60 text-drum-ride-content', shortcut: 'Period', volume: 0.75, pitch: 0, decay: 0.9 },
-  { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-drum-crash to-drum-crash/60 text-drum-crash-content', shortcut: 'Slash', volume: 0.75, pitch: 0, decay: 0.8 },
+  { id: 'kick', name: 'Kick Drum', note: 'kick', color: 'from-drum-kick to-drum-kick/60 text-drum-kick-content', shortcut: 'KeyZ', pitch: 0, decay: 0.3 },
+  { id: 'snare', name: 'Snare Snap', note: 'snare', color: 'from-drum-snare to-drum-snare/60 text-drum-snare-content', shortcut: 'KeyX', pitch: 0, decay: 0.2 },
+  { id: 'rimshot', name: 'Rim Shot', note: 'rimshot', color: 'from-drum-rimshot to-drum-rimshot/60 text-drum-rimshot-content', shortcut: 'KeyC', pitch: 0, decay: 0.12 },
+  { id: 'clap', name: 'Hand Clap', note: 'clap', color: 'from-drum-clap to-drum-clap/60 text-drum-clap-content', shortcut: 'KeyV', pitch: 0, decay: 0.2 },
+  { id: 'hihat', name: 'Closed Hat', note: 'hihat', color: 'from-drum-hihat to-drum-hihat/60 text-drum-hihat-content', shortcut: 'KeyB', pitch: 0, decay: 0.05 },
+  { id: 'openhat', name: 'Open Hat', note: 'openhat', color: 'from-drum-openhat to-drum-openhat/60 text-drum-openhat-content', shortcut: 'KeyN', pitch: 0, decay: 0.35 },
+  { id: 'hitom', name: 'Hi Tom', note: 'hitom', color: 'from-drum-hitom to-drum-hitom/60 text-drum-hitom-content', shortcut: 'KeyM', pitch: 0, decay: 0.2 },
+  { id: 'lowtom', name: 'Low Tom', note: 'lowtom', color: 'from-drum-lowtom to-drum-lowtom/60 text-drum-lowtom-content', shortcut: 'Comma', pitch: 0, decay: 0.25 },
+  { id: 'ride', name: 'Ride Cymbal', note: 'ride', color: 'from-drum-ride to-drum-ride/60 text-drum-ride-content', shortcut: 'Period', pitch: 0, decay: 0.9 },
+  { id: 'crash', name: 'Crash Cymbal', note: 'crash', color: 'from-drum-crash to-drum-crash/60 text-drum-crash-content', shortcut: 'Slash', pitch: 0, decay: 0.8 },
 ];
 
 /**
@@ -55,10 +50,6 @@ export interface DrumPadGridProps {
   pads: DrumPad[];
   activePadId: string | null;
   onTriggerPad: (pad: DrumPad) => void;
-  /** Live preview while the slider moves. */
-  onPadVolumeChange: (padId: string, volume: number) => void;
-  /** The gesture ended: persist the velocity. */
-  onPadVolumeCommit: (padId: string, volume: number) => void;
 }
 
 /** The presentational pad grid, shared by the in-page DrumPads card and the
@@ -67,8 +58,6 @@ export function DrumPadGrid({
   pads,
   activePadId,
   onTriggerPad,
-  onPadVolumeChange,
-  onPadVolumeCommit,
 }: DrumPadGridProps) {
   return (
     // 5 columns matches the two-row, five-per-row keyboard map exactly (ten
@@ -77,10 +66,10 @@ export function DrumPadGrid({
       {pads.map((pad) => {
         const isActive = activePadId === pad.id;
         return (
-          <div key={pad.id} id={`drum-pad-card-${pad.id}`} className="flex flex-col gap-1">
-            {/* Trigger Button Pad */}
+          <div key={pad.id} id={`drum-pad-card-${pad.id}`}>
             <button
               id={`btn-pad-${pad.id}`}
+              title={pad.name}
               onClick={() => onTriggerPad(pad)}
               className={`btn relative w-full h-14 sm:h-16 border-0 rounded-field bg-gradient-to-br ${pad.color} p-1.5 sm:p-2 flex flex-col justify-between items-start shadow-sm transition-all duration-75 ${
                 isActive
@@ -103,22 +92,6 @@ export function DrumPadGrid({
                 </kbd>
               </div>
             </button>
-
-            {/* Volume Slider */}
-            <div className="flex items-center gap-1 px-0.5">
-              <Volume2 className="w-2.5 h-2.5 text-base-content/50 shrink-0" />
-              <Slider
-                id={`slider-pad-vol-${pad.id}`}
-                min={0}
-                max={1}
-                step={0.01}
-                value={pad.volume}
-                onChange={(val) => onPadVolumeChange(pad.id, val)}
-                onCommit={(val) => onPadVolumeCommit(pad.id, val)}
-                className="range range-xs range-primary w-full"
-                title={`${pad.name} Volume`}
-              />
-            </div>
           </div>
         );
       })}

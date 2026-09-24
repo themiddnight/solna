@@ -18,7 +18,7 @@ import {
   synthPlaybackNoteOn,
 } from '../audio/playback/synthPlayback';
 import { emitNoteInput } from '../audio/playback/noteInputBus';
-import { ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
+import { BEAT_PREVIEW_VELOCITY, ensureDrumEngine, triggerPad as triggerDrumPad } from '../audio/playback/drumPlayback';
 import { useAppStore } from '../store/store';
 import type { AppStore } from '../store/types';
 import {
@@ -28,7 +28,7 @@ import {
   getScaleLockedKeyboardNotesFlat,
   getChordKeyboardRows,
 } from './ui/Keyboard';
-import type { BeatVoiceId, DrumPad, KeyboardMode } from '../types';
+import type { DrumPad, KeyboardMode } from '../types';
 import type { ActiveSynth, ArpSettings } from '../types/synth';
 import type { VoiceId } from '../audio/synth/voiceId';
 import { synthReleaseSeconds } from '../utils/synthPatch';
@@ -36,7 +36,6 @@ import type { SynthControlTarget } from '../utils/synthControl';
 import type { LayoutMode } from './shell/useLayoutMode';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
-import { padsWithVelocities } from './drumPadVelocity';
 import { synthTargetForFocus } from '../store/focusTrack';
 import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD } from '../store/sourceBuses';
 
@@ -270,8 +269,6 @@ export interface InputDeckDrumProps {
   pads: DrumPad[];
   activePadId: string | null;
   onTriggerPad: (pad: DrumPad) => void;
-  onPadVolumeChange: (padId: string, volume: number) => void;
-  onPadVolumeCommit: (padId: string, volume: number) => void;
 }
 
 // The patch and the Arp settings the keyboard/arp actually play: the FOCUSED
@@ -643,25 +640,19 @@ function useQwertyNoteListeners({
 
 /**
  * Drum pad state and the QWERTY drum listener (verbatim from DrumPads,
- * including the isTypingTarget guard, the e.repeat skip and the [pads,
- * triggerPad] deps). Returns the memoized prop bundle the dock renders from:
+ * including the isTypingTarget guard and the e.repeat skip). Returns the memoized prop bundle the dock renders from:
  * App mounts every tab at once and calls this hook once at the top, so a fresh
  * object per render would defeat React.memo on every consumer downstream no
  * matter how stable their other props are.
  */
 function useDrumPads(): InputDeckDrumProps {
-  // Persisted overrides from the ui slice, plus a local DRAFT for a slider
-  // mid-drag: the drag previews here and commits once on release, because a
-  // pointer gesture must never write persisted state per move.
-  const overrides = useAppStore((s) => s.drumPadVelocities);
-  const setDrumPadVelocity = useAppStore((s) => s.setDrumPadVelocity);
-  const [draft, setDraft] = useState<Partial<Record<string, number>>>({});
-  const pads = useMemo(() => padsWithVelocities(DEFAULT_PADS, overrides, draft), [overrides, draft]);
   const [activePadId, setActivePadId] = useState<string | null>(null);
 
   const triggerPad = useCallback((pad: DrumPad) => {
     ensureDrumEngine();
-    triggerDrumPad(pad.note, pad.volume);
+    // R105: the Beat page's audition velocity; the voice's own level is its
+    // Beat-mix fader, which the hit passes through in the engine.
+    triggerDrumPad(pad.note, BEAT_PREVIEW_VELOCITY);
     setActivePadId(pad.id);
     setTimeout(() => setActivePadId(null), 150);
   }, []);
@@ -670,7 +661,7 @@ function useDrumPads(): InputDeckDrumProps {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (ignoresNoteKey(e)) return;
       if (e.repeat) return;
-      const pad = pads.find((p) => p.shortcut === e.code);
+      const pad = DEFAULT_PADS.find((p) => p.shortcut === e.code);
       if (pad) {
         triggerPad(pad);
       }
@@ -678,35 +669,15 @@ function useDrumPads(): InputDeckDrumProps {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pads, triggerPad]);
-
-  const handlePadVolumeChange = useCallback((padId: string, volume: number) => {
-    setDraft((prev) => ({ ...prev, [padId]: volume }));
-  }, []);
-
-  const handlePadVolumeCommit = useCallback(
-    (padId: string, volume: number) => {
-      // Pad ids ARE Beat voice ids (DrumPadGrid.test.tsx pins the roster).
-      setDrumPadVelocity(padId as BeatVoiceId, volume);
-      setDraft((prev) => {
-        if (!(padId in prev)) return prev;
-        const next = { ...prev };
-        delete next[padId];
-        return next;
-      });
-    },
-    [setDrumPadVelocity],
-  );
+  }, [triggerPad]);
 
   return useMemo<InputDeckDrumProps>(
     () => ({
-      pads,
+      pads: DEFAULT_PADS,
       activePadId,
       onTriggerPad: triggerPad,
-      onPadVolumeChange: handlePadVolumeChange,
-      onPadVolumeCommit: handlePadVolumeCommit,
     }),
-    [pads, activePadId, triggerPad, handlePadVolumeChange, handlePadVolumeCommit],
+    [activePadId, triggerPad],
   );
 }
 
@@ -796,8 +767,7 @@ export function useInputDeck(layoutMode: LayoutMode): {
   });
 
   // Drums: pad state + trigger, and the QWERTY drum listener (verbatim from
-  // DrumPads, including the isTypingTarget guard, e.repeat skip, and the
-  // [pads, triggerPad] deps).
+  // DrumPads, including the isTypingTarget guard and the e.repeat skip).
   const drumProps = useDrumPads();
 
   // App mounts every tab simultaneously and calls this hook once at the top,

@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { DrumPadGrid, DEFAULT_PADS, PADLESS_VOICES } from './DrumPadGrid';
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
@@ -9,8 +8,6 @@ const props = {
   pads: DEFAULT_PADS,
   activePadId: null,
   onTriggerPad: noop,
-  onPadVolumeChange: noop,
-  onPadVolumeCommit: noop,
 };
 
 describe('DEFAULT_PADS', () => {
@@ -74,8 +71,6 @@ describe('DrumPadGrid', () => {
     expect(html).toContain('Crash Cymbal');
     expect(html).toContain('btn-pad-kick');
     expect(html).toContain('kbd-key');
-    expect(html).toContain('range range-xs range-primary');
-    expect(html).toContain('text-base-content/50');
     expect(html).not.toContain('#12152A');
     expect(html).not.toContain('text-white');
     expect(html).not.toContain('ring-white');
@@ -89,14 +84,15 @@ describe('DrumPadGrid', () => {
   });
 });
 
-describe('pad velocity commits once per gesture', () => {
-  // renderToString cannot fire a pointer event, so the grid's wiring is pinned
-  // at the source: it hands each slider's release to onPadVolumeCommit. When
-  // the Slider commits (a gesture's end, only after a move — never from the
-  // onChange that runs on every move) is its own contract, in Slider.test.tsx.
-  const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8');
+/** R105: a pad has no level control; the Beat mix fader sets its voice's level. */
+describe('a pad carries no level of its own', () => {
+  test('the grid renders no slider', () => {
+    const html = renderToString(<DrumPadGrid {...props} />);
+    expect(html.split('id="btn-pad-').length - 1).toBe(DEFAULT_PADS.length);
+    expect(html).not.toContain('type="range"');
+  });
 
-  test('the grid routes each slider release to onPadVolumeCommit', () => {
-    expect(read('./DrumPadGrid.tsx')).toContain('onCommit={(val) => onPadVolumeCommit(pad.id, val)}');
+  test('no pad authors a volume', () => {
+    for (const pad of DEFAULT_PADS) expect(pad).not.toHaveProperty('volume');
   });
 });

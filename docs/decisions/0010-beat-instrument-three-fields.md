@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425).
+Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425). R105 amended by
+[ADR-0047](0047-drum-pads-take-the-beat-mix-level.md).
 
 ## Context
 
@@ -42,9 +43,9 @@ a patch to the DSP, shared by the live bridge, the preview and the offline rende
 declares, and the `BeatVoices` interface, `DEFAULT_BEAT_VOICES`, every `BEAT_PRESETS` patch,
 `DEFAULT_PADS` and `triggerDrum`'s dispatch all follow it, so a reviewer comparing any two of those
 lists is comparing sorted lists. `DEFAULT_PADS` follows the order but is not the whole roster:
-`bell` has no pad (`PADLESS_VOICES`). A pad's velocity override is persisted UI state,
-`drumPadVelocities` in the ui slice keyed by voice id, committed once when the slider is released —
-never per drag frame.
+`bell` has no pad (`PADLESS_VOICES`). A pad has no level of its own: it strikes at the Beat
+audition velocity and its voice's level is the current loop's Beat-mix fader (ADR-0047; this
+replaced a persisted per-pad velocity override, `drumPadVelocities`).
 
 `BeatVoices` carries no `reference` field — a preset's provenance lives on `FactoryBeatPreset`
 instead, deliberately off the voices type, so `keyof BeatVoices` stays exactly the voice roster and
@@ -96,8 +97,8 @@ that the two are the same object rather than copies that can drift. A preset is 
   declared once in `BEAT_VOICE_IDS`; `BeatVoices`, `DEFAULT_BEAT_VOICES`, `BEAT_PRESETS`,
   `DEFAULT_PADS`, `triggerDrum` follow it.
 - **R104** — `bell` has no pad (`PADLESS_VOICES`).
-- **R105** — Pad velocity override = `drumPadVelocities` in the ui slice keyed by voice id,
-  committed once on slider release, never per drag frame.
+- **R105** — A drum pad has no level control; it strikes at `BEAT_PREVIEW_VELOCITY`, and its
+  voice's level is the current loop's Beat-mix fader ([ADR-0047](0047-drum-pads-take-the-beat-mix-level.md)).
 - **R106** — `BeatVoices` has no `reference` field; provenance lives on `FactoryBeatPreset`;
   `keyof BeatVoices` = the roster.
 - **R107** — `DRUM_ALIASES` is exactly `{ closedhat: 'hihat' }`, asserted with `toEqual`.

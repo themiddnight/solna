@@ -333,9 +333,6 @@ const PERSISTED_KEYS = [
   // NOT project content — see PROJECT_CONTENT_KEYS.
   'customBeatPresets',
   'activeLoopId',
-  // Drum-pad velocity overrides: a UI preference that survives a reload,
-  // never project content.
-  'drumPadVelocities',
   'driveUser',
 ];
 
@@ -576,10 +573,6 @@ describe('persist serialisation is skipped when no persisted key changed', () =>
       customBeatPresets: [
         () => s().saveCustomBeatPreset('Probe', s().beatParams),
         () => s().deleteCustomBeatPreset(s().customBeatPresets[0].id),
-      ],
-      drumPadVelocities: [
-        () => s().setDrumPadVelocity('kick', 0.5),
-        () => s().setDrumPadVelocity('kick', 0.25),
       ],
       driveUser: [], // written only by connect/disconnectDrive; driveSlice.test.ts pins the replace
     };
