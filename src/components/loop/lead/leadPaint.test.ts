@@ -283,6 +283,29 @@ describe('createLeadPaintHandlers — pointer routing', () => {
     }
   });
 
+  test('a touch on the resize handle starts no span resize and leaves the event to the cell', () => {
+    const { commits, calls, h } = withTouch();
+    let started = 0;
+    h.onHandlePointerDown({ pointerId: 3, button: 0, pointerType: 'touch' }, () => {
+      started += 1;
+    });
+    expect(started).toBe(0);
+    expect(calls).toEqual([]);
+    expect(commits).toEqual([]);
+  });
+
+  test('mouse and pen on the resize handle start its drag at once', () => {
+    for (const pointerType of ['mouse', 'pen', undefined]) {
+      const { calls, h } = withTouch();
+      let started = 0;
+      h.onHandlePointerDown({ pointerId: 1, button: 0, pointerType }, () => {
+        started += 1;
+      });
+      expect(started).toBe(1);
+      expect(calls).toEqual([]);
+    }
+  });
+
   test('a window end the touch session owns stops there', () => {
     const { calls, h } = withTouch(true);
     h.onWindowPointerEnd({ pointerId: 3 }, 'pointercancel');

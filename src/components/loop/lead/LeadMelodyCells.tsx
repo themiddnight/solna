@@ -282,22 +282,30 @@ function LeadMelodyCell({
       {endsSpan && (
         <span
           aria-hidden="true"
-          onPointerDown={(e) => {
-            const { spanStartIdx, spanCells, startCol } = spanAt(col);
-            startResize(e, {
-              stepIndex: spanStartIdx,
-              note,
-              startLen: spanCells,
-              maxLen: columns - startCol,
-              stride,
-            });
-          }}
-          // touch-none: without it a touch drag the browser turns into a
-          // scroll fires pointercancel, which correctly discards — so the
-          // gesture would silently do nothing on a touch device.
+          onPointerDown={(e) =>
+            controller.onHandlePointerDown(e, () => {
+              const { spanStartIdx, spanCells, startCol } = spanAt(col);
+              startResize(e, {
+                stepIndex: spanStartIdx,
+                note,
+                startLen: spanCells,
+                maxLen: columns - startCol,
+                stride,
+              });
+            })
+          }
+          // No touch-action of its own: it inherits the scroller's pan-x
+          // pan-y, so a finger swipe that starts on the handle scrolls
+          // (touch never drags the handle; the note's long-press resizes).
+          // CSS cannot branch on pointer type, and the old touch-none would
+          // block that pan. The cost is a pen on a touchscreen, which honours
+          // touch-action too: the browser may take a pen drag on the handle
+          // as a pan and pointercancel it, which writes nothing (R125), the
+          // same as a pen paint drag on the cells already does. A mouse never
+          // pans, so its drag is unchanged.
           // before:*: the visible strip stays w-2; the grab area is 16px,
           // all inside this end cell so it never takes a neighbour's tap.
-          className="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none before:absolute before:inset-y-0 before:right-0 before:w-4"
+          className="absolute inset-y-0 right-0 w-2 cursor-ew-resize before:absolute before:inset-y-0 before:right-0 before:w-4"
         />
       )}
     </button>

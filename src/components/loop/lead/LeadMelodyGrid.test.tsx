@@ -377,8 +377,12 @@ describe('the resize handle', () => {
   test('keeps its visible 8px strip but grabs across 16px, all inside the end cell', () => {
     const html = cellsWithOneNote();
     expect(html).toContain(
-      'class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none before:absolute before:inset-y-0 before:right-0 before:w-4"',
+      'class="absolute inset-y-0 right-0 w-2 cursor-ew-resize before:absolute before:inset-y-0 before:right-0 before:w-4"',
     );
+  });
+
+  test('sets no touch-action of its own, so a finger swipe from the handle still scrolls', () => {
+    expect(cellsWithOneNote()).not.toContain('touch-none');
   });
 });
 

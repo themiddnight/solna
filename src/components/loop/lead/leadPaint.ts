@@ -141,6 +141,12 @@ export interface LeadPaintHandlers {
     covered: boolean,
   ) => void;
   onCellPointerEnter: (e: LeadPaintPointerLike, stepIndex: number, col: number, note: string) => void;
+  /**
+   * A pointerdown on a note's resize handle. Mouse and pen start the
+   * handle's own drag at once; touch does nothing here and lets the event
+   * bubble to the cell, whose touch session owns the whole note (R343).
+   */
+  onHandlePointerDown: (e: LeadPaintPointerLike, startResize: () => void) => void;
   onCellClick: (e: LeadPaintClickLike, stepIndex: number, note: string) => void;
   /** A window pointermove: only a touch session reads it. */
   onWindowPointerMove: (e: LeadPaintPointerLike) => void;
@@ -185,6 +191,13 @@ export function createLeadPaintHandlers(
     },
     onCellPointerEnter: (e, stepIndex, col, note) => {
       controller.visit(e.pointerId, stepIndex, col, note);
+    },
+    onHandlePointerDown: (e, startResize) => {
+      // A touch on the handle is a touch on the note: tap erases, swipe
+      // scrolls, long-press keeps or resizes. Starting the handle's drag
+      // here would stop propagation, so the session would never see it.
+      if (touch && e.pointerType === 'touch') return;
+      startResize();
     },
     onCellClick: (e, stepIndex, note) => {
       if (!leadPaintClickIsKeyboard(e.detail)) return;

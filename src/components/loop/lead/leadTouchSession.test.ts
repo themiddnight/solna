@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import type { SpanResizePointer } from '@/components/ui/useSpanResize';
-import { createLeadPaintController, type LeadPaintCommit } from './leadPaint';
+import { createSpanResizeSlot, type SpanResizePointer } from '@/components/ui/useSpanResize';
+import {
+  createLeadPaintController,
+  createLeadPaintHandlers,
+  type LeadPaintCommit,
+} from './leadPaint';
 import { createLeadTouchSession, type LeadTouchDeps } from './leadTouchSession';
 import { LEAD_LONG_PRESS_MS } from './leadTouchGesture';
 import { LEAD_CELL_SIZE } from './melodyGrid';
+import { leadResizeCallbacks } from './useLeadNoteResize';
 
 const ROWS = ['E4', 'D4', 'C4'];
 const S = LEAD_CELL_SIZE;
@@ -221,5 +226,147 @@ describe('touch interruptions', () => {
     p.session.move(p.at(3, 2));
     expect(p.commits.map((c) => c.stepIndex)).toEqual([2]);
     expect(p.session.holding()).toBe(false);
+  });
+});
+
+/**
+ * A 1-step C4 note at column 2, touched on its resize handle, with the real
+ * handlers, session, span-resize slot and Lead resize writes wired the way
+ * LeadMelodyCells wires them (a long-press resize passes clickErases false).
+ */
+function handleRig() {
+  const commits: LeadPaintCommit[] = [];
+  const writes: string[] = [];
+  const spanStarts: number[] = [];
+  const controller = createLeadPaintController((c) => commits.push(c), (col) => col);
+  const target = new EventTarget();
+  const slot = createSpanResizeSlot<{ stepIndex: number; note: string }>(() => target);
+  let clock = 0;
+  let timer: (() => void) | null = null;
+  const session = createLeadTouchSession(controller, {
+    now: () => clock,
+    schedule: (_ms, fn) => {
+      timer = fn;
+      return () => {
+        if (timer === fn) timer = null;
+      };
+    },
+    measure: () => ({ left: 0, top: 0, clipLeft: 0, clipRight: 16 * S, columns: 16, rowCount: ROWS.length }),
+    rowNote: (row) => ROWS[row],
+    resolveStepIndex: (col) => col,
+    startNoteResize: (pointer, col, note) => {
+      spanStarts.push(pointer.pointerId);
+      slot.start(
+        pointer,
+        {
+          identity: { stepIndex: col, note },
+          startLength: 1,
+          maxLength: 16 - col,
+          pixelsPerStep: S,
+          ...leadResizeCallbacks(
+            {
+              setNoteLength: (i, n, len) => writes.push(`len ${i} ${n} ${len}`),
+              erase: (i, n) => writes.push(`erase ${i} ${n}`),
+            },
+            1,
+            false,
+          ),
+        },
+        () => {},
+      );
+    },
+    cancelNoteResize: () => slot.cancel(),
+  });
+  const handlers = createLeadPaintHandlers(controller, () => {}, session);
+  // The handle's centre-right: inside its 16px grab area, which on a 28px
+  // cell covers the cell's centre.
+  const x = 2 * S + S - 6;
+  const y = centre(2, 2).y;
+  const pointer = (dx = 0) => ({ pointerId: 7, button: 0, pointerType: 'touch', clientX: x + dx, clientY: y });
+  const windowEvent = (type: string, dx: number): Event =>
+    Object.assign(new Event(type), { pointerId: 7, clientX: x + dx, clientY: y });
+  return {
+    session,
+    commits,
+    writes,
+    spanStarts,
+    advance: (ms: number) => {
+      clock += ms;
+    },
+    hold: () => {
+      clock += LEAD_LONG_PRESS_MS;
+      timer?.();
+    },
+    /** One pointerdown as the DOM delivers it: the handle, then — unless
+     * the handle started its own drag and stopped propagation — the cell. */
+    down: () => {
+      let handleDragged = false;
+      handlers.onHandlePointerDown(pointer(), () => {
+        handleDragged = true;
+      });
+      if (!handleDragged) handlers.onCellPointerDown(pointer(), 2, 2, 'C4', true);
+      return handleDragged;
+    },
+    /** A window event reaches the grid's lifetime listener, then the resize's. */
+    move: (dx: number) => {
+      handlers.onWindowPointerMove(pointer(dx));
+      target.dispatchEvent(windowEvent('pointermove', dx));
+    },
+    up: (dx = 0) => {
+      handlers.onWindowPointerEnd(pointer(dx), 'pointerup');
+      target.dispatchEvent(windowEvent('pointerup', dx));
+    },
+  };
+}
+
+describe("touch on a note's resize handle", () => {
+  test('opens the touch session, not a span resize', () => {
+    const r = handleRig();
+    expect(r.down()).toBe(false);
+    expect(r.session.isOpen()).toBe(true);
+    expect(r.spanStarts).toEqual([]);
+    expect(r.commits).toEqual([]);
+  });
+
+  test('a long-press and an unmoved lift keeps a 1-step note', () => {
+    const r = handleRig();
+    r.down();
+    r.hold();
+    expect(r.spanStarts).toEqual([7]);
+    r.up();
+    expect(r.writes).toEqual([]);
+    expect(r.commits).toEqual([]);
+  });
+
+  test('a long-press then a drag resizes the note once, on the lift', () => {
+    const r = handleRig();
+    r.down();
+    r.hold();
+    r.move(2 * S);
+    expect(r.writes).toEqual([]);
+    r.up(2 * S);
+    expect(r.writes).toEqual(['len 2 C4 3']);
+    expect(r.commits).toEqual([]);
+  });
+
+  test('a tap removes the note', () => {
+    const r = handleRig();
+    r.down();
+    r.advance(120);
+    r.up();
+    expect(r.commits).toEqual([{ stepIndex: 2, note: 'C4', mode: 'erase' }]);
+    expect(r.writes).toEqual([]);
+  });
+
+  test('a swipe writes nothing: the browser scrolls it', () => {
+    const r = handleRig();
+    r.down();
+    r.advance(50);
+    r.move(12);
+    r.hold();
+    r.up(12);
+    expect(r.commits).toEqual([]);
+    expect(r.writes).toEqual([]);
+    expect(r.spanStarts).toEqual([]);
   });
 });
