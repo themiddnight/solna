@@ -62,6 +62,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0045](0045-vibe-picker-preview.md) | Vibe picker with preview | Vibes open from a Header tool into a centred Modal that auditions a vibe on the current loop (stop, cut, one write, soloLoop); Use keeps it, every other exit restores a one-write snapshot; persisted writes are held and note input suspended while it is open. |
 | [0046](0046-mobile-keyboard-fits-the-width.md) | The mobile keyboard fits the width | Below `md` the dock's keys share the width and never scroll, asked for by the frame: chromatic one octave, scale one octave of the scale per row, chord the chords only. |
 | [0047](0047-drum-pads-take-the-beat-mix-level.md) | Drum pads take their level from the Beat mix | A pad has no level control: every pad strikes at the Beat audition velocity and its voice's level is the current loop's Beat-mix fader; the persisted `drumPadVelocities` is gone. |
+| [0048](0048-input-target-link.md) | Input target link | The keys play an input target that follows the selection unless the dock's link toggle pins it (`inputTargetPin`, `null` = linked); record arm overrides the pin; the dock panel is derived from the target, so the Keyboard / Drums tabs are gone; `kbd` keycaps show only on a desktop screen. |
 
 ## Adding or changing a decision
 

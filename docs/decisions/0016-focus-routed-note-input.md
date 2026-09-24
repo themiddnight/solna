@@ -1,6 +1,8 @@
 # ADR-0016: Input plays the focused track
 
-**Status:** Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425).
+**Status:** Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425). R163 and R167
+amended by [0048](0048-input-target-link.md): input plays the *input target*, which is
+`focusTrack` unless the dock pins another track.
 
 ## Context
 

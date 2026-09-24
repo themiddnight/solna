@@ -50,7 +50,7 @@ summarised as "setters".
 | **fx** `fxSlice.ts` (32) | the `fx*` twin of the lead keys + `fxSynthParams`, `fxArpSettings`, `fxVolume`, `fxMuted` | the `Fx` twins of the lead actions + `setFxSynthParams`, `setFxArpSettings`, `setFxVolume`, `toggleFxMuted` | same as lead | — |
 | **beat** `beatSlice.ts` (200) | `beatParams`, `beatPattern`, `beatMix` | `setBeatPreset`, `setBeatParams`, `updateBeatVoice`, `updateBeatFilter`, `resetBeatVoice`, `resetBeatParams`, `replaceBeatPattern`, `toggleBeatStep`, `setBeatVoiceLevel`, `toggleBeatVoiceMuted`, `setBeatLevel`, `toggleBeatMuted` | presets `customBeatPresets` (`:42-44`); transport `meterId` | — |
 | **effects** `effectsSlice.ts` (14) | `effects` | `setEffects` | — | — |
-| **ui** `uiSlice.ts` (147) | `activeTab`, `focusTrack`, `soloTracks`, `recordingTrack`, `loopCopySelection`, `loopCopySourceId`, `loopClipboard`, `keyboardMode`, `followPlayhead`, `midiActivityTimestamp`, `midiMappings`, `isMidiSettingsOpen`, `isInputPanelOpen`, `inputPanelMode`, `midiLearnTargetId`, `selectedMidiInputId` | setters/togglers, including `setDrumPadVelocity` and the MIDI-mapping CRUD (`:127-140`) | — | writes **localStorage directly** for `keyboardMode` and `followPlayhead` (`solna_keyboard_mode`, `solna_follow_playhead`, `:10-57`, `:116-125`) |
+| **ui** `uiSlice.ts` (147) | `activeTab`, `focusTrack`, `soloTracks`, `recordingTrack`, `loopCopySelection`, `loopCopySourceId`, `loopClipboard`, `keyboardMode`, `followPlayhead`, `midiActivityTimestamp`, `midiMappings`, `isMidiSettingsOpen`, `isInputPanelOpen`, `inputTargetPin` (persisted), `midiLearnTargetId`, `selectedMidiInputId` | setters/togglers, including `setDrumPadVelocity` and the MIDI-mapping CRUD (`:127-140`) | — | writes **localStorage directly** for `keyboardMode` and `followPlayhead` (`solna_keyboard_mode`, `solna_follow_playhead`, `:10-57`, `:116-125`) |
 | **presets** `presetsSlice.ts` (164) | `customSynthPresets`, `customChordProgressions`, `customBeatPresets` | `saveCustomPreset`, `deleteCustomPreset`, `saveCustomChordProgression`, `deleteCustomChordProgression`, `saveCustomBeatPreset`, `deleteCustomBeatPreset`; `MAX_LIBRARY_ENTRIES` cap on save (`:16`) | beat `beatParams` | beat: `saveCustomBeatPreset` also sets `beatParams.basePresetId` (`:143`) |
 | **loop** `loopSlice.ts` (273) | `loops`, `activeLoopId` | `addLoop`, `duplicateLoop`, `deleteLoop`, `reorderLoops`, `reorderLoopsArray`, `setLoopName`, `setLoopTempName`, `setLoopRepeatCount`, `setLoopMix`, `setActiveLoop` | transport `playbackScope`, `songLoopIndex`, player fields | transport: `playbackScope` (`:114`, `:149`), `songLoopIndex`, stops every player on delete (`:175-178`); flat per-loop mix keys via `setLoopMix` (`:260-269`) |
 | **loopCopy** `loopCopySlice.ts` (61) | — | `applyLoopCopy` | loop | `loops`, then calls `loadLoop` (engine side effects) when the target is active (`:26-29`) |
@@ -87,7 +87,6 @@ actually implements either interface.
 | `soloNav.ts` | Clears `soloTracks` on a layer or `activeLoopId` change | `useSoloNavClear()` `App.tsx:111` | `{layer, activeLoopId}`, `shallow` (`soloNav.ts:49-98`) | `soloTracks` |
 | `vibeNav.ts` | Clears `selectedVibeId` on any `activeLoopId` change | `useVibeNavClear()` `App.tsx:119` | `activeLoopId` (`vibeNav.ts:32-40`) | `selectedVibeId` |
 | `reharmonizeNav.ts` | Clears the `reharmonizedIndicator` badge on an `activeLoopId` change or a project install (the same-loop-id-collides-across-projects case `soloNav.ts` also guards against) | `useReharmonizeNavClear()` `App.tsx` | `{activeLoopId, projectInstallCount}`, `shallow` | `reharmonizedIndicator` |
-| `focusPanelSync.ts` | `inputPanelMode` follows `focusTrack` (drum → pads) | `useFocusPanelSync()` `App.tsx:115` | `focusTrack`, `fireImmediately` (`:39-50`) | `inputPanelMode` |
 | `songMode.ts` | Song-layer coordinator: enters or leaves song scope, subscribes to the playback clock while a song plays, and schedules `loadLoop(id, {atBoundary})` at each boundary | `useSongModeSync()` `App.tsx:106` | `{tab, activeLoopId, playerStatesKey, playbackScope}` (`:285-307`); `subscribePlaybackClock` | direct `useAppStore.setState` (`:114`, `:137`), `songLoopIndex`; calls `loadLoop` |
 | `audioRecovery.ts` | Audio health → recovery modal state; recovery = recreate session → `applyEngineSnapshot` → validate | `useEffect(() => startAudioRecoveryBridge())` `App.tsx:152` | `audioEngine.subscribeHealth` | its own vanilla store; `hardStopAll`; the incident store |
 | `incidentReporter.ts` | Routes detected, render and manual incidents to the incident store | registers `setOperationFailureSink` **as an import side effect** (`:60`); `installGlobalIncidentCapture` in `App.tsx:254`; `ErrorBoundary` `App.tsx:258`; `ProjectMenu.tsx:554` | — | `@/incidents/incidentStore` |
@@ -138,7 +137,6 @@ flowchart LR
     LR["leadRecord bridges<br/>(via useEngineSync)"]
     SN["soloNav"]
     VN["vibeNav"]
-    FP["focusPanelSync"]
     SM["songMode"]
     AS["projectAutosave<br/>(built at import, armed after boot)"]
   end
@@ -159,7 +157,6 @@ flowchart LR
   Slices -- selectors --> ES --> Engine
   Slices --> SN -- clearSoloTracks --> Slices
   Slices --> VN -- setSelectedVibeId --> Slices
-  Slices --> FP -- setInputPanelMode --> Slices
   Slices --> SM -- setState / loadLoop --> Slices
   Clock --> SM
   NoteBus --> LR -- record*/set*NoteLength --> Slices
@@ -187,7 +184,7 @@ flowchart LR
 
 | Destination | What | Written by | Read by |
 |---|---|---|---|
-| localStorage `musibox_project_state_v1` | `metronomeActive`, `selectedVibeId`, `focusTrack`, `customSynthPresets`, `customChordProgressions`, `customBeatPresets`, `activeLoopId`, `driveUser` (`partializeAppState`, `store.ts`) | zustand `persist` → `createDedupedJsonStorage` (`persistStorage.ts`) → coalesced storage | `merge` → `sanitizePersistedState` (`store.ts:193-248`, `:337-341`) |
+| localStorage `musibox_project_state_v1` | `metronomeActive`, `selectedVibeId`, `focusTrack`, `inputTargetPin`, `customSynthPresets`, `customChordProgressions`, `customBeatPresets`, `activeLoopId`, `driveUser` (`partializeAppState`, `store.ts`) | zustand `persist` → `createDedupedJsonStorage` (`persistStorage.ts`) → coalesced storage | `merge` → `sanitizePersistedState` (`store.ts:193-248`, `:337-341`) |
 | localStorage `solna_keyboard_mode`, `solna_follow_playhead` | `keyboardMode`, `followPlayhead` | `uiSlice` setters, directly (`uiSlice.ts:10-57`) | slice initialiser (`uiSlice.ts:82-83`) |
 | localStorage legacy keys (`murva_*`) | legacy preset libraries | — | `migrateLegacyPresets`, then removed (`migrate.ts:69-105`) |
 | IndexedDB `solna-projects` / store `project` / key `current` | `ProjectSlotRecord { body, source }` (`projectSource.ts:89`) | `projectSlice.save` → `projectStore.save` → `putRecord` (`projectStoreIdb.ts:73-77`) | `projectStore.load` → `sanitizeSlotRecord` → `normalizeStoredBody` (`projectStore.ts`) |

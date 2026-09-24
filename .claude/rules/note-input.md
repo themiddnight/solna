@@ -6,6 +6,8 @@ paths:
   - "src/store/leadRecord.ts"
   - "src/components/useInputDeck.ts"
   - "src/components/ui/Keyboard.tsx"
+  - "src/components/ui/BottomInputDock.tsx"
+  - "src/components/ui/useBottomInputDock.ts"
 ---
 
 # The note-input layer
@@ -69,19 +71,33 @@ that needs store state — the melody recorder, for one — subscribes from
 
 ### Focus routing
 
-- The computer keyboard, the on-screen keyboard and the arp play the track `focusTrack` names —
-  bus and patch. <!-- R163 -->
+- The computer keyboard, the on-screen keyboard and the arp play the input target
+  (`inputTargetOf`, R341) — bus and patch. <!-- R163 -->
 - A note's bus is captured at note-on and never recomputed at release, so a mid-hold focus change
   cannot send a note-off to the wrong bus. <!-- R164 -->
 - Equal-power polyphony counts held notes per bus, never globally. <!-- R165 -->
 - The arp releases every bus it actually triggered a voice on, not just the one focused at
   cleanup. <!-- R166 -->
-- A `drum` focus makes the melodic keyboard a complete no-op: nothing sounds and nothing is
+- A `drum` input target makes the melodic keyboard a complete no-op: nothing sounds and nothing is
   announced on the note-input bus; the QWERTY drum-pad keys are a separate listener. <!-- R167 -->
 - An external MIDI device always plays Lead whatever the focus (`store/midiInput.ts` names
   `'synth'`). <!-- R168 -->
 
-([ADR-0016](../../docs/decisions/0016-focus-routed-note-input.md))
+([ADR-0016](../../docs/decisions/0016-focus-routed-note-input.md), amended by
+[ADR-0048](../../docs/decisions/0048-input-target-link.md))
+
+### The input target and its link
+
+- The input target is `inputTargetOf` (`store/focusTrack.ts`): `focusTrack` while a track is
+  armed, else the persisted ui-slice pin `inputTargetPin` if set, else `focusTrack`. `null` is
+  linked; one field holds both the link state and the pinned track, with no sync subscription.
+  The dock's target chip and its link toggle are one joined group: linked, a pick calls
+  `setFocusTrack` (and navigates); pinned, a pick calls `setInputTargetPin` and never navigates;
+  unlinking pins the current target, re-linking clears the pin. The dock's panel is derived
+  from the target (`drum` → pads, else keyboard) and the keyboard mode picker is hidden for
+  `drum`. Pattern segment, Sound channel, mixer row, solo and record arm stay on `focusTrack`. <!-- R341 -->
+
+([ADR-0048](../../docs/decisions/0048-input-target-link.md))
 
 - The polyphony count is the caller's: `useInputDeck` counts held notes per bus, excluding the
   arp and the sequencer; the voice manager skips releasing groups. <!-- R184 -->
@@ -110,11 +126,13 @@ recorder reads `ctx.currentTime` itself, through
 
 ## Prohibited
 
-- Playing the keyboard, on-screen keyboard or arp on anything but `focusTrack`'s bus and patch <!-- R163 -->
+- Playing the keyboard, on-screen keyboard or arp on anything but the input target's bus and patch <!-- R163 -->
 - Recomputing a note's bus at release <!-- R164 -->
 - A global (cross-bus) polyphony count <!-- R165 --> <!-- R184 -->
 - An arp cleanup releasing only the currently focused bus <!-- R166 -->
-- Sounding or announcing a melodic note under `drum` focus <!-- R167 -->
+- Sounding or announcing a melodic note under a `drum` input target <!-- R167 -->
+- Reading `inputTargetPin` directly instead of `inputTargetOf`, a pin that outranks record arm, a
+  separate `linked` flag beside the pin, a stored dock panel, or a pinned pick that navigates <!-- R341 -->
 - Routing external MIDI by focus <!-- R168 -->
 - Dropping the blur/`visibilitychange` release in `useInputDeck.ts` <!-- R202 -->
 - A note or drum-pad keydown, MIDI note-on or CC that ignores noteInputSuspended <!-- R336 -->

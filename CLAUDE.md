@@ -160,7 +160,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `metering.md` | Sample-based meters, tap point, meter scheduler |
 | `theming.md` | Theme tokens and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |
-| `note-input.md` | The note-input dispatcher and focus-routed input |
+| `note-input.md` | The note-input dispatcher, focus-routed input and the input target link |
 | `components.md` | Component logic in a colocated hook, narrow store selectors, placement, the layout shell, `HEADER_TOOLS` and the mobile frame |
 | `utils.md` | One theme per `utils/` file, utils layering, placement |
 
