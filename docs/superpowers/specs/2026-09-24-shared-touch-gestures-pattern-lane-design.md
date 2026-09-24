@@ -25,7 +25,7 @@ code in `loop/lead/`. A second copy for Chord/Bass would let the two drift.
 ## Decisions (agreed with the user)
 
 1. **One gesture behaviour, two grids.** The touch classifier, the finger lifecycle and the
-   element listeners become one shared implementation in `src/components/ui/`. Lead/FX and
+   element listeners become one shared implementation at the `src/components/` root. Lead/FX and
    Chord/Bass each supply a thin adapter that says what a tap and a hold mean on their grid.
 2. **Visuals stay per grid.** Lead keeps its look. Chord/Bass columns grow to a 28px floor.
 3. **Mouse and pen stay as they are on both grids.** Lead drag-paints; Chord/Bass clicks and drags
@@ -53,11 +53,12 @@ code in `loop/lead/`. A second copy for Chord/Bass would let the two drift.
 
 ## Model
 
-### Layer 1: the shared core (`src/components/ui/`)
+### Layer 1: the shared core (`src/components/` root)
 
-Placement (R276): code used by two areas lifts to the shared location. These files sit beside
-`useSpanResize.ts` and `spanResize.ts`, the pointer mechanics the two grids already share, which
-is the precedent for a shared gesture hook living in `ui/`.
+Placement (R276): code used by two areas lifts to the shared location its layer already has, and
+for shared hooks and controllers that is the `src/components/` root — `ui/` is for shared view
+pieces. None of these files renders anything, so they sit at the root beside `playbackStep.ts`,
+not in `ui/`. (`useSpanResize.ts` living in `ui/` is existing placement this change does not move.)
 
 **`touchGesture.ts`:** the classifier, moved from `leadTouchGesture.ts` with generic names and no
 change in behaviour:
@@ -253,7 +254,7 @@ Chord/Bass only. Lead is unchanged.
 
 - **A second, Chord/Bass-only copy of the Lead session.** The two would drift. The gesture table
   is one rule (R343), so it gets one implementation.
-- **Moving the whole Lead session to `ui/` unchanged.** It is bound to the paint controller and
+- **Moving the whole Lead session to the shared root unchanged.** It is bound to the paint controller and
   `leadCellAtPoint`. The shared core has to know only about a tap and a hold.
 - **Keeping the window forwarding per grid.** It would be the same five listeners twice, and a
   forgotten `dispose` in one copy would leak a timer. Lead's fallthrough to the mouse stroke fits
@@ -267,7 +268,7 @@ Chord/Bass only. Lead is unchanged.
 ## Docs
 
 - **R343** in `.claude/rules/pattern-grids.md` is widened to both grids. It says: the shared
-  classifier (`touchGestureReduce`, `ui/touchGesture.ts`) and session (`ui/touchGestureSession.ts`)
+  classifier (`touchGestureReduce`, `components/touchGesture.ts`) and session (`components/touchGestureSession.ts`)
   own tap, swipe and long-press on the Lead/FX pitch matrix and on the custom Chord/Bass lane;
   touch never edits on `pointerdown`; a swipe or `pointercancel` writes nothing; a long-press then
   lift adds on an empty cell and changes nothing on a note or event; on touch the whole note or
@@ -288,11 +289,11 @@ Chord/Bass only. Lead is unchanged.
 
 ## Tests
 
-- **`ui/touchGesture.test.ts`:** the reducer cases move here from `leadTouchGesture.test.ts`, one
+- **`components/touchGesture.test.ts`:** the reducer cases move here from `leadTouchGesture.test.ts`, one
   for one and with the same expectations, under the new names: every table row, 299/300/301ms,
   7/8px, Euclidean slop, a late timer or move resolving to `long-press`, and terminal states.
   `leadCellAtPoint`'s cases stay in `leadTouchGesture.test.ts`.
-- **`ui/touchGestureSession.test.ts`**, run against a fake target with a fake clock and timer:
+- **`components/touchGestureSession.test.ts`**, run against a fake target with a fake clock and timer:
   - A tap calls `tap` on `pointerup` only, never on `down`.
   - A swipe calls nothing, and the timer after it does nothing.
   - A long-press calls `hold` with the latest `clientX`.
@@ -315,7 +316,7 @@ Chord/Bass only. Lead is unchanged.
   removing every listener and calling `dispose`.
 - **Lead regression contract:** `leadTouchSession.test.ts`, `leadPaint.test.ts` and
   `useLeadNoteResize.test.ts` keep every expectation. Only imports may change, for example
-  `TOUCH_LONG_PRESS_MS` from `@/components/ui/touchGesture`. A changed expectation is a
+  `TOUCH_LONG_PRESS_MS` from `@/components/touchGesture`. A changed expectation is a
   regression, not an update.
 - **`patternTouch.test.ts`:**
   - A tap on an empty column or on an event calls `onActivate` once, on the lift.
