@@ -84,7 +84,7 @@ export const TrackRow = React.memo(
         // corners, and only a clip rect trims them to the card's own shape.
         // `hidden` would do that too, but it makes the row a scroll container,
         // and the gutter would then stick to the row instead of to the grid.
-        className="flex items-center gap-2 bg-base-200 py-1.5 sm:py-2 pr-2 rounded-box border border-base-300 overflow-clip hover:border-primary/40 transition-colors"
+        className="flex items-center gap-2 bg-base-200 py-1.5 sm:py-2 pr-2"
       >
         {/* Track Info & Mute.
             `sticky left-0` pins the gutter to the left edge of SequencerGrid's

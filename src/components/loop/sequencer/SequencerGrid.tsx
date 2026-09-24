@@ -61,7 +61,7 @@ export function SequencerGrid({
           (~27px on a phone at 660, ~26px on a tablet at 700). Below it the row
           scrolls and TrackRow's gutter stays pinned. Any change here must be
           mirrored in StepHeader's DRUM_HEADER_CLASS. */}
-      <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
+      <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
         {/* One row per CANONICAL voice, in the roster's order — not per stored
             row. The roster is the same list `planBeatStep` walks, so what the
             grid draws and what the clock plays can never be two different

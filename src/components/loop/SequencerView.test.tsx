@@ -252,7 +252,7 @@ describe('SequencerGrid', () => {
     const before = renderToString(
       <div className="overflow-x-auto">
         <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
-        <div className="space-y-1.5 sm:space-y-2 min-w-[660px] sm:min-w-[700px]">
+        <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
           {BEAT_VOICE_IDS.map((voice) => (
             <TrackRow
               key={voice}
