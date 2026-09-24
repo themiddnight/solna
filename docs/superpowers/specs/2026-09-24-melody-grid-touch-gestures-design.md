@@ -33,7 +33,7 @@ with `trackId="fx"`, and the hooks resolve actions through `MELODY_ACTIONS[track
    | Tap (lifted before 300ms, moved less than 8px) | add one note | remove that note |
    | Swipe (moved 8px or more before 300ms) | native scroll, no edit | native scroll, no edit |
    | Long-press (300ms), then drag | paint stroke (draw) across cells | resize that note's length |
-   | Drag the note's right-edge handle | — | resize (as today, larger hit area) |
+   | Drag the note's right-edge handle | — | mouse and pen only: resize (as today, larger hit area). A touch on the handle is a touch on the note: long-press to resize |
 
    Accepted trade-off: on touch you can no longer erase several notes in one drag. You erase one
    note per tap.
@@ -152,8 +152,12 @@ fixed square cells, which the cell-size change guarantees. Releasing the implici
   multi-touch rule under Risks.
 - **Handle hit area:** the visible `w-2` box stays. A `before:` pseudo-element
   (`before:absolute before:inset-y-0 before:right-0 before:w-4`) widens the hit area to 16px, all
-  inside the end cell, so it never takes a neighbour's tap. A tap on the handle still erases,
-  which matches "tap a note removes it".
+  inside the end cell, so it never takes a neighbour's tap. That area serves mouse and pen: a touch
+  `pointerdown` on the handle starts no drag and bubbles to the cell, so the note's touch session
+  rules it (a tap removes the note, a swipe scrolls, a long-press keeps or resizes it). The handle
+  sets no `touch-action`, so a swipe from it scrolls. A pen on a touchscreen honours `touch-action`
+  too, so the browser may take a pen drag on the handle as a pan and `pointercancel` it, which
+  writes nothing.
 
 ## Rejected and deferred
 
@@ -191,8 +195,12 @@ fixed square cells, which the cell-size change guarantees. Releasing the implici
   nothing.
 - `LeadMelodyGrid.test.tsx` is updated for 28px: `repeat(16, 28px)`, `translateX(84px)`,
   `width:28px`, and the `h-5` counts rewritten against the new height style.
+- A touch on a note's resize handle, with the real handlers, session and span resize: it opens
+  the touch session and no span resize; a tap removes the note; a long-press and an unmoved lift
+  keeps a 1-step note; a long-press and a drag resizes once on the lift; a swipe writes nothing.
 - Manual check in the preview at a 375px viewport with touch emulation: swipe, tap, long-press
-  paint and resize, and handle drag. Then a mouse at desktop width. Then iOS Safari and Android
+  paint and resize, and a tap, hold-and-lift and swipe on the handle. Then a mouse at desktop
+  width, including the handle drag. Then iOS Safari and Android
   Chrome on real devices, because emulation does not reproduce native pan takeover.
 
 ## Risks and open edges
@@ -203,9 +211,6 @@ fixed square cells, which the cell-size change guarantees. Releasing the implici
 - **Multi-touch:** a second touch pointerdown while a session is open cancels it. `pending` is
   dropped. An active stroke ends, and its committed cells stay. An active resize calls
   `useSpanResize.cancel()`, so nothing is written.
-- **Swipe from a note's end cell:** the handle keeps `touch-none`, so a swipe that starts on the
-  inner 16px of a note's last cell resizes instead of scrolling. This is accepted, because
-  "drag the handle" is a row of the table.
 - **Pinch-zoom** that starts on the grid is disabled by `pan-x pan-y`. It still works elsewhere
   on the page.
 - **Keyboard path unchanged:** Enter/Space toggles through `onCellClick` (`detail === 0`), and
