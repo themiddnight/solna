@@ -182,6 +182,16 @@ describe('CustomPatternTimeline (the memoized cell grid)', () => {
     expect(bass).toContain('aria-label="Resize Bass 5th at bar 2 beat 1 step 1"');
     expect(bass).toContain('aria-label="Bass event at bar 1 beat 3 step 1"');
   });
+
+  test('the resize handle sets no touch-action: a finger on it is a finger on the event', () => {
+    expect(html).toContain('aria-label="Resize Chord event at bar 2 beat 1 step 1"');
+    expect(html).not.toContain('touch-none');
+  });
+
+  // A regression guard, not a RED test: the file already adds no listener.
+  test('adds no listener of its own: pointer plumbing is useSpanResize and the shared touch listeners', () => {
+    expect(source).not.toMatch(/addEventListener/);
+  });
 });
 
 /**

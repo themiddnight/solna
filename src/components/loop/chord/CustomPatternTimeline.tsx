@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSegmentGatedStep } from '@/components/playbackStep';
-import { useSpanResize, type SpanResizeStart } from '@/components/ui/useSpanResize';
+import { useSpanResize, type SpanResizePointer, type SpanResizeStart } from '@/components/ui/useSpanResize';
 import { cx } from '@/components/ui/cx';
 import { beatIndexAt } from '@/utils/timeSignature';
 import {
@@ -10,7 +10,10 @@ import {
   customPatternPositionLabel,
   resizedPatternLength,
   type CustomPatternCell,
+  type CustomPatternHead,
 } from './customPatternGrid';
+import type { PatternSpanIdentity } from './patternTouch';
+import { usePatternTouch, type UsePatternTouch } from './usePatternTouch';
 
 /**
  * The one-lane timeline a custom Chord or Bass pattern is edited on: bars laid
@@ -32,8 +35,9 @@ import {
  *    module token — and everything else is a daisyUI semantic role, so the
  *    primitive stays theme-agnostic (`scripts/themeTokenGuard.ts` fails the
  *    build on a raw palette class).
- *  - The pointer plumbing. The resize gesture is `useSpanResize`; this file
- *    must not add a window listener of its own.
+ *  - The pointer plumbing. The resize gesture is `useSpanResize` and the touch
+ *    gesture is the shared `useTouchGestureListeners` (through
+ *    `usePatternTouch`); this file adds no listener of its own.
  *
  * It is presentational apart from one subscription, and that subscription is
  * isolated to its own leaf: `CustomPatternTimeline` (the memoized cell grid,
@@ -73,18 +77,13 @@ const HEAD_BLOCK_CLASS = cx(
 );
 
 /**
- * The grab strip on a span's right edge. `touch-none` is here and NOT on the
- * scroller: a touch-action of `none` on the container would kill the horizontal
- * scroll this lane needs on a phone, while the handle must swallow the pan so
- * the drag is not stolen by a scroll takeover.
+ * The grab strip on a span's right edge, for mouse and pen. It sets no
+ * `touch-action`: a finger on it is a finger on the event (R343), so a swipe
+ * that starts here scrolls the lane and a long-press resizes through the
+ * touch session.
  */
 const RESIZE_HANDLE_CLASS =
-  'absolute right-0 top-0 h-full w-1.5 cursor-ew-resize touch-none bg-base-content/20';
-
-/** What one head's resize gesture needs to identify — stable by reference. */
-interface PatternSpanIdentity {
-  column: number;
-}
+  'absolute right-0 top-0 h-full w-1.5 cursor-ew-resize bg-base-content/20';
 
 /**
  * Everything a cell needs to render itself. Passed as one object so the cell
@@ -102,9 +101,11 @@ interface PatternCellContext<TValue> {
   columnWidthPx: () => number;
   previewFor: (identity: PatternSpanIdentity) => number | null;
   startResize: (
-    event: React.PointerEvent<HTMLElement>,
+    pointer: SpanResizePointer,
     input: SpanResizeStart<PatternSpanIdentity>,
   ) => void;
+  /** Touch routing and the click filter (R343). */
+  touch: UsePatternTouch;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>, cell: CustomPatternCell<TValue>) => void;
   onActivate: (column: number) => void;
   onResize: (column: number, length: number) => void;
@@ -138,7 +139,12 @@ function patternCellNode<TValue>(
         type="button"
         data-column={cell.column}
         aria-label={context.nameOf(cell.column, 'event')}
-        onClick={() => context.onActivate(cell.column)}
+        onPointerDown={(event) =>
+          context.touch.onCellPointerDown(event, { column: cell.column, covered: false })
+        }
+        onClick={(event) => {
+          if (context.touch.allowClick(event.detail)) context.onActivate(cell.column);
+        }}
         onKeyDown={(event) => context.onKeyDown(event, cell)}
         className={cx(
           EMPTY_CELL_CLASS,
@@ -149,6 +155,19 @@ function patternCellNode<TValue>(
     );
   }
 
+  return patternHeadNode(cell, context);
+}
+
+/**
+ * An event: the head block over its whole span and the resize handle on its
+ * right edge. The touch pointerdown sits on the wrapper because the handle is
+ * the head button's sibling, not its child: a finger anywhere on the event,
+ * handle included, reaches the one touch session (R343).
+ */
+function patternHeadNode<TValue>(
+  cell: CustomPatternHead<TValue>,
+  context: PatternCellContext<TValue>,
+): React.ReactNode {
   const spanName = context.valueLabel?.(cell.value) ?? 'event';
   const name = context.nameOf(cell.column, spanName);
   const identity = context.identityFor(cell.column);
@@ -163,11 +182,21 @@ function patternCellNode<TValue>(
       data-column={cell.column}
       className={cx(CELL_CLASS, 'relative')}
       style={{ gridColumn: `${cell.column + 1} / span ${length}`, gridRow: '1' }}
+      onPointerDown={(event) =>
+        context.touch.onCellPointerDown(event, {
+          column: cell.column,
+          covered: true,
+          length: cell.length,
+          maxLength: cell.maxLength,
+        })
+      }
     >
       <button
         type="button"
         aria-label={name}
-        onClick={() => context.onActivate(cell.column)}
+        onClick={(event) => {
+          if (context.touch.allowClick(event.detail)) context.onActivate(cell.column);
+        }}
         onKeyDown={(event) => context.onKeyDown(event, cell)}
         className={cx(HEAD_BLOCK_CLASS, context.color)}
       >
@@ -188,15 +217,19 @@ function patternCellNode<TValue>(
         // is what an unmoved press on the handle does with a pointer) and
         // Shift+Arrow resizes it.
         onKeyDown={(event) => context.onKeyDown(event, cell)}
+        // Mouse and pen drag at once. A touch returns without stopping
+        // propagation, so it bubbles to the wrapper's touch session.
         onPointerDown={(event) =>
-          context.startResize(event, {
-            identity,
-            startLength: cell.length,
-            maxLength: cell.maxLength,
-            pixelsPerStep: context.columnWidthPx(),
-            onCommit: (span, next) => context.onResize(span.column, next),
-            onClick: (span) => context.onActivate(span.column),
-          })
+          context.touch.onHandlePointerDown(event, () =>
+            context.startResize(event, {
+              identity,
+              startLength: cell.length,
+              maxLength: cell.maxLength,
+              pixelsPerStep: context.columnWidthPx(),
+              onCommit: (span, next) => context.onResize(span.column, next),
+              onClick: (span) => context.onActivate(span.column),
+            }),
+          )
         }
         className={RESIZE_HANDLE_CLASS}
       />
@@ -393,7 +426,7 @@ function usePatternCellContext<TValue>({
   onResize,
 }: PatternCellContextInput<TValue>): PatternCellContext<TValue> {
   const identities = React.useRef(new Map<number, PatternSpanIdentity>());
-  const { previewFor, startResize } = useSpanResize<PatternSpanIdentity>();
+  const { previewFor, startResize, cancel } = useSpanResize<PatternSpanIdentity>();
 
   // `previewFor` compares identity BY REFERENCE, so a span must keep the ONE
   // object it began its gesture with. One object per column, minted lazily and
@@ -417,6 +450,14 @@ function usePatternCellContext<TValue>({
     (): number => patternColumnWidthPx(gridRef.current, cycleSteps),
     [gridRef, cycleSteps],
   );
+  const touch = usePatternTouch(gridRef, {
+    onActivate,
+    onResize,
+    identityFor,
+    columnWidthPx,
+    startResize,
+    cancelResize: cancel,
+  });
 
   const nameOf = React.useCallback(
     (column: number, spanName: string): string =>
@@ -452,6 +493,7 @@ function usePatternCellContext<TValue>({
       columnWidthPx,
       previewFor,
       startResize,
+      touch,
       onKeyDown,
       onActivate,
       onResize,
@@ -465,6 +507,7 @@ function usePatternCellContext<TValue>({
       columnWidthPx,
       previewFor,
       startResize,
+      touch,
       onKeyDown,
       onActivate,
       onResize,
@@ -545,7 +588,12 @@ export function CustomPatternTimeline<TValue>({
       <div className="pb-1" role="group" aria-label={`${label} pattern`}
         style={{ minWidth: `${cycleSteps * PATTERN_CELL_MIN_WIDTH}px` }}>
         {patternHeaderGrids(loopLength, stepsPerBar, gridStyle)}
-        <div ref={gridRef} className={cx(GRID_CLASS, 'select-none [-webkit-touch-callout:none]')} style={gridStyle}>
+        <div
+          ref={gridRef}
+          className={cx(GRID_CLASS, 'select-none [-webkit-touch-callout:none]')}
+          style={gridStyle}
+          onPointerDownCapture={context.touch.onGridPointerDownCapture}
+        >
           {cells.map((cell) => patternCellNode(cell, context))}
           {patternBarDividers(loopLength, stepsPerBar)}
           <CustomPatternPlayhead
