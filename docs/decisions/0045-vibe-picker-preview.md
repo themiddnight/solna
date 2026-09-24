@@ -1,6 +1,6 @@
 # ADR-0045: Vibe picker with preview
 
-**Status:** Accepted — 2026-09-24. Amends [ADR-0009](0009-vibes-as-data-and-single-drum-grid-library.md) (R086, R095).
+**Status:** Accepted — 2026-09-24. Amends [ADR-0009](0009-vibes-as-data-and-single-drum-grid-library.md) (R086, R095) and [ADR-0026](0026-clock-and-engine-bridge.md) (R225).
 
 ## Context
 
@@ -138,6 +138,8 @@ change and would drop the cue the strip gave, so it was not done here.
   `vibeContentPatch`.
 - **R095** (reworded) — The vibe picker imports `VIBES` eagerly, makes no resolver call, and
   reaches `store/vibePreview.ts` only through a cached dynamic `import()`.
+- **R225** (reworded) — The set of `src/store/` modules that call `audioEngine` directly names
+  `vibePreview` where it named `vibes`: the vibe cut moved with the preview commands.
 
 ## Sources
 
@@ -145,5 +147,6 @@ change and would drop the cue the strip gave, so it was not done here.
 `docs/superpowers/plans/2026-09-24-vibe-picker-modal.md`;
 [ADR-0009](0009-vibes-as-data-and-single-drum-grid-library.md),
 [ADR-0022](0022-persist-write-path-and-guarded-storage.md),
+[ADR-0026](0026-clock-and-engine-bridge.md),
 [ADR-0041](0041-mobile-frame.md),
 [ADR-0044](0044-secondary-canvas-taxonomy.md).

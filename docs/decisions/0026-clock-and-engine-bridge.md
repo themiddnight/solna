@@ -1,6 +1,6 @@
 # ADR-0026: Clock runs iff a player subscribes; store→engine bridge
 
-**Status:** Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425).
+**Status:** Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425). R225 amended by [0045](0045-vibe-picker-preview.md).
 
 ## Context
 
@@ -32,10 +32,10 @@ music playing.
   `engineSync.ts`.
 - `engineSync` is the path for *persistent* audio state, not the only store module that touches the
   engine: a small set call `audioEngine` directly for **cuts, previews and lifecycle**, and each
-  says why in its docblock — the loop switch (`loadLoop`), the vibe swap (`vibes`), the project
-  install (`projectSlice`), the previews (`synthPatchPreview`, `effectsPreview`, `beatPreview`,
-  `synthPresetInstall`) and runtime/incident plumbing (`audioRecovery`, `incidentReporter`,
-  `sourceBuses`).
+  says why in its docblock — the loop switch (`loadLoop`), the vibe preview (`vibePreview`), the
+  project install (`projectSlice`), the previews (`synthPatchPreview`, `effectsPreview`,
+  `beatPreview`, `synthPresetInstall`, `trackSendsPreview`) and runtime/incident plumbing
+  (`audioRecovery`, `incidentReporter`, `sourceBuses`).
 - A persistent value — a MIDI CC patch edit included — never joins that list; it reaches the engine
   through its `engineSync` subscription only.
 - That list is a snapshot; the code binds, so re-derive it
@@ -65,9 +65,10 @@ music playing.
 - **R224** — Never call engine setters from a component; add state to a slice and wire it in
   `engineSync.ts`.
 - **R225** — Direct `audioEngine` calls from `src/store/` are only for cuts, previews and lifecycle,
-  each with a docblock reason; the list (`loadLoop`, `vibes`, `projectSlice`, `synthPatchPreview`,
-  `effectsPreview`, `beatPreview`, `synthPresetInstall`, `audioRecovery`, `incidentReporter`,
-  `sourceBuses`) is a snapshot — re-derive with `grep -ln audioEngine src/store/*.ts`.
+  each with a docblock reason; the list (`loadLoop`, `vibePreview`, `projectSlice`,
+  `synthPatchPreview`, `effectsPreview`, `beatPreview`, `synthPresetInstall`, `audioRecovery`,
+  `incidentReporter`, `sourceBuses`, `trackSendsPreview`) is a snapshot — re-derive with
+  `grep -ln audioEngine src/store/*.ts`.
 - **R226** — A persistent value (incl. a MIDI CC patch edit) reaches the engine only via its
   `engineSync` subscription.
 
