@@ -193,6 +193,23 @@ describe('the dock target chip', () => {
     expect(html).toContain('id="input-target-group"');
     expect(openTagContaining(html, 'id="input-target-group"')).toContain('join');
   });
+
+  /** R341: armed, the keys stay on the armed track, so the target and its link lock. */
+  test('armed: the chip and the link are disabled; disarmed they are not', () => {
+    try {
+      useAppStore.setState({ focusTrack: 'synth', inputTargetPin: null, recordingTrack: 'lead' });
+      const armed = render();
+      expect(openTagContaining(armed, 'id="btn-focus-chip"')).toContain('disabled');
+      expect(openTagContaining(armed, 'id="btn-input-target-link"')).toContain('disabled');
+      expect(openTagContaining(armed, 'id="input-target-group"')).toContain('title="Recording');
+      useAppStore.setState({ recordingTrack: null });
+      const idle = render();
+      expect(openTagContaining(idle, 'id="btn-focus-chip"')).not.toContain('disabled');
+      expect(openTagContaining(idle, 'id="btn-input-target-link"')).not.toContain('disabled');
+    } finally {
+      useAppStore.setState({ recordingTrack: null });
+    }
+  });
 });
 
 describe('pickInputTarget', () => {

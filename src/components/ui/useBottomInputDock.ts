@@ -40,6 +40,8 @@ export interface UseBottomInputDock {
   /** The track the keys play: `inputTargetOf`, never `focusTrack` directly. */
   target: MixLayerId;
   isPinned: boolean;
+  /** A track is armed: the target and its link are locked to the selection (R341). */
+  isLocked: boolean;
   panel: DockPanel;
   onPickTarget: (id: MixLayerId) => void;
   onToggleLink: () => void;
@@ -57,12 +59,14 @@ export function useBottomInputDock(): UseBottomInputDock {
   const setFocusTrack = useLiveStore((s) => s.setFocusTrack);
   const setInputTargetPin = useLiveStore((s) => s.setInputTargetPin);
   const isPinned = pin !== null;
+  const isLocked = useLiveStore((s) => s.recordingTrack !== null);
 
   return {
     isOpen,
     toggleOpen: () => setIsOpen(!isOpen),
     target,
     isPinned,
+    isLocked,
     panel: panelForTarget(target),
     onPickTarget: (id) => pickInputTarget(id, isPinned, { setFocusTrack, setInputTargetPin }),
     onToggleLink: () => setInputTargetPin(nextInputTargetPin(pin, target)),

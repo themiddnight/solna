@@ -33,7 +33,10 @@ in `store/focusTrack.ts`.
   (`startRecordArmSync`), so while armed "follow focus" is "play the armed track". The pin is kept
   and resumes on disarm; the disarm rules do not change. **Amended:** arming also re-links
   (`setRecordingTrack` clears the pin), and disarming does not restore the old pin, so there is
-  no earlier state to remember. The override is kept for a pin made while armed.
+  no earlier state to remember. **Amended again:** while armed no pin can be made at all —
+  `setInputTargetPin` is a no-op and the dock disables the chip and the link toggle — so a pin
+  never sits waiting to take effect on disarm. The override in `inputTargetOf` stays as a guard
+  for state written through `setState`.
 - **The dock's header is `[chevron + Input] [ON <target> ▾ | link] [<mode> ▾]`.** The chip and a
   link toggle (lucide `Link2` / `Unlink2`) are one daisyUI `join`. Linked, a pick from the chip
   calls `setFocusTrack` and navigates, as before; pinned, a pick calls `setInputTargetPin` and
@@ -86,7 +89,7 @@ External MIDI still plays Lead (R168); making it follow the target is out of sco
 ## Rules this implies
 
 - **R341** — The keys play `inputTargetOf` (arm → focus, else pin, else focus); `inputTargetPin`
-  is the one persisted link-and-pin field; arming re-links and disarming does not restore; a linked pick selects, a pinned pick only re-pins; the
+  is the one persisted link-and-pin field; arming re-links, disarming does not restore, and no pin is set while armed; a linked pick selects, a pinned pick only re-pins; the
   dock panel and the mode picker's visibility derive from the target.
 - **R163** (amended) — Keyboard, on-screen keyboard and arp play the input target's bus and patch.
 - **R167** (amended) — A `drum` input target makes the melodic keyboard a complete no-op.

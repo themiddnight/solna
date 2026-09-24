@@ -39,6 +39,8 @@ interface BottomInputDockProps {
 /** Linked: both halves of the target group wear this tint; pinned, they drop to the idle toolbar style. */
 const LINKED_STYLE = 'btn-soft btn-accent';
 
+const LOCKED_TITLE = 'Recording — the keys stay on the armed track';
+
 /**
  * The target chip and its link toggle, one joined group: which track the keys
  * play, and whether that follows the selection (R341).
@@ -55,25 +57,31 @@ const LINKED_STYLE = 'btn-soft btn-accent';
 function InputTargetGroup({
   target,
   isPinned,
+  isLocked,
   onPick,
   onToggleLink,
 }: {
   target: MixLayerId;
   isPinned: boolean;
+  isLocked: boolean;
   onPick: (id: MixLayerId) => void;
   onToggleLink: () => void;
 }) {
   const style = isPinned ? TOOLBAR_BUTTON_IDLE : LINKED_STYLE;
   const linkTitle = isPinned ? 'Pinned — follow selection again' : 'Follow selection';
+  // Armed, the keys must play the armed track (the recorder writes every
+  // performed note there), so both halves lock to the selection. A disabled
+  // chip cannot take focus, which is what keeps daisyUI's dropdown shut.
   return (
-    <div id="input-target-group" className="join">
+    <div id="input-target-group" className="join" title={isLocked ? LOCKED_TITLE : undefined}>
       <div className="dropdown dropdown-top">
         <button
           id="btn-focus-chip"
           type="button"
+          disabled={isLocked}
           aria-label={`Keys play ${MIX_LAYER_LABELS[target]}`}
           className={`btn btn-xs join-item gap-1 text-[11px] font-semibold ${style}`}
-          title="Which track the keys play"
+          title={isLocked ? LOCKED_TITLE : 'Which track the keys play'}
         >
           <span className="text-base-content/50 uppercase tracking-wider text-[9px]">On</span>
           <span>{MIX_LAYER_LABELS[target]}</span>
@@ -111,9 +119,10 @@ function InputTargetGroup({
         type="button"
         aria-label="Follow selection"
         aria-pressed={!isPinned}
+        disabled={isLocked}
         onClick={onToggleLink}
         className={`btn btn-xs btn-square join-item ${style}`}
-        title={linkTitle}
+        title={isLocked ? LOCKED_TITLE : linkTitle}
       >
         {isPinned ? <Unlink2 className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
       </button>
@@ -304,7 +313,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({
   drumProps,
   keyboardVariant = 'desktop',
 }: BottomInputDockProps) {
-  const { isOpen, toggleOpen, target, isPinned, panel, onPickTarget, onToggleLink } =
+  const { isOpen, toggleOpen, target, isPinned, isLocked, panel, onPickTarget, onToggleLink } =
     useBottomInputDock();
 
   const {
@@ -344,6 +353,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({
         <InputTargetGroup
           target={target}
           isPinned={isPinned}
+          isLocked={isLocked}
           onPick={onPickTarget}
           onToggleLink={onToggleLink}
         />

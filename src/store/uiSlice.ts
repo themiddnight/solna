@@ -93,7 +93,11 @@ export function createUiSlice(set: Set): UiSlice {
 
     setActiveTab: (activeTab) => set({ activeTab }),
     setFocusTrack: (focusTrack) => set({ focusTrack }),
-    setInputTargetPin: (inputTargetPin) => set({ inputTargetPin }),
+    // No pin while armed (R341): the recorder writes every performed note into
+    // the armed track, so the keys must stay on it. The dock locks its
+    // controls too; this keeps any other caller to the same rule.
+    setInputTargetPin: (inputTargetPin) =>
+      set((s) => (s.recordingTrack !== null ? {} : { inputTargetPin })),
     toggleSoloTrack: (track) =>
       set((state) => ({ soloTracks: toggleSolo(state.soloTracks, track) })),
     // Guarded on emptiness so the array reference is stable: a fresh [] would

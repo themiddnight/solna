@@ -182,9 +182,11 @@ describe('input deck dock state', () => {
     expect(slice.inputTargetPin).toBeNull();
   });
 
-  test('setInputTargetPin pins and unpins', () => {
+  test('setInputTargetPin pins and unpins while disarmed', () => {
     let applied: Record<string, unknown> | undefined;
-    const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);
+    const slice = createUiSlice(((updater: (state: { recordingTrack: null }) => Record<string, unknown>) => {
+      applied = updater({ recordingTrack: null });
+    }) as never);
     slice.setInputTargetPin('chord');
     expect(applied).toEqual({ inputTargetPin: 'chord' });
     slice.setInputTargetPin(null);
@@ -390,6 +392,17 @@ describe('record arm re-links the input target', () => {
       useAppStore.getState().setRecordingTrack('lead');
       expect(useAppStore.getState().inputTargetPin).toBeNull();
       useAppStore.getState().setRecordingTrack(null);
+      expect(useAppStore.getState().inputTargetPin).toBeNull();
+    } finally {
+      useAppStore.setState({ inputTargetPin: before.inputTargetPin, recordingTrack: before.recordingTrack });
+    }
+  });
+
+  test('no pin can be set while armed', () => {
+    const before = useAppStore.getState();
+    try {
+      useAppStore.setState({ inputTargetPin: null, recordingTrack: 'lead' });
+      useAppStore.getState().setInputTargetPin('chord');
       expect(useAppStore.getState().inputTargetPin).toBeNull();
     } finally {
       useAppStore.setState({ inputTargetPin: before.inputTargetPin, recordingTrack: before.recordingTrack });
