@@ -6,7 +6,7 @@ import {
   type LeadPaintCommit,
 } from './leadPaint';
 import { createLeadTouchSession, type LeadTouchDeps } from './leadTouchSession';
-import { LEAD_LONG_PRESS_MS } from './leadTouchGesture';
+import { TOUCH_LONG_PRESS_MS } from '@/components/touchGesture';
 import { LEAD_CELL_SIZE } from './melodyGrid';
 import { leadResizeCallbacks } from './useLeadNoteResize';
 
@@ -57,9 +57,9 @@ function rig(clipLeft = 0) {
     advance: (ms: number) => {
       clock += ms;
     },
-    /** Let the long-press timer fire, LEAD_LONG_PRESS_MS after now. */
+    /** Let the long-press timer fire, TOUCH_LONG_PRESS_MS after now. */
     hold: () => {
-      clock += LEAD_LONG_PRESS_MS;
+      clock += TOUCH_LONG_PRESS_MS;
       timer?.();
     },
     /** Whether a long-press timer is still scheduled (its canceller not run). */
@@ -166,13 +166,13 @@ describe('touch long-press', () => {
   test('a lift at the hold threshold before the timer runs still counts as a hold', () => {
     const empty = rig();
     empty.down(2, 2, false);
-    empty.advance(LEAD_LONG_PRESS_MS);
+    empty.advance(TOUCH_LONG_PRESS_MS);
     empty.session.end(empty.at(2, 2), 'pointerup');
     expect(empty.commits).toEqual([{ stepIndex: 2, note: 'C4', mode: 'draw' }]);
 
     const note = rig();
     note.down(2, 2, true);
-    note.advance(LEAD_LONG_PRESS_MS);
+    note.advance(TOUCH_LONG_PRESS_MS);
     note.session.end(note.at(2, 2), 'pointerup');
     expect(note.commits).toEqual([]);
     expect(note.log.resizes).toEqual([]);
@@ -312,7 +312,7 @@ function handleRig() {
       clock += ms;
     },
     hold: () => {
-      clock += LEAD_LONG_PRESS_MS;
+      clock += TOUCH_LONG_PRESS_MS;
       timer?.();
     },
     /** One pointerdown as the DOM delivers it: the handle, then — unless

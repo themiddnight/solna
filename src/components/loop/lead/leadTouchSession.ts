@@ -1,14 +1,13 @@
 import type { SpanResizePointer } from '@/components/ui/useSpanResize';
 import type { LeadPaintController } from './leadPaint';
 import {
-  LEAD_LONG_PRESS_MS,
-  leadCellAtPoint,
-  leadTouchReduce,
-  leadTouchStart,
-  type LeadGridGeometry,
-  type LeadTouchEvent,
-  type LeadTouchState,
-} from './leadTouchGesture';
+  TOUCH_LONG_PRESS_MS,
+  touchGestureReduce,
+  touchGestureStart,
+  type TouchGestureEvent,
+  type TouchGestureState,
+} from '@/components/touchGesture';
+import { leadCellAtPoint, type LeadGridGeometry } from './leadTouchGesture';
 
 interface LeadTouchPointer {
   pointerId: number;
@@ -57,7 +56,7 @@ export interface LeadTouchSession {
 interface OpenTouch {
   pointerId: number;
   cell: LeadTouchCell;
-  gesture: LeadTouchState;
+  gesture: TouchGestureState;
   mode: 'classifying' | 'painting' | 'resizing';
   lastX: number;
   geometry: LeadGridGeometry | null;
@@ -103,8 +102,8 @@ export function createLeadTouchSession(
     controller.begin(t.pointerId, stepIndex, col, note, false);
   };
 
-  const classify = (t: OpenTouch, event: LeadTouchEvent): void => {
-    t.gesture = leadTouchReduce(t.gesture, event);
+  const classify = (t: OpenTouch, event: TouchGestureEvent): void => {
+    t.gesture = touchGestureReduce(t.gesture, event);
     if (t.gesture.phase === 'long-press') hold(t);
     else if (t.gesture.phase !== 'pending') close();
   };
@@ -116,7 +115,7 @@ export function createLeadTouchSession(
     }
     // Resizing: useSpanResize's own pointerup listener commits.
     if (t.mode !== 'classifying') return;
-    const verdict = leadTouchReduce(t.gesture, {
+    const verdict = touchGestureReduce(t.gesture, {
       type: 'up',
       t: deps.now(),
       x: p.clientX,
@@ -140,14 +139,14 @@ export function createLeadTouchSession(
       const t: OpenTouch = {
         pointerId: p.pointerId,
         cell,
-        gesture: leadTouchStart(deps.now(), p.clientX, p.clientY),
+        gesture: touchGestureStart(deps.now(), p.clientX, p.clientY),
         mode: 'classifying',
         lastX: p.clientX,
         geometry: null,
         cancelTimer: noop,
       };
       current = t;
-      t.cancelTimer = deps.schedule(LEAD_LONG_PRESS_MS, () => {
+      t.cancelTimer = deps.schedule(TOUCH_LONG_PRESS_MS, () => {
         if (current === t && t.mode === 'classifying') classify(t, { type: 'timer' });
       });
     },
