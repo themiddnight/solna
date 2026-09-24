@@ -168,20 +168,20 @@ describe('the dock target chip', () => {
     expect(link).toContain('aria-label="Follow selection"');
     expect(link).toContain('aria-pressed="true"');
     expect(link).toContain('title="Follow selection"');
-    expect(link).not.toContain('btn-accent');
-    expect(openTagContaining(html, 'id="btn-focus-chip"')).not.toContain('btn-accent');
+    expect(link).toContain('btn-soft btn-accent');
+    expect(openTagContaining(html, 'id="btn-focus-chip"')).toContain('btn-soft btn-accent');
     expect(html).toContain('lucide-link2');
     expect(html).not.toContain('lucide-unlink2');
   });
 
-  test('pinned: the unlink icon and the accent style on both halves of the group', () => {
+  test('pinned: the unlink icon, and neither half of the group keeps the tint', () => {
     useAppStore.setState({ inputTargetPin: 'chord' });
     const html = render();
     const link = openTagContaining(html, 'id="btn-input-target-link"');
     expect(link).toContain('aria-pressed="false"');
     expect(link).toContain('title="Pinned — follow selection again"');
-    expect(link).toContain('btn-soft btn-accent');
-    expect(openTagContaining(html, 'id="btn-focus-chip"')).toContain('btn-soft btn-accent');
+    expect(link).not.toContain('btn-accent');
+    expect(openTagContaining(html, 'id="btn-focus-chip"')).not.toContain('btn-accent');
     expect(html).toContain('lucide-unlink2');
     expect(html).toContain('>Chord</span>');
   });

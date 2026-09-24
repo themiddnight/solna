@@ -36,8 +36,8 @@ interface BottomInputDockProps {
   keyboardVariant?: KeyboardVariant;
 }
 
-/** Pinned: both halves of the target group wear this instead of the idle toolbar style. */
-const PINNED_STYLE = 'btn-soft btn-accent';
+/** Linked: both halves of the target group wear this tint; pinned, they drop to the idle toolbar style. */
+const LINKED_STYLE = 'btn-soft btn-accent';
 
 /**
  * The target chip and its link toggle, one joined group: which track the keys
@@ -63,7 +63,7 @@ function InputTargetGroup({
   onPick: (id: MixLayerId) => void;
   onToggleLink: () => void;
 }) {
-  const style = isPinned ? PINNED_STYLE : TOOLBAR_BUTTON_IDLE;
+  const style = isPinned ? TOOLBAR_BUTTON_IDLE : LINKED_STYLE;
   const linkTitle = isPinned ? 'Pinned — follow selection again' : 'Follow selection';
   return (
     <div id="input-target-group" className="join">
