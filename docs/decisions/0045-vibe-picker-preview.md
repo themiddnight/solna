@@ -18,9 +18,23 @@ undo after it, so a curious click overwrote a loop the user had built.
   because it is not a mobile bar field tool, a menu row in the phone's menu sheet, where the
   picker opens as a nested dialog inside the sheet's dialog (R320). No frame renders a vibe strip.
 - **The picker is a centred `Modal` on both frames** (`components/vibes/VibePickerModal.tsx`):
-  Modal's own header, a card grid that scrolls, and a pinned footer holding the preview summary,
+  Modal's own header, a list that scrolls, and a pinned footer holding the preview summary,
   Play/Stop, Cancel and Use. The layout comes from `boxClassName` making the box a flex column;
   no footer prop is added to `Modal`. Use and Play stay disabled until a vibe has been previewed.
+- **The vibes stack one per row, and every row carries its own dice.** A row is the vibe's card,
+  then a square dice button. The dice previews a fresh variant of its row's vibe at once, so a
+  reroll does not need a pick first. A single column reads as a list that grows downward, so a new
+  vibe adds a row, and the dice beside each card shows which vibes can be rerolled before any is
+  previewed. An earlier multi-column grid showed the dice only on the previewed card.
+- **The Vibes tool comes first.** Its row leads `HEADER_TOOLS`, so it is the first loop-layer tool
+  in the desktop Header and the first row of the phone's menu sheet, and its icon takes
+  `text-primary`, the same accent as the theme switch. A project starts with a vibe, so the entry
+  point comes before the tools that edit what it loads.
+- **A picker that cannot open says so and closes.** The preview chunk loads on the first open. A
+  load that rejects is not cached, so the next open fetches it again. A `beginVibePreview` that
+  throws releases the hold and the input suspension before rethrowing. Either failure shows one
+  error message under the `vibe` key and closes the picker, instead of leaving it open with every
+  card disabled.
 - **The card of the vibe the loop was loaded from is marked Current.** The picker labels the card
   whose id is `selectedVibeId` "Current", restoring the readout the strip's selected chip gave.
   The label is separate from the pressed state, which marks the previewed card, so a card can show
@@ -42,7 +56,8 @@ undo after it, so a curious click overwrote a loop the user had built.
   `cancelVibePreview`, which writes the snapshot back through `withMirror` in one `setState`.
 - **Persisted writes are held while the picker is open.** `holdPersistedWrites` (`store/store.ts`)
   flushes both writers first — the coalesced `localStorage` blob and the project autosave — then
-  holds them; while held neither schedules a write and a flush (`pagehide`, hidden) is a no-op, so
+  holds them; while held neither schedules a write, the coalesced storage buffers a removal
+  instead of making it, and a flush (`pagehide`, hidden) is a no-op, so
   a tab closed mid-preview reloads the pre-preview state, the same outcome as Cancel.
   `releasePersistedWrites` lets each writer schedule one write if anything changed. The hold is a
   flag, not a count, so one release frees it after a double open.
@@ -90,15 +105,18 @@ change and would drop the cue the strip gave, so it was not done here.
 ## Rules this implies
 
 - **R333** — Vibes are reached only through the `vibes` `HEADER_TOOLS` row
-  (`components/vibes/VibesButton.tsx`); no frame renders an always-visible vibe strip.
-- **R334** — The vibe picker is a centred `Modal` on both frames: the card grid scrolls between
-  Modal's pinned header and a pinned footer; **Use** (and Play) stay disabled until a vibe has
+  (`components/vibes/VibesButton.tsx`), which leads the list, so it is the first tool in the Header
+  and in the menu sheet; no frame renders an always-visible vibe strip.
+- **R334** — The vibe picker is a centred `Modal` on both frames: the vibes stack one per row, each
+  a card then its own dice, and the list scrolls between Modal's pinned header and a pinned footer;
+  a row's dice previews a variant of that row's vibe whether or not it was being previewed; **Use** (and Play) stay disabled until a vibe has
   been previewed; the card of the vibe the active loop was loaded from (`selectedVibeId`, as
   captured at open) carries a "Current" label, never the pressed state, which belongs to the
   previewed card.
 - **R335** — Only the vibe preview holds persisted writes
   (`holdPersistedWrites`/`releasePersistedWrites`); the hold flushes first; nothing is written
-  while held, `pagehide`/hidden included; release writes once.
+  or removed while held, `pagehide`/hidden included; release writes once; an open that throws
+  releases the hold and input before rethrowing.
 - **R336** — `noteInputSuspended` gates QWERTY notes, QWERTY drum pads and MIDI note-on/CC at
   their entry (note-off and keyup pass); its rising edge releases every held QWERTY note.
 - **R337** — A vibe preview is stop → cut → one write → `soloLoop(activeLoopId)`; opening and

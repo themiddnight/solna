@@ -6,8 +6,8 @@ description: Add, remove, retune or debug an Instant Vibe in solna — the genre
 # Instant Vibes (solna)
 
 A vibe is a card in the Vibes picker. Picking one previews it on the current loop;
-Use keeps it, Cancel restores the loop; the dice on the previewed card rerolls it
-into different music with the same identity.
+Use keeps it, Cancel restores the loop; the dice beside each card previews a reroll
+of that vibe: different music with the same identity.
 
 **A vibe is pure data.** The table is `VIBES` in **`src/data/vibes.ts`** — eight
 `VibeSpec` literals that name library ids and nothing else. `src/data/` files
