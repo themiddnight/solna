@@ -62,6 +62,8 @@ function rig(clipLeft = 0) {
       clock += LEAD_LONG_PRESS_MS;
       timer?.();
     },
+    /** Whether a long-press timer is still scheduled (its canceller not run). */
+    timerPending: () => timer !== null,
     down: (col: number, row: number, covered: boolean, pointerId = 7) =>
       session.down(at(col, row, pointerId), { stepIndex: col, col, note: ROWS[row], covered }),
   };
@@ -214,7 +216,9 @@ describe('touch interruptions', () => {
   test('dispose (unmount) mid-hold cancels the timer and writes nothing', () => {
     const r = rig();
     r.down(2, 2, false);
+    expect(r.timerPending()).toBe(true);
     r.session.dispose();
+    expect(r.timerPending()).toBe(false);
     r.hold();
     expect(r.commits).toEqual([]);
     expect(r.session.isOpen()).toBe(false);
@@ -226,6 +230,20 @@ describe('touch interruptions', () => {
     p.session.move(p.at(3, 2));
     expect(p.commits.map((c) => c.stepIndex)).toEqual([2]);
     expect(p.session.holding()).toBe(false);
+  });
+
+  test('dispose (unmount) mid-resize cancels the resize and writes nothing', () => {
+    const r = rig();
+    r.down(2, 2, true);
+    r.hold();
+    expect(r.log.resizes).toHaveLength(1);
+    r.session.dispose();
+    expect(r.log.cancels).toBe(1);
+    expect(r.session.isOpen()).toBe(false);
+    // The lift after the unmount belongs to no session and writes nothing.
+    expect(r.session.end(r.at(2, 2, 7, 60), 'pointerup')).toBe(false);
+    expect(r.commits).toEqual([]);
+    expect(r.log.resizes).toHaveLength(1);
   });
 });
 
