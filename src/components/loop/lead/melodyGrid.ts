@@ -19,8 +19,12 @@ import type { StepCell } from '@/components/sequencerGrid';
 // store/ may not import components/.
 export { LEAD_WINDOW_OCTAVES } from '@/audio/leadStepRecord';
 
-/** Fixed cell width in px — the marker's translateX stride. */
-export const LEAD_CELL_WIDTH = 20;
+/**
+ * Fixed cell size in px, on BOTH axes: the column width, the row height,
+ * the marker's translateX stride, the resize drag's pixels-per-step and the
+ * touch hit test's divisor. One number, so none of them can drift.
+ */
+export const LEAD_CELL_SIZE = 28;
 
 /**
  * The pitch rows of the melody grid, from HIGHEST (index 0) to LOWEST. In

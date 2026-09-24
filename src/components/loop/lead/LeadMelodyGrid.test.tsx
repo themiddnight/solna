@@ -6,7 +6,7 @@ import { renderToString } from 'react-dom/server';
 import { LeadMelodyHeaders, LeadMelodyGrid, LeadMarker, LeadMarkerView } from './LeadMelodyGrid';
 import { stepCells } from '@/components/sequencerGrid';
 import { getMeter } from '@/utils/timeSignature';
-import { leadColumnCells } from './melodyGrid';
+import { LEAD_CELL_SIZE, leadColumnCells } from './melodyGrid';
 import { useAppStore } from '@/store/store';
 import type { MixLayerId } from '@/store/focusTrack';
 import type { MelodyTrackId } from '@/store/melodyTracks';
@@ -27,17 +27,17 @@ describe('LeadMelodyGrid', () => {
   });
 
   test('the grid lays out loopLength × stepsPerBar columns', () => {
-    // Defaults: 4/4 (16 steps) × 1-bar loop → 16 columns of 20px.
+    // Defaults: 4/4 (16 steps) × 1-bar loop → 16 columns of 28px.
     const html = renderToString(<LeadMelodyGrid trackId="lead" />);
-    expect(html).toContain('repeat(16, 20px)');
+    expect(html).toContain('repeat(16, 28px)');
   });
 
   test('the marker translates by column × cell width, from the ruler onward', () => {
-    // The stride is LEAD_CELL_WIDTH, the same constant the header buttons size
+    // The stride is LEAD_CELL_SIZE, the same constant the header buttons size
     // themselves with — a marker that drifts from its own ruler is worse than
     // two honest markers. `left` is the note-name column's width.
     const html = renderToString(<LeadMarkerView column={3} />);
-    expect(html).toContain('translateX(60px)'); // 3 × 20
+    expect(html).toContain('translateX(84px)'); // 3 × 28
     expect(html).toContain('left:44px');
     expect(renderToString(<LeadMarkerView column={0} />)).toContain('translateX(0px)');
   });
@@ -161,7 +161,7 @@ describe('LeadMelodyGrid cells', () => {
     // Scoped to the CELL buttons: the header strips legitimately press the
     // selected bar and the cursor column, and an unscoped assertion here
     // would fail on a selection that has nothing to do with the melody.
-    expect(html).not.toContain('aria-pressed="true" class="relative h-5');
+    expect(html).not.toContain('aria-pressed="true" class="relative border');
   });
 
   test('the bar copy and paste buttons render, with paste dead until something is copied', () => {
@@ -192,14 +192,14 @@ describe('LeadMelodyHeaders geometry', () => {
       <LeadMelodyHeaders {...headerProps(32)} />,
     );
     // Two strips of 32 columns, plus one label spacer each.
-    expect(html.split('width:20px').length - 1).toBe(64);
+    expect(html.split('width:28px').length - 1).toBe(64);
     expect(html.split('width:44px').length - 1).toBe(2);
     // Bar numbers appear only at each bar start: 2 bars over 32 columns.
     // Scoped to the bar-number strip's own class string, since the beat
     // strip legitimately renders a "3" (beat 3 of 4) in this same html.
     expect(html).toContain('>1</button>');
     expect(html).toContain('>2</button>');
-    expect(html).not.toContain('font-bold text-base-content/60" style="width:20px">3</button>');
+    expect(html).not.toContain('font-bold text-base-content/60" style="width:28px;height:28px">3</button>');
   });
 
   test('the whole selected bar is pressed, and exactly one column is the cursor', () => {
@@ -231,9 +231,9 @@ describe('LeadMelodyHeaders geometry', () => {
 
   test('both strips are a full grid row tall, and the DEV-371 contract survives it', () => {
     const html = renderToString(<LeadMelodyHeaders {...headerProps(16, 5)} />);
-    // h-5 is the grid row cell's height (LeadMelodyCells and the note-name
-    // column both use it), so a bar or a beat is an easy pointer target.
-    expect(html.split('h-5 flex items-center justify-center').length - 1).toBe(32);
+    // Every strip cell is one grid row tall — LEAD_CELL_SIZE, the constant
+    // the cells and the note-name column also size by.
+    expect(html.split('style="width:28px;height:28px"').length - 1).toBe(32);
     // Everything DEV-371 delivered, unchanged: every column is a real button,
     // every button is labelled, the selected bar and the cursor column are the
     // pressed ones, and the arrow-key handler is still on both strips.
@@ -241,7 +241,7 @@ describe('LeadMelodyHeaders geometry', () => {
     expect(html).toContain('aria-label="Bar 1"');
     expect(html).toContain('aria-label="Bar 1 step 6"');
     expect(html.split('aria-pressed="true"').length - 1).toBe(headersMeter.stepsPerBar + 1);
-    expect(html.split('width:20px').length - 1).toBe(32);
+    expect(html.split('width:28px').length - 1).toBe(32);
   });
 });
 
@@ -309,8 +309,8 @@ describe('LeadMelodyHeaders rendering stability', () => {
         cellsPerBar={leadColumnCells(headersMeter, 1)}
       />,
     );
-    expect(wide.split('width:20px').length - 1).toBe(64);
-    expect(renderToString(<LeadMarkerView column={3} />)).toContain('translateX(60px)');
+    expect(wide.split('width:28px').length - 1).toBe(64);
+    expect(renderToString(<LeadMarkerView column={3} />)).toContain('translateX(84px)');
   });
 });
 
@@ -329,5 +329,17 @@ describe('LeadMelodyGrid gate slider', () => {
   test('the slider states that gate applies when the arp is off', () => {
     const html = renderToString(<LeadMelodyGrid trackId="lead" />);
     expect(html).toContain('Applies when the arp is off');
+  });
+});
+
+describe('the cell size', () => {
+  test('is 28px on both axes, from the one constant', () => {
+    expect(LEAD_CELL_SIZE).toBe(28);
+    const html = renderToString(<LeadMelodyGrid trackId="lead" />);
+    expect(html).toContain('grid-template-columns:repeat(16, 28px);grid-auto-rows:28px');
+    // No Tailwind row height survives: cells, both header strips and the
+    // note-name column all read the constant, so the touch hit test's
+    // row divisor is the same number as its column divisor.
+    expect(html).not.toMatch(/class="[^"]*\bh-5\b/);
   });
 });

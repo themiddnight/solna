@@ -4,7 +4,7 @@ import type { StepCell } from '@/components/sequencerGrid';
 import type { Meter } from '@/utils/timeSignature';
 import type { MelodyTrackId } from '@/store/melodyTracks';
 import {
-  LEAD_CELL_WIDTH,
+  LEAD_CELL_SIZE,
   isBlackKey,
   isRootNote,
   leadCellEndsSpan,
@@ -244,7 +244,7 @@ function LeadMelodyCell({
         const count = spanCells + (e.key === 'ArrowRight' ? 1 : -1);
         onResize(spanStartIdx, note, count * stride);
       }}
-      className={`relative h-5 border border-base-300 ${span || inactive} ${
+      className={`relative border border-base-300 ${span || inactive} ${
         kind === 'none' || kind === 'start' ? sep : ''
       }`}
     >
@@ -280,7 +280,10 @@ export const LeadMelodyCells = React.memo(function LeadMelodyCells(props: LeadMe
   return (
     <div
       className="grid shrink-0"
-      style={{ gridTemplateColumns: `repeat(${columns}, ${LEAD_CELL_WIDTH}px)` }}
+      style={{
+        gridTemplateColumns: `repeat(${columns}, ${LEAD_CELL_SIZE}px)`,
+        gridAutoRows: `${LEAD_CELL_SIZE}px`,
+      }}
     >
       {rows.map((note, rowIndex) => (
         <LeadMelodyRow key={note} cells={props} paint={paint} note={note} rowIndex={rowIndex} />

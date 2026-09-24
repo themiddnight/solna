@@ -4,7 +4,7 @@ import { PanelCard } from '@/components/ui/PanelCard';
 import { ModuleHeader } from '@/components/ui/ModuleHeader';
 import { SoloButton } from '@/components/ui/SoloButton';
 import { type StepCell } from '@/components/sequencerGrid';
-import { LEAD_CELL_WIDTH, leadCursorKeyTarget, leadRowLabelTone } from './melodyGrid';
+import { LEAD_CELL_SIZE, leadCursorKeyTarget, leadRowLabelTone } from './melodyGrid';
 import { useLeadMarkerColumn } from './useLeadMarker';
 import { ModulePasteButton } from '../ModulePasteButton';
 import { LeadMelodyCells } from './LeadMelodyCells';
@@ -34,7 +34,7 @@ interface LeadMarkerViewProps {
  * ui/BottomInputDock.tsx:9-21).
  *
  * It spans the header strips as well as the body, so it is offset by the
- * note-name column's width and strides by LEAD_CELL_WIDTH — the same
+ * note-name column's width and strides by LEAD_CELL_SIZE — the same
  * constant the header buttons size themselves with.
  */
 export function LeadMarkerView({ column }: LeadMarkerViewProps) {
@@ -42,9 +42,9 @@ export function LeadMarkerView({ column }: LeadMarkerViewProps) {
     <div
       className="pointer-events-none absolute top-0 bottom-0 bg-primary/20 ring-1 ring-inset ring-primary"
       style={{
-        width: LEAD_CELL_WIDTH,
+        width: LEAD_CELL_SIZE,
         left: LABEL_WIDTH,
-        transform: `translateX(${column * LEAD_CELL_WIDTH}px)`,
+        transform: `translateX(${column * LEAD_CELL_SIZE}px)`,
       }}
     />
   );
@@ -102,9 +102,9 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
 
   return (
     <>
-      {/* Both strips are h-5 — one grid row cell tall — so a bar and a beat
-          are pointer targets rather than 8px bands. The widths stay
-          LEAD_CELL_WIDTH, the same constant the marker's translateX strides
+      {/* Both strips are one grid row tall (LEAD_CELL_SIZE), so a bar and a
+          beat are pointer targets rather than thin bands. The widths stay
+          LEAD_CELL_SIZE, the same constant the marker's translateX strides
           by: a marker that drifts from its own ruler is worse than two
           honest markers. */}
       {/* Bar-number header — the whole bar's width selects that bar. */}
@@ -126,12 +126,12 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
                 // copy/paste" — it is a live selection tint, not a second
                 // marker. It sits under the DEV-377 marker on purpose: the
                 // marker is "this column", this strip is "this bar".
-                className={`h-5 flex items-center justify-center text-[8px] leading-none font-bold ${
+                className={`flex items-center justify-center text-[8px] leading-none font-bold ${
                   barIndex === selectedBar
                     ? 'bg-primary/20 text-primary'
                     : 'text-base-content/60'
                 }`}
-                style={{ width: LEAD_CELL_WIDTH }}
+                style={{ width: LEAD_CELL_SIZE, height: LEAD_CELL_SIZE }}
               >
                 {stepInBar === 0 ? barIndex + 1 : '\u00a0'}
               </button>
@@ -159,8 +159,8 @@ export const LeadMelodyHeaders = React.memo(function LeadMelodyHeaders({
                 // aria-pressed stays: it is the button's SELECTION state, and
                 // DEV-371's contract does not change. Only the band goes —
                 // the marker is the one thing that says "this column" now.
-                className="h-5 flex items-center justify-center text-[9px] leading-none text-base-content/50"
-                style={{ width: LEAD_CELL_WIDTH }}
+                className="flex items-center justify-center text-[9px] leading-none text-base-content/50"
+                style={{ width: LEAD_CELL_SIZE, height: LEAD_CELL_SIZE }}
               >
                 {cell.isBeatStart ? cell.beatIndex + 1 : '\u00a0'}
               </button>
@@ -222,7 +222,8 @@ function LeadRowLabels({ rows, rowLabels, outOfScale, onPreview }: LeadRowLabels
           type="button"
           onClick={() => onPreview(note)}
           title={`Preview ${rowLabels[rowIndex]}`}
-          className={`h-5 flex items-center justify-end pr-2 text-[10px] leading-none cursor-pointer ${leadRowLabelTone(outOfScale[rowIndex])}`}
+          className={`flex items-center justify-end pr-2 text-[10px] leading-none cursor-pointer ${leadRowLabelTone(outOfScale[rowIndex])}`}
+          style={{ height: LEAD_CELL_SIZE }}
         >
           {rowLabels[rowIndex]}
         </button>

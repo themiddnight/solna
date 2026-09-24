@@ -110,7 +110,7 @@ export interface SpanResizePreview<TIdentity> {
  * Whether a freshly computed preview is the one already on screen.
  *
  * A pointermove fires per frame, but a preview only CHANGES once the pointer
- * has crossed a whole step — at 20px, most moves of a gesture resolve to the
+ * has crossed a whole step — at Lead's 28px, most moves of a gesture resolve to the
  * length already drawn. Returning the previous object for those keeps the
  * state from bumping, which is what keeps everything derived from the
  * preview memoized and un-re-rendered.

@@ -4,7 +4,7 @@ import { useAppStore } from '@/store/store';
 import { type MelodyTrackId } from '@/store/melodyTracks';
 import { MELODY_ACTIONS } from '@/store/leadSlice';
 import { useSpanResize } from '@/components/ui/useSpanResize';
-import { LEAD_CELL_WIDTH } from './melodyGrid';
+import { LEAD_CELL_SIZE } from './melodyGrid';
 
 export interface LeadResizePreview {
   stepIndex: number;
@@ -93,7 +93,7 @@ export function useLeadNoteResize(trackId: MelodyTrackId): {
         identity,
         startLength: startLen,
         maxLength: maxLen,
-        pixelsPerStep: LEAD_CELL_WIDTH,
+        pixelsPerStep: LEAD_CELL_SIZE,
         // Whether the gesture commits — and what it commits — was already
         // ruled on by the shared hook's pure outcome predicate; a callback
         // here only carries the answer out.
