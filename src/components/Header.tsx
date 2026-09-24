@@ -83,7 +83,8 @@ export const Header = React.memo(function Header() {
         <ViewNav activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
-      {/* WHAT is being edited, then what you do with it: the subject run (the
+      {/* The vibes first on the loop layer (where a project starts), then WHAT
+          is being edited and what you do with it: the subject run (the
           loop picker on the loop layer, the project name on the song layer,
           exactly one of the two per layer), then what Arrange does with it
           while it plays and export (song layer only), then the key it is in

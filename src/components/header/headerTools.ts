@@ -11,7 +11,7 @@ import { ScaleMenu } from './ScaleMenu';
 import { ThemeToggle } from './ThemeToggle';
 
 export type HeaderToolId =
-  | 'loop-copy' | 'loop-selector' | 'vibes' | 'project-name' | 'follow-playhead' | 'export' | 'scale' | 'theme';
+  | 'vibes' | 'loop-copy' | 'loop-selector' | 'project-name' | 'follow-playhead' | 'export' | 'scale' | 'theme';
 
 export interface HeaderTool {
   readonly id: HeaderToolId;
@@ -33,9 +33,9 @@ const BOTH: readonly Layer[] = ['loop', 'song'];
  * tools: a mobile frame replaces them rather than moving them.
  */
 export const HEADER_TOOLS: readonly HeaderTool[] = [
+  { id: 'vibes', Component: VibesButton, layers: LOOP },
   { id: 'loop-copy', Component: LoopCopyButton, layers: LOOP },
   { id: 'loop-selector', Component: LoopSelector, layers: LOOP },
-  { id: 'vibes', Component: VibesButton, layers: LOOP },
   { id: 'project-name', Component: ProjectNameLabel, layers: SONG },
   { id: 'follow-playhead', Component: FollowPlayheadToggle, layers: SONG },
   { id: 'export', Component: ExportButton, layers: SONG },

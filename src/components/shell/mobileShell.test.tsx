@@ -54,10 +54,10 @@ describe('one bottom inset per frame', () => {
 const ids = (tools: readonly { id: string }[]) => tools.map((tool) => tool.id);
 
 describe('the mobile top bar splits HEADER_TOOLS by id', () => {
-  test('loop layer: loop picker and key inline; copy, vibes and theme in the menu', () => {
+  test('loop layer: loop picker and key inline; vibes, copy and theme in the menu', () => {
     const { bar, menu } = mobileHeaderTools('loop');
     expect(ids(bar)).toEqual(['loop-selector', 'scale']);
-    expect(ids(menu)).toEqual(['loop-copy', 'vibes', 'theme']);
+    expect(ids(menu)).toEqual(['vibes', 'loop-copy', 'theme']);
   });
 
   test('song layer: project name inline; follow, export and theme in the menu', () => {

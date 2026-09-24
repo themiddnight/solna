@@ -3,7 +3,7 @@ import { MenuRowButton, type ToolVariantProps } from '@/components/ui/MenuRowBut
 import { VibePickerModal } from './VibePickerModal';
 import { prefetchVibePreview, useVibesButton } from './useVibePicker';
 
-const ICON = <Sparkles className="w-4 h-4" aria-hidden="true" />;
+const ICON = <Sparkles className="w-4 h-4 text-primary" aria-hidden="true" />;
 
 /**
  * The only way to the vibes (R333): a loop-layer `HEADER_TOOLS` row. `bar` in
