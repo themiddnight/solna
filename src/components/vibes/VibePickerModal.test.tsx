@@ -11,10 +11,19 @@ import { VibesButton } from './VibesButton';
 describe('the vibe picker (R334)', () => {
   const html = renderToString(<VibePickerModal open={false} onClose={() => {}} />);
 
-  test('one card per vibe, none pressed, no dice before a preview', () => {
-    for (const vibe of VIBES) expect(html).toContain(`id="btn-vibes-card-${vibe.id}"`);
+  test('one row per vibe, none pressed, each with its own dice beside the card', () => {
+    for (const vibe of VIBES) {
+      const card = html.indexOf(`id="btn-vibes-card-${vibe.id}"`);
+      expect(card).toBeGreaterThan(-1);
+      if (vibe.random) expect(html.indexOf(`id="btn-vibes-reroll-${vibe.id}"`)).toBeGreaterThan(card);
+      else expect(html).not.toContain(`id="btn-vibes-reroll-${vibe.id}"`);
+    }
     expect(html).not.toContain('aria-pressed="true"');
-    expect(html).not.toContain('id="btn-vibes-reroll"');
+  });
+
+  test('the vibes stack as a list, one per row', () => {
+    expect(html).toContain('<ul class="flex flex-col gap-2">');
+    expect(html).not.toContain('grid-cols');
   });
 
   test('Use and Play are disabled until something is previewed; Cancel never is', () => {
@@ -24,7 +33,7 @@ describe('the vibe picker (R334)', () => {
     expect(html).toContain('Pick a vibe to hear it on this loop.');
   });
 
-  test('the grid scrolls between a pinned header and a pinned footer', () => {
+  test('the list scrolls between a pinned header and a pinned footer', () => {
     expect(html).toContain('flex flex-col overflow-hidden');
     expect(html).toContain('min-h-0 flex-1 overflow-y-auto');
     expect(html).toContain('shrink-0');

@@ -45,7 +45,7 @@ const ROLLING_MS = 400;
 export const PICK_PROMPT = 'Pick a vibe to hear it on this loop.';
 
 export interface VibePreviewed {
-  /** The card that was picked; the dice rerolls from it. */
+  /** The vibe whose card or dice was pressed; a variant is always drawn from it. */
   base: VibeSpec;
   /** What is sounding: `base`, or the dice's variant of it. */
   spec: VibeSpec;
@@ -131,7 +131,8 @@ export interface UseVibePicker {
   playing: boolean;
   rolling: boolean;
   pick: (vibe: VibeSpec) => void;
-  reroll: () => void;
+  /** Previews a fresh variant of `vibe`, whichever row it is on. */
+  reroll: (vibe: VibeSpec) => void;
   togglePlay: () => void;
   use: () => void;
   cancel: () => void;
@@ -194,18 +195,18 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
     setPreviewed({ base: vibe, spec: vibe });
   }, []);
 
-  const reroll = useCallback(() => {
+  const reroll = useCallback((vibe: VibeSpec) => {
     const session = sessionRef.current;
-    if (!session || !previewed?.base.random) return;
+    if (!session || !vibe.random) return;
     setRolling(true);
     try {
-      const { spec, headline, detail } = session.preview.rerollPreview(previewed.base);
-      setPreviewed({ base: previewed.base, spec, reroll: { headline, detail } });
+      const { spec, headline, detail } = session.preview.rerollPreview(vibe);
+      setPreviewed({ base: vibe, spec, reroll: { headline, detail } });
     } finally {
       // The spin stops even if the reroll throws.
       scheduleTimeout(spinRef, () => setRolling(false), ROLLING_MS);
     }
-  }, [previewed]);
+  }, []);
 
   const togglePlay = useCallback(() => {
     const session = sessionRef.current;
