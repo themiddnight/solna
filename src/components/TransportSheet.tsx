@@ -49,7 +49,7 @@ export function TransportSheet({
       title="Transport"
       modal={false}
       id={TRANSPORT_SHEET_ID}
-      boxClassName="space-y-3"
+      bodyClassName="space-y-3"
     >
       <div className="flex flex-wrap items-center gap-2">
         <TempoField bpm={bpm} setBpm={setBpm} place="sheet" />

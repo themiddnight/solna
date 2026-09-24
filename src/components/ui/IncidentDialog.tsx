@@ -167,9 +167,45 @@ export function IncidentDialog() {
     void runIncidentExport(report, action, browserExportDependencies()).then(setMessage);
   };
 
+  const showBody = report !== null || canRecover;
+
   return (
-    <Modal open={visible} onClose={dismiss} title={isAudio ? 'Audio stopped working' : 'Solna was interrupted'} size="md" boxClassName="space-y-4">
-      {(report !== null || canRecover) && (
+    <Modal open={visible} onClose={dismiss} title={isAudio ? 'Audio stopped working' : 'Solna was interrupted'} size="md" bodyClassName="space-y-4"
+      footer={showBody ? (
+        <div className="modal-action flex-wrap">
+          <button type="button" className="btn btn-sm btn-ghost" onClick={dismiss}>
+            {canRecover ? 'Not Now' : 'Close'}
+          </button>
+          {failed && (
+            <button type="button" className="btn btn-sm btn-ghost" aria-label="Reload App" onClick={() => window.location.reload()}>
+              Reload App
+            </button>
+          )}
+          {report !== null && (
+            <button
+              type="button"
+              className={canRecover ? 'btn btn-sm btn-outline' : 'btn btn-sm btn-primary'}
+              onClick={() => openGithubReport(report)}
+            >
+              Report on GitHub
+            </button>
+          )}
+          {canRecover && (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              aria-label={failed ? 'Retry' : 'Recover audio'}
+              disabled={recovering}
+              aria-busy={recovering}
+              onClick={() => void recoverAudio()}
+            >
+              {recovering && <span className="loading loading-spinner loading-xs" aria-hidden="true" />}
+              {recovering ? 'Recovering…' : failed ? 'Retry' : 'Recover'}
+            </button>
+          )}
+        </div>
+      ) : undefined}>
+      {showBody && (
         <>
           <p className="text-sm">
             {isAudio
@@ -200,38 +236,6 @@ export function IncidentDialog() {
             <p className="text-xs opacity-80">Device storage is unavailable, so this report is kept for this session only. Export it if you need it later.</p>
           )}
           {message !== null && <p role="status" className="text-xs">{message}</p>}
-          <div className="modal-action flex-wrap">
-            <button type="button" className="btn btn-sm btn-ghost" onClick={dismiss}>
-              {canRecover ? 'Not Now' : 'Close'}
-            </button>
-            {failed && (
-              <button type="button" className="btn btn-sm btn-ghost" aria-label="Reload App" onClick={() => window.location.reload()}>
-                Reload App
-              </button>
-            )}
-            {report !== null && (
-              <button
-                type="button"
-                className={canRecover ? 'btn btn-sm btn-outline' : 'btn btn-sm btn-primary'}
-                onClick={() => openGithubReport(report)}
-              >
-                Report on GitHub
-              </button>
-            )}
-            {canRecover && (
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                aria-label={failed ? 'Retry' : 'Recover audio'}
-                disabled={recovering}
-                aria-busy={recovering}
-                onClick={() => void recoverAudio()}
-              >
-                {recovering && <span className="loading loading-spinner loading-xs" aria-hidden="true" />}
-                {recovering ? 'Recovering…' : failed ? 'Retry' : 'Recover'}
-              </button>
-            )}
-          </div>
         </>
       )}
     </Modal>

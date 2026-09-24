@@ -69,7 +69,13 @@ function LoopChecklist({ rows, selected, onToggle }: {
 export function KeyChangeDialog(props: KeyChangeDialogProps) {
   const d = useKeyChangeDialog(props);
   return (
-    <Modal open onClose={props.onClose} title="Change key" size="md" boxClassName="space-y-4">
+    <Modal open onClose={props.onClose} title="Change key" size="md" bodyClassName="space-y-4" footer={
+      <div className="modal-action">
+        <button id="btn-key-change-cancel" type="button" className="btn btn-ghost" onClick={props.onClose}>Cancel</button>
+        <button id="btn-key-change-apply" type="button" className="btn btn-primary"
+          disabled={!d.canApply} onClick={d.apply}>Apply</button>
+      </div>
+    }>
       <ModeToggle mode={d.mode} onChange={d.setMode} />
       {d.mode === 'set' ? (
         <SetKeyFields root={d.root} scaleType={d.scaleType} onRoot={d.setRoot} onScale={d.setScaleType} />
@@ -82,11 +88,6 @@ export function KeyChangeDialog(props: KeyChangeDialogProps) {
         <span className={LABEL}>Harmonize chords</span>
       </label>
       <LoopChecklist rows={d.rows} selected={d.selected} onToggle={d.toggleLoop} />
-      <div className="modal-action">
-        <button id="btn-key-change-cancel" type="button" className="btn btn-ghost" onClick={props.onClose}>Cancel</button>
-        <button id="btn-key-change-apply" type="button" className="btn btn-primary"
-          disabled={!d.canApply} onClick={d.apply}>Apply</button>
-      </div>
     </Modal>
   );
 }

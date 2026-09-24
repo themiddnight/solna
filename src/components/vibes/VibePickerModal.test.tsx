@@ -34,9 +34,9 @@ describe('the vibe picker (R334)', () => {
   });
 
   test('the list scrolls between a pinned header and a pinned footer', () => {
-    expect(html).toContain('flex flex-col overflow-hidden');
-    expect(html).toContain('min-h-0 flex-1 overflow-y-auto');
-    expect(html).toContain('shrink-0');
+    expect(html).toContain('flex flex-col gap-4 overflow-hidden');
+    expect(html).toMatch(/min-h-0 flex-1 overflow-y-auto[^"]*"><ul/);
+    expect(html).toMatch(/<div class="shrink-0 [^"]*"><div class="shrink-0 border-t/);
   });
 
   test('the Header button opens a dialog and brings the picker with it', () => {

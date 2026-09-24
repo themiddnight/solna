@@ -19,13 +19,15 @@ describe('BottomSheet', () => {
     expect(html).toContain('aria-label="Close"');
   });
 
-  test('boxClassName composes onto the box', () => {
+  test('the title stays pinned and bodyClassName composes onto the scrolling body', () => {
     const html = renderToString(
-      <BottomSheet open onClose={noop} title="Menu" boxClassName="space-y-3">body</BottomSheet>,
+      <BottomSheet open onClose={noop} title="Menu" bodyClassName="space-y-3">body</BottomSheet>,
     );
     expect(html).toContain(
-      'class="modal-box bg-base-100 border border-base-300 shadow-2xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] space-y-3"',
+      'class="modal-box bg-base-100 border border-base-300 shadow-2xl flex flex-col gap-4 overflow-hidden pb-[calc(1.5rem+env(safe-area-inset-bottom))]"',
     );
+    expect(html).toContain('<div class="flex shrink-0 items-center justify-between"><h3');
+    expect(html).toContain('<div class="min-h-0 flex-1 overflow-y-auto overscroll-contain -m-1 p-1 space-y-3">body</div>');
   });
 
   test('afterBox renders inside the dialog, after the box, before the backdrop form', () => {
@@ -53,7 +55,7 @@ describe('BottomSheet', () => {
 });
 
 describe('BottomSheet modal={false}', () => {
-  const sheet = (props: { id?: string; boxClassName?: string } = {}) =>
+  const sheet = (props: { id?: string; bodyClassName?: string } = {}) =>
     renderToString(
       <BottomSheet open onClose={noop} title="Transport" modal={false} {...props}>body</BottomSheet>,
     );
@@ -85,8 +87,12 @@ describe('BottomSheet modal={false}', () => {
     expect(html).toContain('<h3 id="sheet-x-title"');
   });
 
-  test('boxClassName composes onto the dialog itself', () => {
-    expect(sheet({ boxClassName: 'space-y-3' })).toMatch(/<dialog class="[^"]* p-4 [^"]*space-y-3"/);
+  test('the title stays pinned and bodyClassName composes onto the scrolling body', () => {
+    const html = sheet({ bodyClassName: 'space-y-3' });
+    expect(html).toMatch(/<dialog class="[^"]* open:flex flex-col gap-4 overflow-hidden /);
+    expect(html).not.toMatch(/<dialog class="[^"]* flex /);
+    expect(html).toContain('<div class="flex shrink-0 items-center justify-between"><h3');
+    expect(html).toContain('<div class="min-h-0 flex-1 overflow-y-auto overscroll-contain -m-1 p-1 space-y-3">');
   });
 
   test('rises in on open and reverses on close, and stays still under reduced motion', () => {

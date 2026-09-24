@@ -90,27 +90,26 @@ export function VibeFooter({ previewed, playing, onTogglePlay, onCancel, onUse }
 }
 
 /**
- * The vibe picker (R334): a centred Modal on both frames. The box is a column —
- * Modal's own header, the vibe list (the only thing that scrolls), the footer.
+ * The vibe picker (R334): a centred Modal on both frames. The vibe list is
+ * Modal's scrolling body, between its pinned header and the pinned footer.
  * Every way out but Use routes through `cancel`, which restores the loop.
  */
 export function VibePickerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const p = useVibePicker(open, onClose);
   return (
-    <Modal open={open} onClose={p.cancel} title="Vibes" boxClassName="flex flex-col overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-y-auto py-3">
-        <ul className="flex flex-col gap-2">
-          {VIBES.map((vibe) => {
-            const selected = p.previewed?.base.id === vibe.id;
-            return (
-              <VibeRow key={vibe.id} vibe={vibe} selected={selected} current={p.currentVibeId === vibe.id}
-                disabled={!p.ready} rolling={selected && p.rolling} onPick={p.pick} onReroll={p.reroll} />
-            );
-          })}
-        </ul>
-      </div>
+    <Modal open={open} onClose={p.cancel} title="Vibes" footer={
       <VibeFooter previewed={p.previewed} playing={p.playing}
         onTogglePlay={p.togglePlay} onCancel={p.cancel} onUse={p.use} />
+    }>
+      <ul className="flex flex-col gap-2">
+        {VIBES.map((vibe) => {
+          const selected = p.previewed?.base.id === vibe.id;
+          return (
+            <VibeRow key={vibe.id} vibe={vibe} selected={selected} current={p.currentVibeId === vibe.id}
+              disabled={!p.ready} rolling={selected && p.rolling} onPick={p.pick} onReroll={p.reroll} />
+          );
+        })}
+      </ul>
     </Modal>
   );
 }

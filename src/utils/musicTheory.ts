@@ -408,25 +408,26 @@ export interface BorrowedChord {
 
 /**
  * Returns a curated list of popular borrowed chords (modal interchange / chromatic chords) for the given scale/key.
+ * `label` is the bare Roman numeral (`♭VI`, `iiø7`), as terse as the in-scale palette's degree badge.
  */
 export function getBorrowedChords(root: string, scaleType: string): BorrowedChord[] {
   const rootIndex = rootSemitone(root);
   const candidates: BorrowedChord[] =
     scaleType === 'Major' || scaleType === 'Lydian' || scaleType === 'Mixolydian'
       ? [
-          { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv (Minor IV)' },
-          { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI (Flat VI)' },
-          { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII (Flat VII)' },
-          { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III (Flat III)' },
-          { root: ROOTS[(rootIndex + 1) % 12], quality: 'maj', label: '♭II (Neapolitan)' },
-          { root: ROOTS[(rootIndex + 2) % 12], quality: 'm7b5', label: 'iiø7 (Half-Dim)' },
+          { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv' },
+          { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI' },
+          { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII' },
+          { root: ROOTS[(rootIndex + 3) % 12], quality: 'maj', label: '♭III' },
+          { root: ROOTS[(rootIndex + 1) % 12], quality: 'maj', label: '♭II' },
+          { root: ROOTS[(rootIndex + 2) % 12], quality: 'm7b5', label: 'iiø7' },
         ]
       : scaleType === 'Natural Minor' || scaleType === 'Harmonic Minor' || scaleType === 'Dorian' || scaleType === 'Phrygian'
         ? [
-            { root: ROOTS[(rootIndex + 5) % 12], quality: 'maj', label: 'IV (Major IV)' },
-            { root: ROOTS[(rootIndex + 7) % 12], quality: 'maj', label: 'V (Major V)' },
-            { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI (Flat VI)' },
-            { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII (Flat VII)' },
+            { root: ROOTS[(rootIndex + 5) % 12], quality: 'maj', label: 'IV' },
+            { root: ROOTS[(rootIndex + 7) % 12], quality: 'maj', label: 'V' },
+            { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI' },
+            { root: ROOTS[(rootIndex + 10) % 12], quality: 'maj', label: '♭VII' },
           ]
         : [
             // Default universal borrowed / chromatic accents

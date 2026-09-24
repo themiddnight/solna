@@ -87,8 +87,29 @@ any hold is active no timer runs; entries still render in the host, under the ba
 is lost and a snackbar's action stays valid. When the last hold releases, every queued entry gets a fresh full-duration timer.
 This is the only place feedback timing is paused or resumed.
 
+### Pinned header, scrolling body
+
+Every titled overlay — `Modal`, both `BottomSheet` forms, the `PresetLibrary` drawer — is a
+column: the title and its close button pinned at the top, the body the only thing that scrolls,
+and, where the surface has one, a footer pinned at the bottom. A long menu sheet or dialog
+otherwise scrolled its own close button out of reach, which on a phone left only the backdrop
+(and nothing at all on the non-modal transport sheet, which has none) as a way out. `Modal.tsx`
+holds the three class strings (`SURFACE_COLUMN`, `SURFACE_HEADER`, `SURFACE_BODY`) and both
+primitives render them, so a consumer passes only its body spacing (`bodyClassName`) and, for
+`Modal`, an optional `footer`; no consumer lays out its own scroll region. Every dialog's
+`modal-action` row is its `footer`, so Cancel/Apply stay in reach however long the body grows;
+the footer drops `modal-action`'s own top margin because the column's gap already spaces it. A
+submit button moved out of its `<form>` into the footer keeps submitting it, and stays the Enter
+default, through the `form` attribute (the preset save modal). The non-modal sheet
+uses `open:flex`, never `flex`, because a bare `display` utility beats the UA's closed-dialog
+`display: none`. Popups (short anchored lists, no title) and the dock are not titled overlays and
+are out of this rule.
+
 ### Rejected alternatives
 
+- **A `sticky top-0` header inside the scrolling `modal-box`.** The box's own padding sits above
+  a sticky header, so content scrolls visibly through that strip, and the scrollbar runs the full
+  height beside the title; a column with a separate scroll body has neither problem.
 - A modal transport sheet: its backdrop makes Play/Stop inert, so every start or stop costs a
   close first — the one control a transport sheet sits beside is the one it would block.
 - A non-modal sheet positioned `fixed` above the bar: needs the bar's height as a number (or a
@@ -138,6 +159,9 @@ accepted trade-off of the fixed z-scale, not a bug to chase with a higher one-of
 - **R331** — The z-scale is fixed; a new layer takes a listed step.
 - **R332** — Below `md` the transport is one row; tempo, meter, metronome, MIDI, level and master
   live in a non-modal transport sheet above it; the frame picks the variant; desktop unchanged.
+- **R339** — Every titled overlay pins its header (and footer, if any) and scrolls only its body;
+  `Modal` and `BottomSheet` own that layout, consumers pass `bodyClassName`/`footer`; a dialog's
+  `modal-action` row is always its `footer`.
 
 ## Sources
 

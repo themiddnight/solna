@@ -416,10 +416,11 @@ function SaveModalForm(props: {
       open
       onClose={() => setShowSave(false)}
       size="sm"
-      boxClassName="space-y-4"
+      bodyClassName="space-y-4"
       title={<><Bookmark className="w-4 h-4 text-primary" />{save.heading}</>}
+      footer={<SaveModalActions formId={`${uid}-form`} label={save.buttonLabel} onCancel={() => setShowSave(false)} />}
     >
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form id={`${uid}-form`} onSubmit={onSubmit} className="space-y-3">
           <div>
             <label className={FIELD_LABEL} htmlFor={`${uid}-name`}>Progression Name</label>
             <input
@@ -488,20 +489,25 @@ function SaveModalForm(props: {
             </div>
           )}
 
-          <div className="modal-action">
-            <button
-              type="button"
-              onClick={() => setShowSave(false)}
-              className="btn btn-sm btn-ghost"
-            >
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-sm btn-primary">
-              {save.buttonLabel}
-            </button>
-          </div>
         </form>
     </Modal>
+  );
+}
+
+/**
+ * The save modal's pinned footer. It sits outside the scrolling form, so
+ * `form` keeps Save the form's submit button (and Enter's default button).
+ */
+function SaveModalActions({ formId, label, onCancel }: { formId: string; label: string; onCancel: () => void }) {
+  return (
+    <div className="modal-action">
+      <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">
+        Cancel
+      </button>
+      <button type="submit" form={formId} className="btn btn-sm btn-primary">
+        {label}
+      </button>
+    </div>
   );
 }
 

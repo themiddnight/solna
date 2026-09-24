@@ -173,7 +173,7 @@ export function DriveFileBrowserModal({
   const rows = useMemo(() => sortBrowserRows(toBrowserRows(files)), [files]);
 
   return (
-    <Modal open={open} onClose={onClose} title={browserTitle(mode)} size="lg" boxClassName="space-y-3">
+    <Modal open={open} onClose={onClose} title={browserTitle(mode)} size="lg" bodyClassName="space-y-3">
       {signedIn ? (
         <>
           {error !== null && <p className="text-xs text-error">{error}</p>}

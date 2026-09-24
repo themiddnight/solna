@@ -19,21 +19,34 @@ describe('Modal', () => {
 
   test('renders the standard box chrome and the default width', () => {
     const html = renderToString(<Modal open onClose={noop} title="Projects">body</Modal>);
-    expect(html).toContain('class="modal-box bg-base-100 border border-base-300 shadow-2xl max-w-md"');
+    expect(html).toContain('class="modal-box bg-base-100 border border-base-300 shadow-2xl max-w-md flex flex-col gap-4 overflow-hidden"');
   });
 
-  test('size and boxClassName compose onto the box', () => {
+  test('size composes onto the box, bodyClassName onto the scrolling body', () => {
     const html = renderToString(
-      <Modal open onClose={noop} title="MIDI" size="lg" boxClassName="space-y-6">body</Modal>,
+      <Modal open onClose={noop} title="MIDI" size="lg" bodyClassName="space-y-6">body</Modal>,
     );
-    expect(html).toContain(
-      'class="modal-box bg-base-100 border border-base-300 shadow-2xl max-w-2xl space-y-6"',
+    expect(html).toContain('modal-box bg-base-100 border border-base-300 shadow-2xl max-w-2xl');
+    expect(html).toContain('<div class="min-h-0 flex-1 overflow-y-auto overscroll-contain -m-1 p-1 space-y-6">body</div>');
+  });
+
+  test('the header is pinned above the body and the footer below it', () => {
+    const html = renderToString(
+      <Modal open onClose={noop} title="Vibes" footer={<p id="foot">foot</p>}>body</Modal>,
     );
+    expect(html).toContain('<div class="flex shrink-0 items-center justify-between"><h3');
+    expect(html).toContain('<div class="shrink-0 [&amp;&gt;.modal-action]:mt-0"><p id="foot">foot</p></div>');
+    expect(html.indexOf('>body<')).toBeLessThan(html.indexOf('id="foot"'));
+  });
+
+  test('renders no footer slot without a footer', () => {
+    const html = renderToString(<Modal open onClose={noop} title="Projects">body</Modal>);
+    expect(html).not.toContain('<div class="shrink-0 ');
   });
 
   test('the header carries the title and a labelled close button', () => {
     const html = renderToString(<Modal open onClose={noop} title="Projects">body</Modal>);
-    expect(html).toContain('class="flex items-center justify-between"');
+    expect(html).toContain('class="flex shrink-0 items-center justify-between"');
     expect(html).toContain('<h3 class="font-bold text-lg flex items-center gap-2">Projects</h3>');
     expect(html).toContain('aria-label="Close"');
   });
@@ -44,7 +57,7 @@ describe('Modal', () => {
         body
       </Modal>,
     );
-    expect(html).toContain('class="flex items-center justify-between border-b border-base-300 pb-4"');
+    expect(html).toContain('class="flex shrink-0 items-center justify-between border-b border-base-300 pb-4"');
   });
 
   test('renders the backdrop form the platform closes on', () => {

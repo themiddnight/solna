@@ -397,7 +397,8 @@ export function LoopCopyDialog({
       onClose={onClose}
       title={`Copy into "${labels[targetId] ?? ''}"`}
       size="md"
-      boxClassName="space-y-4"
+      bodyClassName="space-y-4"
+      footer={<CopyDialogActions disabled={selected.length === 0} onApply={apply} onCancel={onClose} />}
     >
       <label className="flex items-center gap-2">
         <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
@@ -436,11 +437,6 @@ export function LoopCopyDialog({
       {keyNotice && <CopyNotice>{keyNotice}</CopyNotice>}
       {barsNotice && <CopyNotice>{barsNotice}</CopyNotice>}
 
-      <CopyDialogActions
-        disabled={selected.length === 0}
-        onApply={apply}
-        onCancel={onClose}
-      />
     </Modal>
   );
 }

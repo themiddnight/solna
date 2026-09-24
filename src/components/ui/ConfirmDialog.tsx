@@ -29,8 +29,7 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <Modal open onClose={onCancel} title={title} boxClassName="space-y-4">
-      <p className="text-sm">{message}</p>
+    <Modal open onClose={onCancel} title={title} bodyClassName="space-y-4" footer={
       <div className="modal-action">
         {/* eslint-disable-next-line jsx-a11y/no-autofocus -- a dialog raised by a destructive action must open with Cancel focused, or a stray Enter confirms it. */}
         <button type="button" className="btn" onClick={onCancel} autoFocus>Cancel</button>
@@ -38,6 +37,8 @@ export function ConfirmDialog({
           {confirmLabel}
         </button>
       </div>
+    }>
+      <p className="text-sm">{message}</p>
     </Modal>
   );
 }

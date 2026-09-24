@@ -28,7 +28,7 @@ export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) 
       open={open}
       onClose={onClose}
       title="Menu"
-      boxClassName="space-y-3"
+      bodyClassName="space-y-3"
       afterBox={<ProjectMenuEffects menu={project} />}
     >
       <div className="flex flex-col gap-1">

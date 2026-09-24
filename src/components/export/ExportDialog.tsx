@@ -48,7 +48,7 @@ function ExportStatus({ status, onCancel }: { status: ExportStatusView; onCancel
 
 export function ExportDialog({ open, onClose, kinds, busy, status, onStart, onCancel }: ExportDialogProps) {
   return (
-    <Modal open={open} onClose={onClose} title="Export" size="sm" boxClassName="space-y-4">
+    <Modal open={open} onClose={onClose} title="Export" size="sm" bodyClassName="space-y-4">
       <ExportKindRows kinds={kinds} busy={busy} onStart={onStart} />
       {status && <ExportStatus status={status} onCancel={onCancel} />}
     </Modal>

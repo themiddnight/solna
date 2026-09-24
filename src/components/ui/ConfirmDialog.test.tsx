@@ -20,6 +20,13 @@ describe('ConfirmDialog', () => {
     expect(html).toContain('>Delete</button>');
   });
 
+  test('pins the action row in the footer, below the scrolling message', () => {
+    const html = renderToString(
+      <ConfirmDialog title="T" message="M" confirmLabel="OK" onConfirm={noop} onCancel={noop} />,
+    );
+    expect(html).toMatch(/overflow-y-auto[^"]*"><p class="text-sm">M<\/p><\/div><div class="shrink-0 [^"]*"><div class="modal-action">/);
+  });
+
   test('is a Modal — never a modal-open div', () => {
     const html = renderToString(
       <ConfirmDialog title="T" message="M" confirmLabel="OK" onConfirm={noop} onCancel={noop} />,

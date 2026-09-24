@@ -275,7 +275,18 @@ export function MidiSettingsModal() {
       onClose={() => setIsOpen(false)}
       size="lg"
       headerDivider
-      boxClassName="space-y-6"
+      bodyClassName="space-y-6"
+      footer={
+        <div className="modal-action">
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="btn btn-sm btn-primary"
+          >
+            Done
+          </button>
+        </div>
+      }
       title={<><Sliders className="w-5 h-5 text-primary" />MIDI Controller &amp; Mappings</>}
     >
       {/* Connected Devices & Input Selection */}
@@ -324,17 +335,6 @@ export function MidiSettingsModal() {
 
       {/* Add Custom Binding Form */}
       <AddMappingForm onAdd={addMidiMapping} />
-
-      {/* Footer Actions */}
-      <div className="modal-action">
-        <button
-          type="button"
-          onClick={() => setIsOpen(false)}
-          className="btn btn-sm btn-primary"
-        >
-          Done
-        </button>
-      </div>
     </Modal>
   );
 }

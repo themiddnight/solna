@@ -42,6 +42,15 @@ describe('getBorrowedChords catalog', () => {
     );
   });
 
+  test('labels are bare Roman numerals, with no spelled-out name', () => {
+    for (const scaleType of ['Major', 'Natural Minor', 'Blues']) {
+      for (const { label } of getBorrowedChords('C', scaleType)) {
+        expect(label).toMatch(/^♭?[iIvV]+ø?7?$/);
+      }
+    }
+    expect(getBorrowedChords('C', 'Major').map((c) => c.label)).toEqual(['iv', '♭VI', '♭VII', '♭III', '♭II', 'iiø7']);
+  });
+
   test('minor branch contains no III entry', () => {
     for (const scaleType of ['Natural Minor', 'Harmonic Minor', 'Dorian', 'Phrygian']) {
       const borrowed = getBorrowedChords('C', scaleType);

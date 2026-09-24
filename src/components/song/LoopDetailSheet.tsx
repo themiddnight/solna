@@ -67,7 +67,7 @@ export function LoopDetailSheet({
   };
 
   return (
-    <BottomSheet open={open} onClose={onClose} title={label} boxClassName="flex flex-col gap-3">
+    <BottomSheet open={open} onClose={onClose} title={label} bodyClassName="flex flex-col gap-3">
       <LoopCardMetaRow
         loop={loop}
         label={label}

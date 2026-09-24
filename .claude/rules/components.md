@@ -96,6 +96,13 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   sheet opens with `show()`, has no backdrop and takes no feedback hold, renders inside the bar it
   opens from and anchors to that bar's top edge (no offset, no safe-area padding), sits at the
   frame-bar step (40), and closes on its trigger, its close button and Escape. <!-- R326 -->
+- Every titled overlay (`Modal`, both `BottomSheet` forms, the `PresetLibrary` drawer) is a column:
+  the title and close button pinned at the top, the body the only scroll container, a footer (if
+  any) pinned at the bottom. `Modal` and `BottomSheet` own that layout through `SURFACE_COLUMN`,
+  `SURFACE_HEADER` and `SURFACE_BODY` (`ui/Modal.tsx`); a consumer passes only `bodyClassName` and,
+  for `Modal`, `footer`. A dialog's `modal-action` row is always its `footer`, never the last child
+  of the body; a submit button pinned there names its form through `form`. The non-modal sheet takes `open:flex`, never `flex`, which would show it
+  closed. <!-- R339 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 - A preset library is a `PresetLibrary` side drawer on both frames, never a sheet; a quick
   in-place pick is a native `<select>`; a surface with a user library that can be deleted from
   gets a drawer, even where a quick pick also exists. <!-- R327 -->
@@ -157,6 +164,9 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A non-centered `Modal`, or a bottom sheet built from anything but `BottomSheet` <!-- R326 -->
 - A non-modal `BottomSheet` with a backdrop, a feedback hold, its own offset or safe-area padding,
   a z-index off the frame-bar step, or used where the frame need not stay interactive <!-- R326 -->
+- A titled overlay whose header scrolls away with its content, a consumer that lays out its own
+  scroll region inside `Modal`/`BottomSheet`, a `modal-action` row inside a `Modal`'s scrolling body,
+  or a bare `flex` on a non-modal sheet's `<dialog>` <!-- R339 -->
 - A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
 - A popup rendered inside a bottom sheet, or positioned via the popover API or CSS anchor positioning <!-- R328 -->
 - A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an

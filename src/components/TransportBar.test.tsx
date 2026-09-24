@@ -193,7 +193,8 @@ describe('the mobile transport bar', () => {
 
   test('is one row: no column stack, no md:contents wrappers', () => {
     expect(html).toMatch(/^<div class="shrink-0 bg-base-100 border-t border-base-300 px-2 py-1 flex items-center gap-1 /);
-    expect(html).not.toContain('flex-col');
+    // The bar, not the sheet: the sheet is a pinned-header column like every titled overlay (R339).
+    expect(bar).not.toContain('flex-col');
     expect(html).not.toContain('md:contents');
   });
 

@@ -120,7 +120,7 @@ describe('DriveFileBrowserModal', () => {
   test('a closed modal still renders the shared box chrome, without modal-open', () => {
     const html = renderToString(<DriveFileBrowserModal {...props({ open: false })} />);
     expect(html).toContain('class="modal"');
-    expect(html).toContain('modal-box bg-base-100 border border-base-300 shadow-2xl max-w-2xl space-y-3');
+    expect(html).toContain('modal-box bg-base-100 border border-base-300 shadow-2xl max-w-2xl flex flex-col gap-4 overflow-hidden');
     expect(html).not.toContain('modal-open');
   });
 });

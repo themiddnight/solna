@@ -63,7 +63,7 @@ export default function DiagnosticPanel({ open, onClose }: { open: boolean; onCl
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={<><Activity className="h-5 w-5" /> Performance diagnostics</>} size="lg" boxClassName="space-y-4">
+    <Modal open={open} onClose={onClose} title={<><Activity className="h-5 w-5" /> Performance diagnostics</>} size="lg" bodyClassName="space-y-4">
       <p className="text-sm text-base-content/70">
         Local-only, bounded to 1,800 one-second samples. Closing this panel does not stop recording.
       </p>
