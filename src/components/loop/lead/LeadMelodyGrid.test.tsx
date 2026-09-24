@@ -10,6 +10,9 @@ import { LEAD_CELL_SIZE, leadColumnCells } from './melodyGrid';
 import { useAppStore } from '@/store/store';
 import type { MixLayerId } from '@/store/focusTrack';
 import type { MelodyTrackId } from '@/store/melodyTracks';
+import { LeadMelodyCells } from './LeadMelodyCells';
+import type { LeadNote } from '@/audio/playback/leadMelody';
+import { LEAD_TICKS_PER_BAR, columnsPerBar, strideFor } from '@/utils/stepResolution';
 
 const source = readFileSync(
   join(process.cwd(), 'src/components/loop/lead/LeadMelodyGrid.tsx'),
@@ -341,5 +344,40 @@ describe('the cell size', () => {
     // note-name column all read the constant, so the touch hit test's
     // row divisor is the same number as its column divisor.
     expect(html).not.toMatch(/class="[^"]*\bh-5\b/);
+  });
+});
+
+describe('the resize handle', () => {
+  function cellsWithOneNote(): string {
+    const meter = getMeter('4/4');
+    const stride = strideFor(null);
+    const melody: LeadNote[][] = Array.from({ length: LEAD_TICKS_PER_BAR }, () => []);
+    melody[0] = [{ note: 'C4', len: stride }];
+    // Props passed directly: renderToString serves the store's creation-time
+    // state, so a setState here would have no effect (R257).
+    return renderToString(
+      <LeadMelodyCells
+        trackId="lead"
+        meter={meter}
+        loopLength={1}
+        melody={melody}
+        rows={['C4']}
+        rowLabels={['C4']}
+        outOfScale={[false]}
+        root="C"
+        onResize={() => {}}
+        stride={stride}
+        colsPerBar={columnsPerBar(meter.stepsPerBar, stride)}
+        cellsPerBar={leadColumnCells(meter, stride)}
+        onPreview={() => {}}
+      />,
+    );
+  }
+
+  test('keeps its visible 8px strip but grabs across 16px, all inside the end cell', () => {
+    const html = cellsWithOneNote();
+    expect(html).toContain(
+      'class="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none before:absolute before:inset-y-0 before:right-0 before:w-4"',
+    );
   });
 });

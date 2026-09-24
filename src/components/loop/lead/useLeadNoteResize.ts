@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import type React from 'react';
 import { useAppStore } from '@/store/store';
 import { type MelodyTrackId } from '@/store/melodyTracks';
 import { MELODY_ACTIONS } from '@/store/leadSlice';
-import { useSpanResize } from '@/components/ui/useSpanResize';
+import {
+  useSpanResize,
+  type SpanResizePointer,
+  type SpanResizeStart,
+} from '@/components/ui/useSpanResize';
 import { LEAD_CELL_SIZE } from './melodyGrid';
 
 export interface LeadResizePreview {
@@ -50,6 +53,45 @@ export function leadTicksFromCells(cells: number, stride: number): number {
   return cells * stride;
 }
 
+/** The two writes a finished Lead resize can make. */
+interface LeadResizeWrites {
+  setNoteLength: (stepIndex: number, note: string, len: number) => void;
+  erase: (stepIndex: number, note: string) => void;
+}
+
+/** What one resize grabs, and whether an unmoved release erases it. */
+interface LeadResizeTarget {
+  stepIndex: number;
+  note: string;
+  startLen: number;
+  maxLen: number;
+  stride: number;
+  /**
+   * An unmoved release is a click on the span, which erases it — right for
+   * the mouse handle. A touch long-press passes false: a hold and lift is
+   * not a tap, so the note must survive it.
+   */
+  clickErases?: boolean;
+}
+
+/**
+ * The end-of-gesture writes, pure so the clickErases ruling is testable
+ * without a DOM.
+ */
+export function leadResizeCallbacks(
+  write: LeadResizeWrites,
+  stride: number,
+  clickErases: boolean,
+): Pick<SpanResizeStart<LeadResizeIdentity>, 'onCommit' | 'onClick'> {
+  return {
+    onCommit: (target, cells) =>
+      write.setNoteLength(target.stepIndex, target.note, leadTicksFromCells(cells, stride)),
+    onClick: (target) => {
+      if (clickErases) write.erase(target.stepIndex, target.note);
+    },
+  };
+}
+
 /**
  * The Lead adapter over the shared span-resize hook: it supplies the note
  * identity, the cell width, and the ticks-per-cell stride, and reads the
@@ -65,48 +107,36 @@ export function leadTicksFromCells(cells: number, stride: number): number {
  */
 export function useLeadNoteResize(trackId: MelodyTrackId): {
   preview: LeadResizePreview | null;
-  startResize: (
-    e: React.PointerEvent<HTMLElement>,
-    stepIndex: number,
-    note: string,
-    startLen: number,
-    maxLen: number,
-    stride: number,
-  ) => void;
+  startResize: (pointer: SpanResizePointer, target: LeadResizeTarget) => void;
+  cancelResize: () => void;
 } {
   const actions = MELODY_ACTIONS[trackId];
-  const { previewFor, startResize: startSpanResize } = useSpanResize<LeadResizeIdentity>();
+  const {
+    previewFor,
+    startResize: startSpanResize,
+    cancel: cancelResize,
+  } = useSpanResize<LeadResizeIdentity>();
   const [gesture, setGesture] = useState<LeadResizeGesture | null>(null);
 
   const startResize = useCallback(
-    (
-      e: React.PointerEvent<HTMLElement>,
-      stepIndex: number,
-      note: string,
-      startLen: number,
-      maxLen: number,
-      stride: number,
-    ) => {
-      const identity: LeadResizeIdentity = { stepIndex, note };
-      setGesture({ identity, stride });
-      startSpanResize(e, {
+    (pointer: SpanResizePointer, target: LeadResizeTarget) => {
+      const identity: LeadResizeIdentity = { stepIndex: target.stepIndex, note: target.note };
+      setGesture({ identity, stride: target.stride });
+      startSpanResize(pointer, {
         identity,
-        startLength: startLen,
-        maxLength: maxLen,
+        startLength: target.startLen,
+        maxLength: target.maxLen,
         pixelsPerStep: LEAD_CELL_SIZE,
-        // Whether the gesture commits — and what it commits — was already
-        // ruled on by the shared hook's pure outcome predicate; a callback
-        // here only carries the answer out.
-        onCommit: (target, cells) => {
-          useAppStore.getState()[actions.setNoteLength](
-            target.stepIndex,
-            target.note,
-            leadTicksFromCells(cells, stride),
-          );
-        },
-        onClick: (target) => {
-          useAppStore.getState()[actions.paintNote](target.stepIndex, target.note, 'erase');
-        },
+        ...leadResizeCallbacks(
+          {
+            setNoteLength: (stepIndex, note, len) =>
+              useAppStore.getState()[actions.setNoteLength](stepIndex, note, len),
+            erase: (stepIndex, note) =>
+              useAppStore.getState()[actions.paintNote](stepIndex, note, 'erase'),
+          },
+          target.stride,
+          target.clickErases ?? true,
+        ),
       });
     },
     [actions, startSpanResize],
@@ -123,5 +153,5 @@ export function useLeadNoteResize(trackId: MelodyTrackId): {
     };
   }, [gesture, previewFor]);
 
-  return { preview, startResize };
+  return { preview, startResize, cancelResize };
 }

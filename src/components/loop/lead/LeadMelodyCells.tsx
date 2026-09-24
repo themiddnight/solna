@@ -253,13 +253,20 @@ function LeadMelodyCell({
           aria-hidden="true"
           onPointerDown={(e) => {
             const { spanStartIdx, spanCells, startCol } = spanAt(col);
-            startResize(e, spanStartIdx, note, spanCells, columns - startCol, stride);
+            startResize(e, {
+              stepIndex: spanStartIdx,
+              note,
+              startLen: spanCells,
+              maxLen: columns - startCol,
+              stride,
+            });
           }}
-          // touch-none: without it a touch drag the browser
-          // turns into a scroll fires pointercancel, which now
-          // correctly discards — so the gesture would silently
-          // do nothing on a touch device.
-          className="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none"
+          // touch-none: without it a touch drag the browser turns into a
+          // scroll fires pointercancel, which correctly discards — so the
+          // gesture would silently do nothing on a touch device.
+          // before:*: the visible strip stays w-2; the grab area is 16px,
+          // all inside this end cell so it never takes a neighbour's tap.
+          className="absolute inset-y-0 right-0 w-2 cursor-ew-resize touch-none before:absolute before:inset-y-0 before:right-0 before:w-4"
         />
       )}
     </button>
