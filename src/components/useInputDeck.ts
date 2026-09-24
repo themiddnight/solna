@@ -36,11 +36,12 @@ import type { SynthControlTarget } from '../utils/synthControl';
 import type { LayoutMode } from './shell/useLayoutMode';
 import { isTypingTarget } from '../utils/keyboard';
 import { DEFAULT_PADS } from './ui/DrumPadGrid';
-import { synthTargetForFocus } from '../store/focusTrack';
+import { inputTargetOf, synthTargetForFocus } from '../store/focusTrack';
 import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD } from '../store/sourceBuses';
 
-// The keyboard, the on-screen keyboard and the arp all play the FOCUSED track
-// (`focusTrack` in the ui slice). They used to be pinned to a module constant
+// The keyboard, the on-screen keyboard and the arp all play the INPUT TARGET
+// (`inputTargetOf` in store/focusTrack.ts: the dock's pin, else `focusTrack`,
+// R341). They used to be pinned to a module constant
 // (deleted with this change), whose stated reason was that pinning kept every
 // audio call site (note-on, note-off, arp playback, voice release) agreeing on
 // one engine, so a target switch could never strand voices on an engine
@@ -60,7 +61,7 @@ import { SYNTH_ARP_FIELD, SYNTH_PARAM_FIELD } from '../store/sourceBuses';
 //    rescale is scoped to that source, so playing a second track never
 //    quietens the first.
 //
-// A focus change alone does NOT cut sounding voices: they ring out naturally.
+// A target change (focus, pin or arm) alone does NOT cut sounding voices: they ring out naturally.
 // That is a decision (spec, Open risks 1) — cutting them is a hard stop the
 // user did not ask for, and they are finite.
 
@@ -271,8 +272,8 @@ export interface InputDeckDrumProps {
   onTriggerPad: (pad: DrumPad) => void;
 }
 
-// The patch and the Arp settings the keyboard/arp actually play: the FOCUSED
-// track's, not always Lead's. Two reads off two tables, because Arp is
+// The patch and the Arp settings the keyboard/arp actually play: the INPUT
+// TARGET's (R341), not always Lead's. Two reads off two tables, because Arp is
 // performance state and deliberately not part of the patch. Routes through `synthTargetForFocus` — the same store-layer
 // projection the Pro/Simple panels resolve their channel from — so a drum
 // focus is not re-decided here. Its `?? 'synth'` fallback is inert for
@@ -288,11 +289,11 @@ export interface InputDeckDrumProps {
 // the engine from, so the arp cannot end up reading a different bus's patch
 // than the one being played.
 function resolveFocusedSynth(s: AppStore): ActiveSynth {
-  return s[SYNTH_PARAM_FIELD[synthTargetForFocus(s.focusTrack) ?? 'synth']];
+  return s[SYNTH_PARAM_FIELD[synthTargetForFocus(inputTargetOf(s)) ?? 'synth']];
 }
 
 function resolveFocusedArp(s: AppStore): ArpSettings {
-  return s[SYNTH_ARP_FIELD[synthTargetForFocus(s.focusTrack) ?? 'synth']];
+  return s[SYNTH_ARP_FIELD[synthTargetForFocus(inputTargetOf(s)) ?? 'synth']];
 }
 
 // Named (not inline) so a test can pin their behaviour directly: given two
@@ -314,12 +315,12 @@ export const selectSynthRelease = (s: AppStore): number =>
  * staler params than before. Same pattern as `components/playback/useSequencerPlayback.ts`.
  */
 export function subscribeArpState(ref: ArpStateRef): () => void {
-  // A single selector over the FOCUSED channel's params, not always
+  // A single selector over the INPUT TARGET's channel params, not always
   // `s.synthParams`: this re-fires both when that channel's own params object
-  // changes AND when focus moves to a different channel (the selector then
+  // changes AND when the target moves to a different channel (the selector then
   // returns a different object, e.g. `fxSynthParams` instead of
   // `synthParams`), so one subscription covers both triggers the fix calls
-  // for — no separate focus-driven refresh of `.params` is needed.
+  // for — no separate target-driven refresh of `.params` is needed.
   const unsubParams = useAppStore.subscribe(
     resolveFocusedSynth,
     (synth) => {
@@ -341,8 +342,10 @@ export function subscribeArpState(ref: ArpStateRef): () => void {
     },
     { fireImmediately: true },
   );
+  // The derived input target, not `focusTrack`: a pin, a re-link and an arm
+  // each move it without focus changing. A primitive, so no equality fn.
   const unsubFocus = useAppStore.subscribe(
-    (s) => s.focusTrack,
+    inputTargetOf,
     (focus) => {
       ref.current.target = synthTargetForFocus(focus);
     },
@@ -378,12 +381,12 @@ function useNoteHandlers(
       // subscription (subscribeArpState), so this reads the latest value
       // without the callback identity changing on every knob move.
       const { synth: liveSynth, arp: liveArp } = arpStateRef.current;
-      // The bus focus names RIGHT NOW. Read once, used for both the engine
+      // The bus the input target names RIGHT NOW. Read once, used for both the engine
       // call and the map entry, so the note is captured on exactly the bus it
-      // was played on even if focus moves during this callback.
+      // was played on even if the target moves during this callback.
       const target = arpStateRef.current.target;
       if (target === null) {
-        // Focus is on the drum track: the melodic keyboard has nothing to
+        // The input target is the drum track: the melodic keyboard has nothing to
         // play. Nothing sounds, nothing is announced on the note-input bus
         // (announcing would let the recorder capture a note that made no
         // sound), and the key is not added to activeNotes — a highlighted key
@@ -412,7 +415,7 @@ function useNoteHandlers(
       // Same ref read as handleNoteOn — see the note there.
       const { synth: liveSynth, arp: liveArp } = arpStateRef.current;
       const held = arpStateRef.current.heldTargets;
-      // The bus this note was PLAYED on, never the bus focus names right now:
+      // The bus this note was PLAYED on, never the bus the target names now:
       // recomputing would send the release to an engine the voice was never
       // on and the held voice would drone until the same key was pressed
       // again on the same track. See audio/playback/heldNotes.ts and
@@ -719,7 +722,7 @@ export function useInputDeck(layoutMode: LayoutMode): {
     heldTargets: new Map(),
     synth: resolveFocusedSynth(useAppStore.getState()),
     arp: resolveFocusedArp(useAppStore.getState()),
-    target: synthTargetForFocus(useAppStore.getState().focusTrack),
+    target: synthTargetForFocus(inputTargetOf(useAppStore.getState())),
     triggeredTargets: new Set(),
     bpm: useAppStore.getState().bpm,
   });

@@ -329,6 +329,7 @@ describe('handleNoteOn (via the rendered hook)', () => {
     // assertion above that line would otherwise leak a non-default
     // `focusTrack` into every test that runs afterwards.
     useAppStore.getState().setFocusTrack('synth');
+    useAppStore.getState().setInputTargetPin(null);
   });
 
   function heard(): NoteInputEvent[] {
@@ -383,6 +384,77 @@ describe('handleNoteOn (via the rendered hook)', () => {
       { kind: 'on', note: 'C4', velocity: 1.0, time: undefined },
       { kind: 'off', note: 'C4', velocity: 0, time: undefined },
     ]);
+  });
+
+  test('a pinned target plays its own patch and bus while focus is elsewhere (R341)', () => {
+    useAppStore.getState().setFocusTrack('drum');
+    useAppStore.getState().setInputTargetPin('chord');
+    spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
+    const noteOnSpy = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(() => {});
+    const events = heard();
+
+    renderToString(<Probe />);
+    captured!.keyboardProps.handleNoteOn('C4');
+
+    expect(noteOnSpy).toHaveBeenCalled();
+    const [, synth, , , source] = noteOnSpy.mock.calls[0]!;
+    expect(synth).toBe(useAppStore.getState().chordSynthParams);
+    expect(source).toBe('chord');
+    expect(events).toHaveLength(1);
+  });
+
+  test('a drum pin makes the melodic keyboard a no-op even with a melodic focus (R167)', () => {
+    useAppStore.getState().setFocusTrack('synth');
+    useAppStore.getState().setInputTargetPin('drum');
+    spyOn(audioEngine, 'init').mockImplementation(() => Promise.resolve());
+    const noteOnSpy = spyOn(audioEngine, 'triggerSynthNoteOn').mockImplementation(() => {});
+    const events = heard();
+
+    renderToString(<Probe />);
+    captured!.keyboardProps.handleNoteOn('C4');
+
+    expect(noteOnSpy).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+  });
+});
+
+describe('subscribeArpState follows the input target', () => {
+  test('pinning, re-linking and arming move the target and patch the arp reads', () => {
+    const ref = {
+      current: {
+        heldTargets: new Map() as HeldNoteTargets,
+        synth: useAppStore.getState().synthParams,
+        arp: useAppStore.getState().synthArpSettings,
+        target: 'synth' as SynthControlTarget | null,
+        triggeredTargets: new Set<SynthControlTarget>(),
+        bpm: useAppStore.getState().bpm,
+      },
+    };
+    const stop = subscribeArpState(ref);
+    try {
+      useAppStore.setState({ focusTrack: 'synth', recordingTrack: null });
+      useAppStore.getState().setInputTargetPin('bass');
+      expect(ref.current.target).toBe('bass');
+      expect(ref.current.synth).toBe(useAppStore.getState().bassSynthParams);
+
+      // Focus moves; the pin holds.
+      useAppStore.getState().setFocusTrack('fx');
+      expect(ref.current.target).toBe('bass');
+
+      // Arming overrides the pin: the keys play the armed (focused) track.
+      useAppStore.setState({ recordingTrack: 'fx' });
+      expect(ref.current.target).toBe('fx');
+      expect(ref.current.synth).toBe(useAppStore.getState().fxSynthParams);
+      useAppStore.setState({ recordingTrack: null });
+      expect(ref.current.target).toBe('bass');
+
+      // Re-linking snaps back to the selection.
+      useAppStore.getState().setInputTargetPin(null);
+      expect(ref.current.target).toBe('fx');
+    } finally {
+      stop();
+      useAppStore.setState({ focusTrack: 'synth', inputTargetPin: null, recordingTrack: null });
+    }
   });
 });
 
