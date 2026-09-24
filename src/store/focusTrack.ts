@@ -168,7 +168,8 @@ export interface InputTargetSource {
  * Chord with Lead armed would sound Chord and write Lead. The arm can only be
  * set on the focused track and disarms when focus leaves it
  * (`startRecordArmSync`), so while armed "follow focus" is "play the armed
- * track". The pin itself is kept and resumes on disarm.
+ * track". Arming also clears the pin (`setRecordingTrack`), so this override
+ * only matters for a pin made while armed; that pin takes effect on disarm.
  */
 export function inputTargetOf(s: InputTargetSource): MixLayerId {
   return s.recordingTrack !== null ? s.focusTrack : (s.inputTargetPin ?? s.focusTrack);

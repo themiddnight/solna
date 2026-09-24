@@ -106,8 +106,11 @@ export function createUiSlice(set: Set): UiSlice {
       set((state) => (state.soloTracks.length === 0 ? {} : { soloTracks: [] })),
     // A plain setter, not a toggle: the button knows which track it is on and
     // computes `armed ? null : trackId` itself, so the store never has to
-    // guess which track a bare "toggle" meant.
-    setRecordingTrack: (recordingTrack) => set({ recordingTrack }),
+    // guess which track a bare "toggle" meant. Arming re-links the input
+    // target (R341) in the same set(); disarming leaves the link alone, so
+    // there is no earlier pin to remember and restore.
+    setRecordingTrack: (recordingTrack) =>
+      set(recordingTrack === null ? { recordingTrack } : { recordingTrack, inputTargetPin: null }),
     setLoopCopySelection: (loopCopySelection, loopCopySourceId) =>
       set({ loopCopySelection, loopCopySourceId }),
     setLoopClipboard: (loopClipboard) => set({ loopClipboard }),

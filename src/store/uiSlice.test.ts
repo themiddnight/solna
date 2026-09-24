@@ -380,3 +380,30 @@ describe('noteInputSuspended (R336)', () => {
     expect(useAppStore.getState().noteInputSuspended).toBe(true);
   });
 });
+
+/** R341: arming re-links the input target, and disarming never restores the pin. */
+describe('record arm re-links the input target', () => {
+  test('arming clears the pin; disarming leaves it cleared', () => {
+    const before = useAppStore.getState();
+    try {
+      useAppStore.setState({ inputTargetPin: 'chord', recordingTrack: null });
+      useAppStore.getState().setRecordingTrack('lead');
+      expect(useAppStore.getState().inputTargetPin).toBeNull();
+      useAppStore.getState().setRecordingTrack(null);
+      expect(useAppStore.getState().inputTargetPin).toBeNull();
+    } finally {
+      useAppStore.setState({ inputTargetPin: before.inputTargetPin, recordingTrack: before.recordingTrack });
+    }
+  });
+
+  test('disarming does not touch a pin', () => {
+    const before = useAppStore.getState();
+    try {
+      useAppStore.setState({ inputTargetPin: 'fx', recordingTrack: null });
+      useAppStore.getState().setRecordingTrack(null);
+      expect(useAppStore.getState().inputTargetPin).toBe('fx');
+    } finally {
+      useAppStore.setState({ inputTargetPin: before.inputTargetPin, recordingTrack: before.recordingTrack });
+    }
+  });
+});

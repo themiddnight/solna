@@ -31,13 +31,16 @@ in `store/focusTrack.ts`.
   whatever bus sounded it (notes carry no bus), so a pin to Chord with Lead armed would sound Chord
   and write Lead. The arm can only be set on the focused track and disarms when focus leaves it
   (`startRecordArmSync`), so while armed "follow focus" is "play the armed track". The pin is kept
-  and resumes on disarm; the disarm rules do not change.
+  and resumes on disarm; the disarm rules do not change. **Amended:** arming also re-links
+  (`setRecordingTrack` clears the pin), and disarming does not restore the old pin, so there is
+  no earlier state to remember. The override is kept for a pin made while armed.
 - **The dock's header is `[chevron + Input] [ON <target> ▾ | link] [<mode> ▾]`.** The chip and a
   link toggle (lucide `Link2` / `Unlink2`) are one daisyUI `join`. Linked, a pick from the chip
   calls `setFocusTrack` and navigates, as before; pinned, a pick calls `setInputTargetPin` and
   never navigates. Unlinking pins the current target, so the press itself changes nothing
-  audible; re-linking clears the pin and the target snaps back to the selection. Pinned, both
-  halves wear the accent style. The "Input" word is `sr-only` below `md`, so the row fits a 375px
+  audible; re-linking clears the pin and the target snaps back to the selection. Linked, both
+  halves wear the accent tint; pinned, they drop to the idle style (amended at the user's
+  review: the tint marks the default, following state). The "Input" word is `sr-only` below `md`, so the row fits a 375px
   screen and the toggle keeps its accessible name.
 - **The Keyboard | Drums tabs go.** The panel is derived from the target (`drum` → pads, anything
   else → keyboard); `inputPanelMode`, `setInputPanelMode`, `InputPanelMode` and
@@ -74,8 +77,8 @@ External MIDI still plays Lead (R168); making it follow the target is out of sco
 ## Consequences
 
 - A user can jam on one track while editing another; the pinned track survives a reload.
-- Arming a track silently overrides a pin until disarm. The chip shows the armed track while the
-  link stays in its pinned style, so the override is visible.
+- Arming a track drops the pin; after disarm the keys keep following the selection until the user
+  unlinks again.
 - Anything new that must play "what the keys play" reads `inputTargetOf`, never
   `inputTargetPin` or `focusTrack` directly.
 - A phone shows no QWERTY hints; the shortcuts still work with a hardware keyboard.
@@ -83,7 +86,7 @@ External MIDI still plays Lead (R168); making it follow the target is out of sco
 ## Rules this implies
 
 - **R341** — The keys play `inputTargetOf` (arm → focus, else pin, else focus); `inputTargetPin`
-  is the one persisted link-and-pin field; a linked pick selects, a pinned pick only re-pins; the
+  is the one persisted link-and-pin field; arming re-links and disarming does not restore; a linked pick selects, a pinned pick only re-pins; the
   dock panel and the mode picker's visibility derive from the target.
 - **R163** (amended) — Keyboard, on-screen keyboard and arp play the input target's bus and patch.
 - **R167** (amended) — A `drum` input target makes the melodic keyboard a complete no-op.

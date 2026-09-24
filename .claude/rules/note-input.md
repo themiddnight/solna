@@ -93,7 +93,9 @@ that needs store state — the melody recorder, for one — subscribes from
   linked; one field holds both the link state and the pinned track, with no sync subscription.
   The dock's target chip and its link toggle are one joined group: linked, a pick calls
   `setFocusTrack` (and navigates); pinned, a pick calls `setInputTargetPin` and never navigates;
-  unlinking pins the current target, re-linking clears the pin. The dock's panel is derived
+  unlinking pins the current target, re-linking clears the pin, and arming a track re-links
+  (`setRecordingTrack` clears the pin in the same `set()`; disarming never restores it). Linked,
+  both halves of the group wear the accent tint; pinned, the idle style. The dock's panel is derived
   from the target (`drum` → pads, else keyboard) and the keyboard mode picker is hidden for
   `drum`. Pattern segment, Sound channel, mixer row, solo and record arm stay on `focusTrack`. <!-- R341 -->
 
