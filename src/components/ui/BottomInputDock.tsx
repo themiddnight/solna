@@ -19,6 +19,8 @@ const KEYBOARD_MODE_LABELS = {
   chord: 'Chord',
 } as const;
 
+const KEYBOARD_MODES = ['chromatic', 'scale-locked', 'chord'] as const;
+
 const KEYBOARD_MODE_TITLES = {
   chromatic: 'Chromatic Mode: every semitone, ignores key/scale',
   'scale-locked': 'Scale Locked Mode: cuts notes outside the active scale',
@@ -40,6 +42,51 @@ interface BottomInputDockProps {
 const LINKED_STYLE = 'btn-soft btn-accent';
 
 const LOCKED_TITLE = 'Recording — the keys stay on the armed track';
+
+/**
+ * The item list of a dock header dropdown (the target chip, the keyboard mode
+ * chip): one button per option, the current one marked.
+ */
+function DockMenu<T extends string>({
+  options,
+  current,
+  idPrefix,
+  labels,
+  titles,
+  onPick,
+}: {
+  options: readonly T[];
+  current: T;
+  idPrefix: string;
+  labels: Readonly<Record<T, string>>;
+  titles?: Readonly<Record<T, string>>;
+  onPick: (option: T) => void;
+}) {
+  return (
+    <ul className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg">
+      {options.map((option) => (
+        <li key={option}>
+          <button
+            id={`${idPrefix}-${option}`}
+            type="button"
+            aria-current={current === option ? 'true' : undefined}
+            onClick={(e) => {
+              onPick(option);
+              // daisyUI opens the dropdown on :focus-within, and picking an
+              // item leaves DOM focus on the item itself, so without this the
+              // menu stays open over the dock after selection.
+              (e.currentTarget as HTMLElement).blur();
+            }}
+            className={current === option ? 'active font-bold' : ''}
+            title={titles?.[option]}
+          >
+            {labels[option]}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * The target chip and its link toggle, one joined group: which track the keys
@@ -87,29 +134,13 @@ function InputTargetGroup({
           <span>{MIX_LAYER_LABELS[target]}</span>
           <ChevronDown aria-hidden="true" className="w-3 h-3 opacity-60" />
         </button>
-        <ul
-          className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
-        >
-          {MIX_LAYER_IDS.map((id) => (
-            <li key={id}>
-              <button
-                id={`btn-focus-chip-${id}`}
-                type="button"
-                aria-current={target === id ? 'true' : undefined}
-                onClick={(e) => {
-                  onPick(id);
-                  // daisyUI opens this dropdown on :focus-within, and picking
-                  // an item leaves DOM focus on the item itself, so without
-                  // this the menu stays open over the dock after selection.
-                  (e.currentTarget as HTMLElement).blur();
-                }}
-                className={target === id ? 'active font-bold' : ''}
-              >
-                {MIX_LAYER_LABELS[id]}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <DockMenu
+          options={MIX_LAYER_IDS}
+          current={target}
+          idPrefix="btn-focus-chip"
+          labels={MIX_LAYER_LABELS}
+          onPick={onPick}
+        />
       </div>
       {/* One constant name with aria-pressed, not a name that flips with the
           state: "Follow selection", pressed while linked. The title carries
@@ -156,28 +187,14 @@ function KeyboardModePicker({
         <span>{KEYBOARD_MODE_LABELS[keyboardMode]}</span>
         <ChevronDown aria-hidden="true" className="w-3 h-3 opacity-60" />
       </button>
-      <ul
-        className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
-      >
-        {(['chromatic', 'scale-locked', 'chord'] as const).map((m) => (
-          <li key={m}>
-            <button
-              id={`btn-keyboard-mode-${m}`}
-              type="button"
-              aria-current={keyboardMode === m ? 'true' : undefined}
-              onClick={(e) => {
-                onSelect(m);
-                // Same :focus-within reason as the target chip's items.
-                (e.currentTarget as HTMLElement).blur();
-              }}
-              className={keyboardMode === m ? 'active font-bold' : ''}
-              title={KEYBOARD_MODE_TITLES[m]}
-            >
-              {KEYBOARD_MODE_LABELS[m]}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <DockMenu
+        options={KEYBOARD_MODES}
+        current={keyboardMode}
+        idPrefix="btn-keyboard-mode"
+        labels={KEYBOARD_MODE_LABELS}
+        titles={KEYBOARD_MODE_TITLES}
+        onPick={onSelect}
+      />
     </div>
   );
 }
