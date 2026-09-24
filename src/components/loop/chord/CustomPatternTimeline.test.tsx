@@ -113,11 +113,18 @@ describe('CustomPatternTimeline (the memoized cell grid)', () => {
     expect(html).toContain('data-bar-divider="16"');
   });
 
-  test('holds every column at least half its height, scrolling instead of shrinking', () => {
-    // h-9 is 36px, so a column never drops below 18px; the scroller's min-width
-    // is that floor times the column count (32), not the old fixed 420/520px.
-    expect(html).toContain('min-width:576px');
+  test('holds every column at the 28px touch-target floor, scrolling instead of shrinking', () => {
+    // 28px is a Lead cell's size; the scroller's min-width is that floor
+    // times the column count (32), not the old fixed 420/520px.
+    expect(html).toContain('min-width:896px');
     expect(html).not.toContain('min-w-[420px]');
+    // The unmeasured drag fallback agrees with the floor.
+    expect(source).toMatch(/const PATTERN_STEP_PX = 28;/);
+  });
+
+  test('the scroller pans natively; the grid suppresses selection and the callout', () => {
+    expect(html).toContain('overflow-x-auto touch-pan-x touch-pan-y');
+    expect(html).toContain('grid gap-px select-none [-webkit-touch-callout:none]');
   });
 
   test('an event head carries its own name and a right-edge resize handle', () => {

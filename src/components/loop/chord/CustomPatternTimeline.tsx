@@ -49,11 +49,14 @@ import {
  * alone; the grid is untouched.
  */
 
-/** Fallback step width while dragging, when the grid cannot be measured (server render). */
-const PATTERN_STEP_PX = 24;
+/** Fallback step width while dragging, when the grid cannot be measured (server render). Matches the floor. */
+const PATTERN_STEP_PX = 28;
 
-/** Half of CELL_CLASS's `h-9` (36px): the floor below which a column never shrinks. */
-const PATTERN_CELL_MIN_WIDTH = 18;
+/**
+ * The floor below which a column never shrinks: a 28px touch target, the size
+ * of a Lead cell. Below it the lane scrolls instead (R343).
+ */
+const PATTERN_CELL_MIN_WIDTH = 28;
 
 const GRID_CLASS = 'grid gap-px';
 
@@ -538,11 +541,11 @@ export function CustomPatternTimeline<TValue>({
   const gridStyle = { gridTemplateColumns: `repeat(${cycleSteps}, minmax(0, 1fr))` };
 
   return (
-    <div className={cx('overflow-x-auto', className)}>
+    <div className={cx('overflow-x-auto touch-pan-x touch-pan-y', className)}>
       <div className="pb-1" role="group" aria-label={`${label} pattern`}
         style={{ minWidth: `${cycleSteps * PATTERN_CELL_MIN_WIDTH}px` }}>
         {patternHeaderGrids(loopLength, stepsPerBar, gridStyle)}
-        <div ref={gridRef} className={GRID_CLASS} style={gridStyle}>
+        <div ref={gridRef} className={cx(GRID_CLASS, 'select-none [-webkit-touch-callout:none]')} style={gridStyle}>
           {cells.map((cell) => patternCellNode(cell, context))}
           {patternBarDividers(loopLength, stepsPerBar)}
           <CustomPatternPlayhead
