@@ -116,7 +116,8 @@ describe('loadProject (boot)', () => {
     // content write would let the old project's queued voices ring over it.
     expect(order).toEqual(['chord@0.02', 'bass@0.02', 'pad@0.02', 'set']);
     expect(s.bpm).toBe(77);
-    expect(s.selectedVibeId).toBeNull();
+    // Boot resumed the same loop, so the vibe it was loaded from stays marked.
+    expect(s.selectedVibeId).toBe('cyber-dance');
     expect(s.activeLoopId).toBe('loop-Alpha');
     expect(s.songLoopIndex).toBeNull();
     expect(s.projectName).toBe('Alpha');
@@ -168,6 +169,24 @@ describe('loadProject (boot)', () => {
     useAppStore.setState({ activeLoopId: 'loop-from-a-previous-project' });
     await slice.loadProject();
     expect(useAppStore.getState().activeLoopId).toBe(useAppStore.getState().loops[0].id);
+  });
+});
+
+/** Boot resumes the session, so the Current mark (selectedVibeId) comes back with its loop. */
+describe('loadProject (boot) — the vibe the loop came from', () => {
+  test('the resumed loop keeps the vibe it was loaded from (the Current mark survives a reload)', async () => {
+    const { useAppStore, slice } = await sliceWithBackend(stored('Vibe', 84));
+    useAppStore.setState({ activeLoopId: 'loop-Vibe', selectedVibeId: 'lofi-chill' });
+    await slice.loadProject();
+    expect(useAppStore.getState().selectedVibeId).toBe('lofi-chill');
+  });
+
+  test('a persisted vibe whose loop is not the one resumed is dropped', async () => {
+    const { useAppStore, slice } = await sliceWithBackend(stored('Vibe', 84));
+    useAppStore.setState({ activeLoopId: 'loop-from-a-previous-project', selectedVibeId: 'lofi-chill' });
+    await slice.loadProject();
+    expect(useAppStore.getState().activeLoopId).toBe('loop-Vibe');
+    expect(useAppStore.getState().selectedVibeId).toBeNull();
   });
 });
 
@@ -311,6 +330,14 @@ describe('openProjectFile', () => {
     expect(useAppStore.getState().bpm).toBe(99);
     const loaded = await store.load();
     expect(loaded.ok && loaded.value.body.id).toBe(file.id);
+  });
+
+  test('an opened file has no vibe, even when its first loop id matches the one in focus', async () => {
+    const { useAppStore, slice } = await sliceWithBackend();
+    useAppStore.setState({ activeLoopId: 'loop-From Disk', selectedVibeId: 'lofi-chill' });
+    await slice.openProjectFile(stored('From Disk', 99));
+    expect(useAppStore.getState().activeLoopId).toBe('loop-From Disk');
+    expect(useAppStore.getState().selectedVibeId).toBeNull();
   });
 
   // DEFENSIVE CONTRACT — no production caller reaches this. Both readers run

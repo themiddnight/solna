@@ -149,6 +149,12 @@ interface ProjectContext {
   session: ProjectSession;
 }
 
+/** What boot resumes from the persisted session: the loop in focus and the vibe it came from. */
+interface SessionSelection {
+  activeLoopId: string;
+  selectedVibeId: string | null;
+}
+
 /**
  * Lifecycle actions. Every path that replaces the live session goes through
  * `installProject`, in loadLoop's order: hardStopAll (dispatches the reducer's
@@ -163,7 +169,7 @@ function installProject(
   ctx: ProjectContext,
   content: ProjectContent,
   identity: ProjectEnvelope,
-  activeLoopId: string | null = null,
+  resume: SessionSelection | null = null,
   source: ProjectSource = UNTITLED_SOURCE,
 ): void {
   // An export owns a snapshot of the outgoing project. Invalidate that job
@@ -175,8 +181,14 @@ function installProject(
     audioEngine.stopSource(source, INSTALL_RELEASE);
   }
   ctx.session.slot = { id: identity.id, createdAt: identity.createdAt };
+  const patch = applyProjectContent(content, resume?.activeLoopId ?? null);
   ctx.set({
-    ...applyProjectContent(content, activeLoopId),
+    ...patch,
+    // Boot resumes the session: the vibe the resumed loop was loaded from
+    // stays marked Current — but only when that same loop is the one resumed,
+    // the rule vibeNav.ts keeps for every other activeLoopId move.
+    ...(resume?.selectedVibeId != null && patch.activeLoopId === resume.activeLoopId
+      && { selectedVibeId: resume.selectedVibeId }),
     // A song-mode cursor into the OLD project's loops[] must not survive
     // the swap: it would index the new project's loops[] instead (out of
     // range, or in range but pointing at the wrong loop) and enterSongIndex
@@ -267,7 +279,8 @@ async function loadProjectFromStore(ctx: ProjectContext): Promise<void> {
     return;
   }
   const { body, source, warnings: readWarnings } = result.value;
-  installProject(ctx, body.content, body, ctx.get().activeLoopId, source);
+  const { activeLoopId, selectedVibeId } = ctx.get();
+  installProject(ctx, body.content, body, { activeLoopId, selectedVibeId }, source);
   // The read's own warnings first, for the same reason `openProjectBody` folds
   // `importWarnings` into one notice: a synth patch the stored body could not
   // carry has already been replaced by the track default, and the boot path is

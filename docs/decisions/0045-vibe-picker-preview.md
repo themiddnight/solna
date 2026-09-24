@@ -40,7 +40,9 @@ undo after it, so a curious click overwrote a loop the user had built.
   The label is separate from the pressed state, which marks the previewed card, so a card can show
   both. While a session is open the store's `selectedVibeId` holds the vibe being previewed, so the
   picker uses the value captured at open. The hook reads it through `useLiveStore`, one value per
-  selector.
+  selector. The mark survives a reload: `selectedVibeId` is persisted, and boot's install keeps it
+  when it resumes the same loop it was set for. Open and New still clear it, because loop ids are
+  not unique across projects.
 - **Preview commands live in `store/vibePreview.ts`**, one per picker action:
   `beginVibePreview` (hold persisted writes, suspend note input, stop and cut, return the
   snapshot), `previewVibe` (resolve first, then stop, cut, one write, play), `rerollPreview` (the
@@ -112,7 +114,8 @@ change and would drop the cue the strip gave, so it was not done here.
   a row's dice previews a variant of that row's vibe whether or not it was being previewed; **Use** (and Play) stay disabled until a vibe has
   been previewed; the card of the vibe the active loop was loaded from (`selectedVibeId`, as
   captured at open) carries a "Current" label, never the pressed state, which belongs to the
-  previewed card.
+  previewed card; boot keeps `selectedVibeId` when it resumes the loop it was set for, so the
+  label survives a reload.
 - **R335** — Only the vibe preview holds persisted writes
   (`holdPersistedWrites`/`releasePersistedWrites`); the hold flushes first; nothing is written
   or removed while held, `pagehide`/hidden included; release writes once; an open that throws
