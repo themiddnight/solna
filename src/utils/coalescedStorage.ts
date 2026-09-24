@@ -44,9 +44,10 @@ export interface CoalescedStorage extends StateStorage {
   /** Names with a write still buffered. Test/diagnostic use only. */
   pendingNames(): string[];
   /**
-   * Stop writing (R335): `setItem` still buffers but schedules nothing, a
-   * flush already scheduled is cancelled, and `flush()` writes nothing — so
-   * pagehide/hidden leave the base storage as it was. A flag, not a count.
+   * Stop writing (R335): `setItem` still buffers but schedules nothing,
+   * `removeItem` buffers the removal instead of making it, a flush already
+   * scheduled is cancelled, and `flush()` writes nothing — so pagehide/hidden
+   * leave the base storage as it was. A flag, not a count.
    */
   hold(): void;
   /** End a hold; schedules ONE flush if anything is buffered. A no-op when not held. */
@@ -81,7 +82,8 @@ export function createCoalescedStorage(
   base: StateStorage,
   scheduler: WriteScheduler = idleWriteScheduler,
 ): CoalescedStorage {
-  const pending = new Map<string, string>();
+  // A null value is a removal made while held, carried to the next flush.
+  const pending = new Map<string, string | null>();
   let handle: number | null = null;
   let held = false;
 
@@ -102,7 +104,8 @@ export function createCoalescedStorage(
     pending.clear();
     for (const [name, value] of drained) {
       try {
-        base.setItem(name, value);
+        if (value === null) base.removeItem(name);
+        else base.setItem(name, value);
       } catch {
         // ignore — see the docblock
       }
@@ -112,7 +115,7 @@ export function createCoalescedStorage(
   return {
     getItem: (name) => {
       const buffered = pending.get(name);
-      if (buffered !== undefined) return buffered;
+      if (buffered !== undefined) return buffered; // null: removed while held
       try {
         return base.getItem(name);
       } catch {
@@ -124,6 +127,10 @@ export function createCoalescedStorage(
       if (!held && handle === null) handle = scheduler.schedule(flush);
     },
     removeItem: (name) => {
+      if (held) {
+        pending.set(name, null);
+        return;
+      }
       pending.delete(name);
       if (pending.size === 0) cancelScheduled();
       try {

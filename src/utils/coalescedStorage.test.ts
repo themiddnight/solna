@@ -240,6 +240,32 @@ describe('hold / release (R335)', () => {
     expect(base.calls).toEqual(['set:k']);
   });
 
+  test('while held, removeItem buffers the removal and reads back as gone', () => {
+    const { base, sched, storage } = fixture();
+    base.data.set('k', 'v');
+    storage.hold();
+    storage.removeItem('k');
+    storage.flush();
+    expect(base.calls).toEqual([]);
+    expect(base.data.get('k')).toBe('v');
+    expect(storage.getItem('k')).toBe(null);
+    storage.release();
+    sched.run();
+    expect(base.calls).toEqual(['remove:k']);
+    expect(base.data.has('k')).toBe(false);
+  });
+
+  test('a write after a held removal supersedes it', () => {
+    const { base, sched, storage } = fixture();
+    storage.hold();
+    storage.removeItem('k');
+    storage.setItem('k', 'v2');
+    storage.release();
+    sched.run();
+    expect(base.calls).toEqual(['set:k']);
+    expect(base.data.get('k')).toBe('v2');
+  });
+
   test('release with nothing buffered, or without a hold, schedules nothing', () => {
     const { sched, storage } = fixture();
     storage.release();

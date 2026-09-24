@@ -7,6 +7,7 @@ import { INITIAL_EFFECTS } from './initialState';
 import { loopStatePatch } from './loop';
 import { createDefaultLoop } from './loopSlice';
 import { SCOPE_NONE } from './playbackScope';
+import * as store from './store';
 import { releasePersistedWrites, useAppStore } from './store';
 import { DEFAULT_BPM, isAnyPlayerActive } from './transportSlice';
 import type { AppStore } from './types';
@@ -111,6 +112,23 @@ describe('vibe preview commands (R337)', () => {
     cancelVibePreview(snap);
     expect(s().chords).toEqual(before);
     expect(s().noteInputSuspended).toBe(false);
+  });
+});
+
+describe('an open that throws undoes itself', () => {
+  test('writes are released and input is back on before the error propagates', () => {
+    const stopSource = spyOn(audioEngine, 'stopSource').mockImplementation(() => {
+      throw new Error('engine gone');
+    });
+    const release = spyOn(store, 'releasePersistedWrites');
+    try {
+      expect(() => beginVibePreview()).toThrow('engine gone');
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(s().noteInputSuspended).toBe(false);
+    } finally {
+      stopSource.mockRestore();
+      release.mockRestore();
+    }
   });
 });
 

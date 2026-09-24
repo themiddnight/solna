@@ -41,8 +41,9 @@ describe('the current-vibe mark', () => {
 /** A promise the test resolves by hand, standing in for the lazy chunk. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => { resolve = r; });
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
 }
 
 /**
@@ -50,11 +51,17 @@ function deferred<T>() {
  * `begin` holds and suspends, the disposer's `end` cancels only a session
  * that began, and cancelling releases both.
  */
-function fakePicker() {
-  const log = { begun: 0, cancelled: 0, ready: 0, held: false, suspended: false };
+function fakePicker({ beginThrows = false } = {}) {
+  const log = { begun: 0, cancelled: 0, ready: 0, held: false, suspended: false, failed: 0 };
   let session: { snapshot: string } | null = null;
   const module = {
-    beginVibePreview: () => { log.begun += 1; log.held = true; log.suspended = true; return 'snapshot'; },
+    beginVibePreview: () => {
+      log.begun += 1;
+      if (beginThrows) throw new Error('open failed'); // the real one undoes itself before rethrowing
+      log.held = true;
+      log.suspended = true;
+      return 'snapshot';
+    },
     cancelVibePreview: () => { log.cancelled += 1; log.held = false; log.suspended = false; },
   };
   const chunk = deferred<typeof module>();
@@ -67,9 +74,12 @@ function fakePicker() {
       session = null;
       if (live) module.cancelVibePreview();
     },
+    () => { log.failed += 1; },
   );
-  const settle = async () => { chunk.resolve(module); await chunk.promise; await Promise.resolve(); };
-  return { log, start, settle };
+  const flush = async () => { for (let i = 0; i < 3; i += 1) await Promise.resolve(); };
+  const settle = async () => { chunk.resolve(module); await flush(); };
+  const reject = async () => { chunk.reject(new Error('chunk failed')); await flush(); };
+  return { log, start, settle, reject };
 }
 
 describe('the picker session (Review Focus 3 and 5)', () => {
@@ -78,7 +88,7 @@ describe('the picker session (Review Focus 3 and 5)', () => {
     const dispose = start();
     dispose();
     await settle();
-    expect(log).toEqual({ begun: 0, cancelled: 0, ready: 0, held: false, suspended: false });
+    expect(log).toEqual({ begun: 0, cancelled: 0, ready: 0, held: false, suspended: false, failed: 0 });
   });
 
   test('a double open (StrictMode mount, cleanup, mount) begins exactly once', async () => {
@@ -89,16 +99,39 @@ describe('the picker session (Review Focus 3 and 5)', () => {
     expect(log.begun).toBe(1);
     expect(log.ready).toBe(1);
     dispose();
-    expect(log).toEqual({ begun: 1, cancelled: 1, ready: 1, held: false, suspended: false });
+    expect(log).toEqual({ begun: 1, cancelled: 1, ready: 1, held: false, suspended: false, failed: 0 });
   });
 
   test('closed after the session began: the disposer cancels it once', async () => {
     const { log, start, settle } = fakePicker();
     const dispose = start();
     await settle();
-    expect(log).toEqual({ begun: 1, cancelled: 0, ready: 1, held: true, suspended: true });
+    expect(log).toEqual({ begun: 1, cancelled: 0, ready: 1, held: true, suspended: true, failed: 0 });
     dispose();
     dispose();
-    expect(log).toEqual({ begun: 1, cancelled: 1, ready: 1, held: false, suspended: false });
+    expect(log).toEqual({ begun: 1, cancelled: 1, ready: 1, held: false, suspended: false, failed: 0 });
+  });
+
+  test('the chunk fails to load: nothing begins and the failure is reported once', async () => {
+    const { log, start, reject } = fakePicker();
+    start();
+    await reject();
+    expect(log).toEqual({ begun: 0, cancelled: 0, ready: 0, held: false, suspended: false, failed: 1 });
+  });
+
+  test('the open throws: no session is kept, nothing stays held, the failure is reported', async () => {
+    const { log, start, settle } = fakePicker({ beginThrows: true });
+    const dispose = start();
+    await settle();
+    expect(log).toEqual({ begun: 1, cancelled: 0, ready: 0, held: false, suspended: false, failed: 1 });
+    dispose();
+    expect(log.cancelled).toBe(0);
+  });
+
+  test('a failure after the picker closed is not reported', async () => {
+    const { log, start, reject } = fakePicker();
+    start()();
+    await reject();
+    expect(log.failed).toBe(0);
   });
 });

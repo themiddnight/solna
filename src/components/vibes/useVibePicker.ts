@@ -15,16 +15,29 @@ let previewModule: Promise<VibePreviewModule> | null = null;
 /**
  * The preview commands reach the engine and the four library resolvers, so
  * they load on demand (R095): prefetched on the button's hover/focus, awaited
- * once per open. The promise is cached — fetched and evaluated at most once.
+ * once per open. A loaded module is cached — fetched and evaluated at most
+ * once; a failed fetch is dropped, so the next open fetches again.
  */
 function loadVibePreview(): Promise<VibePreviewModule> {
-  previewModule ??= import('@/store/vibePreview');
+  previewModule ??= import('@/store/vibePreview').catch((error: unknown) => {
+    previewModule = null;
+    throw error;
+  });
   return previewModule;
 }
 
 export function prefetchVibePreview(): void {
-  void loadVibePreview();
+  // A failed prefetch is not reported here: the open that needs the module
+  // fetches it again and reports its own failure.
+  loadVibePreview().catch(() => {});
 }
+
+/** Shown when the picker cannot open — the chunk failed to load, or the open threw. */
+const OPEN_FAILED_FEEDBACK: FeedbackRequest = {
+  key: 'vibe',
+  message: "Couldn't open the vibes. Check your connection and try again.",
+  tone: 'error',
+};
 
 /** 400 ms of spin, then the dice settles. */
 const ROLLING_MS = 400;
@@ -82,19 +95,26 @@ export function currentVibeId(stored: string | null, openedFrom: OpenedFrom | nu
  * which cancels whatever began and is a no-op when nothing did (or Use
  * already ended it). A close before the module arrives begins nothing, so no
  * hold and no suspension is left behind; StrictMode's mount → cleanup → mount
- * therefore begins exactly once.
+ * therefore begins exactly once. A load that rejects, or a `begin` that
+ * throws (it undoes itself first), reaches `fail` — unless the picker has
+ * already closed, when there is nobody left to tell.
  */
 export function startPickerSession<M, S>(
   load: () => Promise<M>,
   begin: (module: M) => S,
   ready: (session: S) => void,
   end: () => void,
+  fail: (error: unknown) => void,
 ): () => void {
   let live = true;
-  void load().then((module) => {
-    if (!live) return;
-    ready(begin(module));
-  });
+  load()
+    .then((module) => {
+      if (!live) return;
+      ready(begin(module));
+    })
+    .catch((error: unknown) => {
+      if (live) fail(error);
+    });
   return () => {
     live = false;
     end();
@@ -158,8 +178,12 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
         setOpenedFrom({ vibeId: session.snapshot.selectedVibeId ?? null });
       },
       () => end(false), // a no-op after Use or Cancel already ended it
+      () => {
+        useAppStore.getState().showFeedback(OPEN_FAILED_FEEDBACK);
+        onClose();
+      },
     );
-  }, [open, end]);
+  }, [open, end, onClose]);
 
   useEffect(() => clearSpin, [clearSpin]);
 

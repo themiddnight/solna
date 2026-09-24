@@ -38,12 +38,21 @@ function endPreview(): void {
   useAppStore.getState().setNoteInputSuspended(false);
 }
 
-/** Open: disk keeps the pre-preview state (R335), input goes quiet (R336), the transport stops. */
+/**
+ * Open: disk keeps the pre-preview state (R335), input goes quiet (R336), the
+ * transport stops. An open that throws undoes itself before rethrowing, so a
+ * failed open never leaves writes held or input suspended.
+ */
 export function beginVibePreview(): Partial<AppStore> {
   holdPersistedWrites();
-  useAppStore.getState().setNoteInputSuspended(true);
-  stopAndCut();
-  return captureVibeTargets(useAppStore.getState());
+  try {
+    useAppStore.getState().setNoteInputSuspended(true);
+    stopAndCut();
+    return captureVibeTargets(useAppStore.getState());
+  } catch (error) {
+    endPreview();
+    throw error;
+  }
 }
 
 /** Audition `spec`: everything resolved before any state is touched, then one write, then play. */
