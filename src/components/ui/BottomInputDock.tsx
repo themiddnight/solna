@@ -43,6 +43,14 @@ const LINKED_STYLE = 'btn-soft btn-accent';
 
 const LOCKED_TITLE = 'Recording — the keys stay on the armed track';
 
+/*
+ * DROPDOWN_TRIGGER_NOTE — daisyUI's dropdown opens only on :focus-within, and
+ * Safari (iOS and macOS) never focuses a <button> on tap or click, so a
+ * <button> trigger leaves the menu shut on an iPhone. The triggers are
+ * therefore focusable `role="button"` elements, the same shape as the project
+ * menu's Wordmark trigger.
+ */
+
 /**
  * The item list of a dock header dropdown (the target chip, the keyboard mode
  * chip): one button per option, the current one marked.
@@ -63,19 +71,27 @@ function DockMenu<T extends string>({
   onPick: (option: T) => void;
 }) {
   return (
-    <ul className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg">
+    <ul
+      // Focusable so a tap inside keeps the dropdown's :focus-within: Safari
+      // never focuses a tapped <button>, so without this the focus falls to
+      // <body> on pointer-down and the menu closes before the item's click.
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+      tabIndex={0}
+      className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
+    >
       {options.map((option) => (
         <li key={option}>
           <button
             id={`${idPrefix}-${option}`}
             type="button"
             aria-current={current === option ? 'true' : undefined}
-            onClick={(e) => {
+            onClick={() => {
               onPick(option);
               // daisyUI opens the dropdown on :focus-within, and picking an
-              // item leaves DOM focus on the item itself, so without this the
-              // menu stays open over the dock after selection.
-              (e.currentTarget as HTMLElement).blur();
+              // item leaves DOM focus inside it — on the item, or on the list
+              // in Safari, which never focuses a tapped <button> — so without
+              // this the menu stays open over the dock after selection.
+              (document.activeElement as HTMLElement | null)?.blur();
             }}
             className={current === option ? 'active font-bold' : ''}
             title={titles?.[option]}
@@ -117,23 +133,26 @@ function InputTargetGroup({
   const style = isPinned ? TOOLBAR_BUTTON_IDLE : LINKED_STYLE;
   const linkTitle = isPinned ? 'Pinned — follow selection again' : 'Follow selection';
   // Armed, the keys must play the armed track (the recorder writes every
-  // performed note there), so both halves lock to the selection. A disabled
-  // chip cannot take focus, which is what keeps daisyUI's dropdown shut.
+  // performed note there), so both halves lock to the selection. A locked
+  // chip drops its tabIndex so it cannot take focus, which is what keeps
+  // daisyUI's dropdown shut.
   return (
     <div id="input-target-group" className="join" title={isLocked ? LOCKED_TITLE : undefined}>
       <div className="dropdown dropdown-top flex">
-        <button
+        {/* A focusable <div>, not a <button>: see DROPDOWN_TRIGGER_NOTE. */}
+        <div
           id="btn-focus-chip"
-          type="button"
-          disabled={isLocked}
+          role="button"
+          tabIndex={isLocked ? undefined : 0}
+          aria-disabled={isLocked ? 'true' : undefined}
           aria-label={`Keys play ${MIX_LAYER_LABELS[target]}`}
-          className={`btn btn-xs join-item gap-1 text-[11px] font-semibold ${style}`}
+          className={`btn btn-xs join-item gap-1 text-[11px] font-semibold ${style}${isLocked ? ' btn-disabled' : ''}`}
           title={isLocked ? LOCKED_TITLE : 'Which track the keys play'}
         >
           <span className="text-base-content/50 uppercase tracking-wider text-[9px]">On</span>
           <span>{MIX_LAYER_LABELS[target]}</span>
           <ChevronDown aria-hidden="true" className="w-3 h-3 opacity-60" />
-        </button>
+        </div>
         <DockMenu
           options={MIX_LAYER_IDS}
           current={target}
@@ -177,16 +196,18 @@ function KeyboardModePicker({
 }) {
   return (
     <div className="dropdown dropdown-top flex">
-      <button
+      {/* A focusable <div>, not a <button>: see DROPDOWN_TRIGGER_NOTE. */}
+      <div
         id="btn-keyboard-mode-chip"
-        type="button"
+        role="button"
+        tabIndex={0}
         aria-label={`Keyboard mode: ${KEYBOARD_MODE_LABELS[keyboardMode]}`}
         className={`btn btn-xs gap-1 text-[11px] font-semibold ${TOOLBAR_BUTTON_IDLE}`}
         title={KEYBOARD_MODE_TITLES[keyboardMode]}
       >
         <span>{KEYBOARD_MODE_LABELS[keyboardMode]}</span>
         <ChevronDown aria-hidden="true" className="w-3 h-3 opacity-60" />
-      </button>
+      </div>
       <DockMenu
         options={KEYBOARD_MODES}
         current={keyboardMode}
