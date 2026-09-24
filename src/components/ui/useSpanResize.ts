@@ -61,6 +61,8 @@ export function openSpanResizeSession<TIdentity>(
   input: SpanResizeStart<TIdentity>,
   setPreview: React.Dispatch<React.SetStateAction<SpanResizePreview<TIdentity> | null>>,
   target: SpanResizeTarget,
+  /** Runs once when the session ends, however it ends. */
+  onDetach?: () => void,
 ): { cancel: () => void } {
   // Never let the gesture reach the element's own click handling, or the
   // drag would toggle off the very thing it started on.
@@ -92,11 +94,15 @@ export function openSpanResizeSession<TIdentity>(
     };
     setPreview((prev) => (spanPreviewUnchanged(prev, next) ? prev : next));
   };
+  let detached = false;
   const detach = (): void => {
+    if (detached) return;
+    detached = true;
     target.removeEventListener('pointermove', onMove);
     target.removeEventListener('pointerup', onEnd);
     target.removeEventListener('pointercancel', onEnd);
     setPreview(null);
+    onDetach?.();
   };
   const onEnd = (event: Event): void => {
     const ev = event as SpanResizePointerEvent;
@@ -118,6 +124,43 @@ export function openSpanResizeSession<TIdentity>(
   target.addEventListener('pointerup', onEnd);
   target.addEventListener('pointercancel', onEnd);
   return { cancel: detach };
+}
+
+interface SpanResizeSlot<TIdentity> {
+  start: (
+    pointer: SpanResizePointer,
+    input: SpanResizeStart<TIdentity>,
+    setPreview: React.Dispatch<React.SetStateAction<SpanResizePreview<TIdentity> | null>>,
+  ) => void;
+  cancel: () => void;
+}
+
+/**
+ * At most one live resize per hook. Opening a gesture cancels any still
+ * running (two fingers on two handles would otherwise share one preview and
+ * `cancel` would reach only the newer), and a gesture that ends by itself
+ * empties the slot, so a later `cancel` has nothing stale to reach.
+ */
+export function createSpanResizeSlot<TIdentity>(
+  /** Read at each start, so the hook can build a slot where no window exists (SSR). */
+  target: () => SpanResizeTarget,
+): SpanResizeSlot<TIdentity> {
+  let live: { cancel: () => void } | null = null;
+  const cancel = (): void => {
+    const session = live;
+    live = null;
+    session?.cancel();
+  };
+  return {
+    start: (pointer, input, setPreview) => {
+      cancel();
+      const session = openSpanResizeSession(pointer, input, setPreview, target(), () => {
+        if (live === session) live = null;
+      });
+      live = session;
+    },
+    cancel,
+  };
 }
 
 /**
@@ -142,7 +185,9 @@ export function useSpanResize<TIdentity>(): {
   cancel: () => void;
 } {
   const [preview, setPreview] = useState<SpanResizePreview<TIdentity> | null>(null);
-  const sessionRef = useRef<{ cancel: () => void } | null>(null);
+  const slotRef = useRef<SpanResizeSlot<TIdentity> | null>(null);
+  slotRef.current ??= createSpanResizeSlot<TIdentity>(() => window);
+  const slot = slotRef.current;
 
   const previewFor = useCallback(
     (identity: TIdentity): number | null =>
@@ -152,15 +197,14 @@ export function useSpanResize<TIdentity>(): {
 
   const startResize = useCallback(
     (pointer: SpanResizePointer, input: SpanResizeStart<TIdentity>): void => {
-      sessionRef.current = openSpanResizeSession(pointer, input, setPreview, window);
+      slot.start(pointer, input, setPreview);
     },
-    [],
+    [slot],
   );
 
   const cancel = useCallback((): void => {
-    sessionRef.current?.cancel();
-    sessionRef.current = null;
-  }, []);
+    slot.cancel();
+  }, [slot]);
 
   return { previewFor, startResize, cancel };
 }
