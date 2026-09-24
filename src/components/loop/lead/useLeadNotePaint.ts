@@ -64,8 +64,12 @@ function leadTouchDeps(
  * decision lives in leadPaint.ts and leadTouchSession.ts; this file forwards
  * events and owns the listeners, all of them for the component's whole life.
  *
- * Each committed cell is written to the store on its own (see the stroke
- * rationale in leadPaint.ts); a resize still commits once, on pointerup.
+ * Each committed cell is written to the store on its own, rather than
+ * batched to pointerup like the resize drag: a stroke visits at most one new
+ * cell per pointermove, which is exactly the rate the user could have clicked
+ * at, and the alternative — previewing locally and committing at the end —
+ * would mean reimplementing the covering-note rules outside the slice that
+ * owns them. A resize, touch or mouse, still commits once, on pointerup.
  *
  * The matrix's touchmove listener is NON-PASSIVE and lifetime on purpose: a
  * browser decides whether a touch sequence may be cancelled when it begins,
