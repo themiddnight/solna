@@ -87,6 +87,14 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   of the scale per row, tonic's octave on top (`getScaleLockedTouchRows`), each key keeping its
   shortcut; chord shows the chords only. The range moves by the octave buttons. The desktop
   surface keeps its QWERTY layout and scrolls, centred with `justify-center-safe`. <!-- R340 --> ([ADR-0046](../../docs/decisions/0046-mobile-keyboard-fits-the-width.md))
+- Each frame's one vertical scroll container is `ViewScrollArea` (`components/shell/`, rendered
+  by `ShellBody`), and it remembers the scroll position per visible view: the key is the active
+  tab, plus the Pattern segment on Pattern (`viewScrollKey`: `sound`, `pattern:lead`, …). A view
+  seen for the first time starts at the top; a return restores its position in a layout effect,
+  before paint. Positions come from the container's passive scroll listener, never from the
+  switch, and the events of the switch's own clamp and restore are recorded against neither view
+  (`createViewScrollMemory`, `useViewScrollMemory.ts`). The memory lives in the hook — never a
+  slice, never persisted — and a layout switch may drop it. <!-- R342 --> ([ADR-0049](../../docs/decisions/0049-per-view-scroll-memory.md))
 
 ([ADR-0040](../../docs/decisions/0040-layout-shell.md), [ADR-0041](../../docs/decisions/0041-mobile-frame.md), [ADR-0042](../../docs/decisions/0042-flat-view-nav.md), [ADR-0043](../../docs/decisions/0043-hint-text-on-desktop-only.md))
 
@@ -165,6 +173,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - A Loop/Song layer switch in either frame, or the desktop tab nav placed after a layer-gated tool run <!-- R322 -->
 - A mobile keyboard surface that scrolls, a media query choosing the keyboard variant, or a
   plain `justify-center` on a keyboard row that can overflow <!-- R340 -->
+- A second scroll container per frame for the views, scroll positions in a slice or storage, or a
+  restore read from `scrollTop` after the switch <!-- R342 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
 - An always-visible vibe strip, or a vibe entry point outside the `vibes` HEADER_TOOLS row <!-- R333 -->
 - A vibe picker that is a BottomSheet, a drawer or non-modal, or a Use enabled before a preview <!-- R334 -->
