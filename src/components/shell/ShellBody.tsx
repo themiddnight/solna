@@ -6,6 +6,7 @@ import { FeedbackHost } from '@/components/ui/FeedbackHost';
 import { UpdateBanner } from '@/components/ui/UpdateBanner';
 import { ProjectNotice } from '@/components/project/ProjectNotice';
 import { LayerPages } from './LayerPages';
+import { ViewScrollArea } from './ViewScrollArea';
 import type { ShellProps } from './shellProps';
 
 /**
@@ -40,15 +41,10 @@ export function ShellBody({
       {/* Main Workspace Body with Persistent Mounts for Background Audio Continuity.
           Both layers stay mounted; the active layer gates which page is visible,
           and each page toggles its own sub-tabs (block/hidden). */}
-      {/* `pb-9` reserves the strip the input dock's toggle floats over. The
-          dock's header is absolutely positioned above the dock body so a
-          collapsed deck costs no layout height, which also means it sits ON
-          TOP of whatever the page has scrolled to its bottom edge — without
-          this padding it covers the last row of chord chips or FX knobs and
-          swallows their clicks. */}
-      <main className="flex-1 min-h-0 relative overflow-y-auto pb-9">
+      {/* The one scroll container; it keeps each view's position (R342). */}
+      <ViewScrollArea>
         <LayerPages />
-      </main>
+      </ViewScrollArea>
 
       {/* Toasts and snackbars: a zero-height slot, so the host floats over
           the bottom of <main> just above the dock's toggle strip. */}
