@@ -74,7 +74,7 @@ function InputTargetGroup({
   // chip cannot take focus, which is what keeps daisyUI's dropdown shut.
   return (
     <div id="input-target-group" className="join" title={isLocked ? LOCKED_TITLE : undefined}>
-      <div className="dropdown dropdown-top">
+      <div className="dropdown dropdown-top flex">
         <button
           id="btn-focus-chip"
           type="button"
@@ -145,7 +145,7 @@ function KeyboardModePicker({
   onSelect: InputDeckKeyboardProps['setKeyboardMode'];
 }) {
   return (
-    <div className="dropdown dropdown-top">
+    <div className="dropdown dropdown-top flex">
       <button
         id="btn-keyboard-mode-chip"
         type="button"
