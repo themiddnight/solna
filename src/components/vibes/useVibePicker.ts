@@ -151,7 +151,7 @@ export function useVibePicker(open: boolean, onClose: () => void): UseVibePicker
   const [openedFrom, setOpenedFrom] = useState<OpenedFrom | null>(null);
   const [previewed, setPreviewed] = useState<VibePreviewed | null>(null);
   const [rolling, setRolling] = useState(false);
-  const playing = useAppStore((s) => isAnyPlayerActive(s));
+  const playing = useAppStore(isAnyPlayerActive);
   // Through useLiveStore so a renderToString test can seed it (R257).
   const storedVibeId = useLiveStore((s) => s.selectedVibeId);
 
