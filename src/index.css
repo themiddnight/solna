@@ -595,9 +595,14 @@ input[type="range"] {
    of coloured keys and pads, so they are outline-only and take their colour
    from the parent via currentColor — that keeps them legible on a white key,
    a black key and an active primary key alike. One utility, so the piano and
-   the pads cannot drift apart. Applied to a real <kbd> element. */
+   the pads cannot drift apart. Applied to a real <kbd> element.
+   Desktop only (R341's companion, ADR-0048): hidden unless the screen is at
+   least `lg` wide AND the pointer hovers and is fine, so a phone, a narrow
+   window and an iPad in landscape (wide, but touch) show no keycaps. Hidden
+   with display, not visibility: the keys and pads have fixed heights, so the
+   label simply sits where the chip was and nothing around it moves. */
 @utility kbd-key {
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -611,6 +616,10 @@ input[type="range"] {
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
+
+  @media (width >= theme(--breakpoint-lg)) and (hover: hover) and (pointer: fine) {
+    display: inline-flex;
+  }
 }
 
 /* tailwindcss-animate is not a dependency; these two hand-written utilities
