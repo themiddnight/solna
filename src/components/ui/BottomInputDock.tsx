@@ -1,9 +1,8 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
-// The shared hook, not a private copy: its docstring names THIS file as the
-// reference implementation, so a fix to the snapshot contract that skipped the
-// dock would skip the component the rule was written for.
-import { useLiveStore } from './useLiveStore';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Link2, Unlink2 } from 'lucide-react';
+// Store reads go through `useLiveStore` inside this hook, so a test's setState
+// before renderToString shows up in the markup (R257).
+import { useBottomInputDock } from './useBottomInputDock';
 import { ChromaticKeyboard, ScaleLockedKeyboard, ChordKeyboard, type KeyboardVariant } from './Keyboard';
 import { DrumPadGrid } from './DrumPadGrid';
 import { SECTION_HEADER } from './fieldClasses';
@@ -13,9 +12,6 @@ import type { InputDeckDrumProps, InputDeckKeyboardProps } from '../useInputDeck
 import { TOOLBAR_BUTTON_IDLE } from '@/components/ui/Toolbar';
 import { MIX_LAYER_LABELS } from '../mixLayers';
 import { MIX_LAYER_IDS, type MixLayerId } from '@/store/focusTrack';
-
-const PANEL_LABELS = { keyboard: 'Keyboard', drums: 'Drums' } as const;
-
 
 const KEYBOARD_MODE_LABELS = {
   chromatic: 'Chromatic',
@@ -30,9 +26,9 @@ const KEYBOARD_MODE_TITLES = {
 } as const;
 
 /** The bottom input deck: a purely visual/touch surface hosting the synth
- *  keyboard and the drum pads in one panel. QWERTY input is owned by
- *  useInputDeck (mounted in App) and is NEVER gated by this dock's open state
- *  or mode toggle. */
+ *  keyboard or the drum pads, whichever the input target plays. QWERTY input
+ *  is owned by useInputDeck (mounted in App) and is NEVER gated by this dock's
+ *  open state. */
 interface BottomInputDockProps {
   keyboardProps: InputDeckKeyboardProps;
   drumProps: InputDeckDrumProps;
@@ -40,53 +36,135 @@ interface BottomInputDockProps {
   keyboardVariant?: KeyboardVariant;
 }
 
+/** Pinned: both halves of the target group wear this instead of the idle toolbar style. */
+const PINNED_STYLE = 'btn-soft btn-accent';
+
 /**
- * The focus chip: which track the keyboard plays.
+ * The target chip and its link toggle, one joined group: which track the keys
+ * play, and whether that follows the selection (R341).
  *
  * ALWAYS visible — open, collapsed, on every tab and every Pattern segment —
  * because the dock is the one surface all of them share, and "which track will
  * the keyboard play" has to be answerable without navigating. A daisyUI
  * dropdown rather than a cycling button: six values is too many to step
  * through, and a menu shows the whole roster at once.
+ *
+ * Linked, a pick selects the track (and the page follows); pinned, a pick
+ * moves only the pin — see `pickInputTarget`.
  */
-function FocusChip({
-  focusTrack,
+function InputTargetGroup({
+  target,
+  isPinned,
+  onPick,
+  onToggleLink,
+}: {
+  target: MixLayerId;
+  isPinned: boolean;
+  onPick: (id: MixLayerId) => void;
+  onToggleLink: () => void;
+}) {
+  const style = isPinned ? PINNED_STYLE : TOOLBAR_BUTTON_IDLE;
+  const linkTitle = isPinned ? 'Pinned — follow selection again' : 'Follow selection';
+  return (
+    <div id="input-target-group" className="join">
+      <div className="dropdown dropdown-top">
+        <button
+          id="btn-focus-chip"
+          type="button"
+          aria-label={`Keys play ${MIX_LAYER_LABELS[target]}`}
+          className={`btn btn-xs join-item gap-1 text-[11px] font-semibold ${style}`}
+          title="Which track the keys play"
+        >
+          <span className="text-base-content/50 uppercase tracking-wider text-[9px]">On</span>
+          <span>{MIX_LAYER_LABELS[target]}</span>
+          <ChevronDown aria-hidden="true" className="w-3 h-3 opacity-60" />
+        </button>
+        <ul
+          className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
+        >
+          {MIX_LAYER_IDS.map((id) => (
+            <li key={id}>
+              <button
+                id={`btn-focus-chip-${id}`}
+                type="button"
+                aria-current={target === id ? 'true' : undefined}
+                onClick={(e) => {
+                  onPick(id);
+                  // daisyUI opens this dropdown on :focus-within, and picking
+                  // an item leaves DOM focus on the item itself, so without
+                  // this the menu stays open over the dock after selection.
+                  (e.currentTarget as HTMLElement).blur();
+                }}
+                className={target === id ? 'active font-bold' : ''}
+              >
+                {MIX_LAYER_LABELS[id]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {/* One constant name with aria-pressed, not a name that flips with the
+          state: "Follow selection", pressed while linked. The title carries
+          the spec's two wordings for the pointer. */}
+      <button
+        id="btn-input-target-link"
+        type="button"
+        aria-label="Follow selection"
+        aria-pressed={!isPinned}
+        onClick={onToggleLink}
+        className={`btn btn-xs btn-square join-item ${style}`}
+        title={linkTitle}
+      >
+        {isPinned ? <Unlink2 className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The keyboard mode picker (Chromatic / Scale / Chord), in the header open or
+ * collapsed: the dock owns live QWERTY input even when closed, and each mode
+ * binds those keys differently, so which mode they drive is answerable — and
+ * changeable — without opening the deck. A dropdown like the target chip.
+ * Not rendered for a drum target: the pads have no mode.
+ */
+function KeyboardModePicker({
+  keyboardMode,
   onSelect,
 }: {
-  focusTrack: MixLayerId;
-  onSelect: (id: MixLayerId) => void;
+  keyboardMode: InputDeckKeyboardProps['keyboardMode'];
+  onSelect: InputDeckKeyboardProps['setKeyboardMode'];
 }) {
   return (
     <div className="dropdown dropdown-top">
       <button
-        id="btn-focus-chip"
+        id="btn-keyboard-mode-chip"
         type="button"
-        aria-label={`Working on ${MIX_LAYER_LABELS[focusTrack]}`}
+        aria-label={`Keyboard mode: ${KEYBOARD_MODE_LABELS[keyboardMode]}`}
         className={`btn btn-xs gap-1 text-[11px] font-semibold ${TOOLBAR_BUTTON_IDLE}`}
-        title="Which track you are working on"
+        title={KEYBOARD_MODE_TITLES[keyboardMode]}
       >
-        <span className="text-base-content/50 uppercase tracking-wider text-[9px]">On</span>
-        <span>{MIX_LAYER_LABELS[focusTrack]}</span>
+        <span>{KEYBOARD_MODE_LABELS[keyboardMode]}</span>
+        <ChevronDown aria-hidden="true" className="w-3 h-3 opacity-60" />
       </button>
       <ul
         className="dropdown-content menu menu-sm z-50 mb-1 w-36 rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
       >
-        {MIX_LAYER_IDS.map((id) => (
-          <li key={id}>
+        {(['chromatic', 'scale-locked', 'chord'] as const).map((m) => (
+          <li key={m}>
             <button
-              id={`btn-focus-chip-${id}`}
+              id={`btn-keyboard-mode-${m}`}
               type="button"
-              aria-current={focusTrack === id ? 'true' : undefined}
+              aria-current={keyboardMode === m ? 'true' : undefined}
               onClick={(e) => {
-                onSelect(id);
-                // daisyUI opens this dropdown on :focus-within, and picking
-                // an item leaves DOM focus on the item itself, so without
-                // this the menu stays open over the dock after selection.
+                onSelect(m);
+                // Same :focus-within reason as the target chip's items.
                 (e.currentTarget as HTMLElement).blur();
               }}
-              className={focusTrack === id ? 'active font-bold' : ''}
+              className={keyboardMode === m ? 'active font-bold' : ''}
+              title={KEYBOARD_MODE_TITLES[m]}
             >
-              {MIX_LAYER_LABELS[id]}
+              {KEYBOARD_MODE_LABELS[m]}
             </button>
           </li>
         ))}
@@ -95,88 +173,17 @@ function FocusChip({
   );
 }
 
-/**
- * What the closed dock is currently driving. It still owns live QWERTY input
- * when collapsed, and each keyboard mode binds those keys differently — so the
- * header states which surface and which mode the typing keys are driving rather
- * than making the user open the deck to find out.
- */
-function CollapsedSummary({
-  summary,
-  mode,
-  keyboardMode,
-}: {
-  summary: string;
-  mode: 'keyboard' | 'drums';
-  keyboardMode: InputDeckKeyboardProps['keyboardMode'];
-}) {
-  return (
-    <div id="input-deck-collapsed-summary" className="flex items-center gap-1 pr-1">
-      {/* A real text node, not an `aria-label` on this div: ARIA does not
-          expose aria-label on a generic element with no role, so the
-          framing was announced to nobody and the badges read as two bare
-          words. `sr-only` keeps it out of the visual row, where the
-          badges already say it. */}
-      <span className="sr-only">{`Current input: ${summary}`}</span>
-      <span className="badge badge-sm badge-outline badge-primary text-[10px] font-semibold">
-        {PANEL_LABELS[mode]}
-      </span>
-      {mode === 'keyboard' && (
-        <span
-          className="badge badge-sm badge-outline text-[10px] font-semibold text-base-content/60"
-          title={KEYBOARD_MODE_TITLES[keyboardMode]}
-        >
-          {KEYBOARD_MODE_LABELS[keyboardMode]}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** The Keyboard | Drums switch, shown only while the deck is open. */
-function PanelTabs({
-  mode,
-  onSelect,
-}: {
-  mode: 'keyboard' | 'drums';
-  onSelect: (mode: 'keyboard' | 'drums') => void;
-}) {
-  return (
-    <div className="join" role="radiogroup" aria-label="Input deck panel">
-      {(['keyboard', 'drums'] as const).map((m) => (
-        <button
-          key={m}
-          id={`input-tab-${m}`}
-          type="button"
-          role="radio"
-          aria-checked={mode === m}
-          onClick={() => onSelect(m)}
-          className={`btn btn-xs join-item text-[11px] font-semibold ${
-            mode === m ? 'btn-primary' : 'btn-ghost text-base-content/60'
-          }`}
-        >
-          {PANEL_LABELS[m]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** The keyboard panel's header row: key/scale badge, octave stepper, mode switch. */
+/** The keyboard panel's header row: key/scale badge and the octave stepper. */
 function KeyboardToolbar({
   scaleRoot,
   scaleType,
   keyboardOctave,
   setKeyboardOctave,
-  keyboardMode,
-  setKeyboardMode,
 }: {
   scaleRoot: string;
   scaleType: string;
   keyboardOctave: number;
   setKeyboardOctave: InputDeckKeyboardProps['setKeyboardOctave'];
-  keyboardMode: InputDeckKeyboardProps['keyboardMode'];
-  setKeyboardMode: InputDeckKeyboardProps['setKeyboardMode'];
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -215,27 +222,6 @@ function KeyboardToolbar({
           disabled={keyboardOctave >= 2}
           className="w-7 h-7 min-h-0 border border-base-300 text-base-content/60 hover:text-base-content hover:border-primary hover:bg-primary/20 disabled:opacity-30"
         />
-
-        <div className="join" role="radiogroup" aria-label="Keyboard input mode">
-          {(['chromatic', 'scale-locked', 'chord'] as const).map((m) => (
-            <button
-              key={m}
-              id={`btn-keyboard-mode-${m}`}
-              type="button"
-              role="radio"
-              aria-checked={keyboardMode === m}
-              onClick={() => setKeyboardMode(m)}
-              className={`btn btn-xs join-item text-[11px] font-semibold ${
-                keyboardMode === m
-                  ? 'btn-primary'
-                  : TOOLBAR_BUTTON_IDLE
-              }`}
-              title={KEYBOARD_MODE_TITLES[m]}
-            >
-              {KEYBOARD_MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -318,12 +304,8 @@ export const BottomInputDock = React.memo(function BottomInputDock({
   drumProps,
   keyboardVariant = 'desktop',
 }: BottomInputDockProps) {
-  const isOpen = useLiveStore((s) => s.isInputPanelOpen);
-  const setIsOpen = useLiveStore((s) => s.setIsInputPanelOpen);
-  const mode = useLiveStore((s) => s.inputPanelMode);
-  const setMode = useLiveStore((s) => s.setInputPanelMode);
-  const focusTrack = useLiveStore((s) => s.focusTrack);
-  const setFocusTrack = useLiveStore((s) => s.setFocusTrack);
+  const { isOpen, toggleOpen, target, isPinned, panel, onPickTarget, onToggleLink } =
+    useBottomInputDock();
 
   const {
     keyboardMode,
@@ -339,34 +321,36 @@ export const BottomInputDock = React.memo(function BottomInputDock({
     handleNoteOff,
   } = keyboardProps;
 
-  const collapsedSummary =
-    mode === 'keyboard'
-      ? `${PANEL_LABELS.keyboard} · ${KEYBOARD_MODE_LABELS[keyboardMode]}`
-      : PANEL_LABELS.drums;
-
   return (
     <div className="relative z-30 pointer-events-none">
-      {/* Always-visible header: the toggle, plus (when open) the Keyboard | Drums tabs. */}
+      {/* Always-visible header, one row down to 375px: the toggle, the target
+          chip with its link, and (for a keyboard target) the mode picker. The
+          panel has no tabs: it is derived from the target (R341). */}
       <div className="absolute bottom-full left-0 flex items-center gap-1.5 p-1 bg-base-100 rounded-t-lg border border-base-300 pointer-events-auto">
         <button
           id="btn-toggle-input-deck"
           type="button"
           aria-expanded={isOpen}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={toggleOpen}
           className="btn btn-xs btn-ghost gap-1 text-xs font-bold"
-          title={isOpen ? 'Hide input deck' : `Show input deck (${collapsedSummary})`}
+          title={isOpen ? 'Hide input deck' : 'Show input deck'}
         >
           {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-          <span>Input</span>
+          {/* sr-only below md rather than hidden: the word is the button's
+              accessible name, so it must stay in the tree on the phone. */}
+          <span className="sr-only md:not-sr-only">Input</span>
         </button>
 
-        <FocusChip focusTrack={focusTrack} onSelect={setFocusTrack} />
+        <InputTargetGroup
+          target={target}
+          isPinned={isPinned}
+          onPick={onPickTarget}
+          onToggleLink={onToggleLink}
+        />
 
-        {!isOpen && (
-          <CollapsedSummary summary={collapsedSummary} mode={mode} keyboardMode={keyboardMode} />
+        {panel === 'keyboard' && (
+          <KeyboardModePicker keyboardMode={keyboardMode} onSelect={setKeyboardMode} />
         )}
-
-        {isOpen && <PanelTabs mode={mode} onSelect={setMode} />}
       </div>
 
       {/* Collapsible body: grid-template-rows 0fr -> 1fr animates the intrinsic
@@ -377,15 +361,13 @@ export const BottomInputDock = React.memo(function BottomInputDock({
         }`}
       >
         <div className="overflow-hidden min-h-0">
-          {isOpen && mode === 'keyboard' && (
+          {isOpen && panel === 'keyboard' && (
             <div className="p-3 space-y-2">
               <KeyboardToolbar
                 scaleRoot={scaleRoot}
                 scaleType={scaleType}
                 keyboardOctave={keyboardOctave}
                 setKeyboardOctave={setKeyboardOctave}
-                keyboardMode={keyboardMode}
-                setKeyboardMode={setKeyboardMode}
               />
 
               <KeyboardSurface
@@ -401,7 +383,7 @@ export const BottomInputDock = React.memo(function BottomInputDock({
             </div>
           )}
 
-          {isOpen && mode === 'drums' && (
+          {isOpen && panel === 'drums' && (
             <div className="px-3 pb-3">
               <DrumPadGrid {...drumProps} />
             </div>

@@ -153,11 +153,15 @@ describe('the input dock keyboard follows the frame', () => {
   };
   const renderOpen = (shell: typeof MobileShell) => {
     const before = useAppStore.getState();
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    useAppStore.setState({ isInputPanelOpen: true, focusTrack: 'synth', inputTargetPin: null });
     try {
       return renderToString(createElement(shell, chromatic));
     } finally {
-      useAppStore.setState({ isInputPanelOpen: before.isInputPanelOpen, inputPanelMode: before.inputPanelMode });
+      useAppStore.setState({
+        isInputPanelOpen: before.isInputPanelOpen,
+        focusTrack: before.focusTrack,
+        inputTargetPin: before.inputTargetPin,
+      });
     }
   };
 

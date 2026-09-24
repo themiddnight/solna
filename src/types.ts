@@ -111,9 +111,6 @@ export type BeatFilterType = Exclude<FilterType, 'notch'>;
 /** The synth keyboard's input mode: how key presses are mapped to notes. */
 export type KeyboardMode = 'chromatic' | 'scale-locked' | 'chord';
 
-/** The bottom input dock's active surface. */
-export type InputPanelMode = 'keyboard' | 'drums';
-
 /**
  * Arpeggiator order and rate. Declared here rather than in audio/arpeggiator.ts
  * and audio/arpSchedule.ts because both of those modules need them and this

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { BottomInputDock } from './BottomInputDock';
-import { MIX_LAYER_IDS } from '@/store/focusTrack';
+import { MIX_LAYER_IDS, type MixLayerId } from '@/store/focusTrack';
+import { nextInputTargetPin, panelForTarget, pickInputTarget } from './useBottomInputDock';
 import { useAppStore } from '@/store/store';
 import { DEFAULT_PADS } from './DrumPadGrid';
 import { getChordKeyboardRows, getScaleLockedKeyboardNotes, MELODY_KEYS } from './Keyboard';
@@ -38,131 +39,197 @@ const drumProps = {
 };
 
 beforeEach(() => {
-  useAppStore.setState({ isInputPanelOpen: false, inputPanelMode: 'keyboard' });
+  useAppStore.setState({ isInputPanelOpen: false, focusTrack: 'synth', inputTargetPin: null, recordingTrack: null });
 });
+
+afterEach(() => {
+  useAppStore.setState({ isInputPanelOpen: false, focusTrack: 'synth', inputTargetPin: null, recordingTrack: null });
+});
+
+const render = () =>
+  renderToString(<BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />);
 
 describe('BottomInputDock', () => {
   test('toggle button is always visible; body is collapsed when closed', () => {
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
+    const html = render();
     expect(html).toContain('btn-toggle-input-deck');
     expect(html).not.toContain('C Major');
     expect(html).not.toContain('btn-pad-kick');
   });
 
-  test('collapsed header states the active panel and keyboard mode', () => {
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
-    expect(html).toContain('input-deck-collapsed-summary');
-    expect(html).toContain('Keyboard');
-    expect(html).toContain('Scale');
-    expect(html).toContain('Current input: Keyboard');
+  test('the "Input" label is hidden below md but stays the button\'s name', () => {
+    expect(render()).toContain('<span class="sr-only md:not-sr-only">Input</span>');
   });
 
-  test('collapsed header on the drums panel names no keyboard mode', () => {
-    useAppStore.setState({ isInputPanelOpen: false, inputPanelMode: 'drums' });
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
-    expect(html).toContain('Current input: Drums');
-    expect(html).not.toContain('Scale');
+  test('there are no Keyboard | Drums tabs, open or closed (R341)', () => {
+    for (const isInputPanelOpen of [false, true]) {
+      useAppStore.setState({ isInputPanelOpen });
+      const html = render();
+      expect(html).not.toContain('input-tab-');
+      expect(html).not.toContain('Input deck panel');
+      expect(html).not.toContain('input-deck-collapsed-summary');
+    }
   });
 
-  test('the collapsed summary is gone once the deck is open', () => {
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
-    expect(html).not.toContain('input-deck-collapsed-summary');
-  });
-
-  test('keyboard tab renders the scale badge, octave controls and mode radio group', () => {
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
+  test('keyboard panel renders the scale badge and octave controls', () => {
+    useAppStore.setState({ isInputPanelOpen: true });
+    const html = render();
     expect(html).toContain('C Major');
     expect(html).toContain('btn-keyboard-octave-down');
-    expect(html).toContain('role="radiogroup"');
-    expect(html).toContain('aria-label="Keyboard input mode"');
-    expect(html).toContain('role="radio"');
-    expect(html).toContain('aria-checked="true"');
-    expect(html).toContain('aria-checked="false"');
+    expect(html).not.toContain('btn-pad-kick');
   });
 
-  test('drums tab renders the shared pad grid', () => {
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'drums' });
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
-    expect(html).toContain('btn-toggle-input-deck');
-    expect(html).toContain('btn-pad-kick');
-    expect(html).toContain('Kick Drum');
+  test('the panel is the pads iff the input target is drum', () => {
+    useAppStore.setState({ isInputPanelOpen: true });
+    for (const id of MIX_LAYER_IDS) {
+      useAppStore.setState({ focusTrack: id });
+      const html = render();
+      expect(html.includes('btn-pad-kick')).toBe(id === 'drum');
+      expect(html.includes('btn-keyboard-octave-down')).toBe(id !== 'drum');
+    }
   });
 
-  test('keyboard | drums switch announces as a radio group', () => {
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'drums' });
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
-    expect(html).toContain('aria-label="Input deck panel"');
-    expect(html).toContain('input-tab-drums');
-    expect(html).toContain('input-tab-keyboard');
+  test('a pinned target picks the panel, not the focus', () => {
+    useAppStore.setState({ isInputPanelOpen: true, focusTrack: 'drum', inputTargetPin: 'synth' });
+    const html = render();
+    expect(html).toContain('btn-keyboard-octave-down');
+    expect(html).not.toContain('btn-pad-kick');
+    expect(html).toContain('>Lead</span>');
   });
 });
 
-describe('the dock focus chip', () => {
-  afterEach(() => {
-    useAppStore.setState({ focusTrack: 'synth' });
+describe('the keyboard mode picker', () => {
+  test('is in the header both collapsed and open', () => {
+    for (const isInputPanelOpen of [false, true]) {
+      useAppStore.setState({ isInputPanelOpen });
+      const html = render();
+      const tag = openTagContaining(html, 'id="btn-keyboard-mode-chip"');
+      expect(tag).toContain('aria-label="Keyboard mode: Scale"');
+      for (const m of ['chromatic', 'scale-locked', 'chord']) {
+        expect(html).toContain(`id="btn-keyboard-mode-${m}"`);
+      }
+    }
   });
 
+  test('marks exactly the current mode', () => {
+    const html = render();
+    expect(openTagContaining(html, 'id="btn-keyboard-mode-scale-locked"')).toContain('aria-current="true"');
+    expect(openTagContaining(html, 'id="btn-keyboard-mode-chord"')).not.toContain('aria-current');
+  });
+
+  test('is absent when the input target is drum', () => {
+    for (const isInputPanelOpen of [false, true]) {
+      useAppStore.setState({ isInputPanelOpen, focusTrack: 'drum' });
+      expect(render()).not.toContain('btn-keyboard-mode-');
+    }
+  });
+
+  test('is gone from the keyboard toolbar', () => {
+    useAppStore.setState({ isInputPanelOpen: true });
+    const html = render();
+    expect(html).not.toContain('role="radiogroup"');
+  });
+});
+
+describe('the dock target chip', () => {
   // The dock is the one surface visible from every tab and every Pattern
-  // segment, so it is where "which track am I working on" has to be
+  // segment, so it is where "which track do the keys play" has to be
   // answerable without navigating.
-  test('renders the focused track label, open or closed', () => {
+  test('renders the target label, open or closed', () => {
     useAppStore.setState({ focusTrack: 'drum', isInputPanelOpen: false });
-    const closed = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
+    const closed = render();
     const chipTag = openTagContaining(closed, 'id="btn-focus-chip"');
-    expect(chipTag).toContain('id="btn-focus-chip"');
     expect(chipTag).not.toContain('aria-haspopup');
+    expect(chipTag).toContain('aria-label="Keys play Beat"');
     expect(closed).toContain('>Beat</span>');
     useAppStore.setState({ isInputPanelOpen: true });
-    const open = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
+    const open = render();
     expect(open).toContain('id="btn-focus-chip"');
     expect(open).toContain('>Beat</span>');
   });
 
-  test('the menu offers every focus', () => {
-    const html = renderToString(
-      <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-    );
+  test('the menu offers every track', () => {
+    const html = render();
     for (const id of MIX_LAYER_IDS) expect(html).toContain(`id="btn-focus-chip-${id}"`);
   });
 
-  test('exactly one item carries aria-current, matching the focused track', () => {
-    try {
-      useAppStore.setState({ focusTrack: 'drum' });
-      const html = renderToString(
-        <BottomInputDock keyboardProps={keyboardProps} drumProps={drumProps} />,
-      );
-      const current = MIX_LAYER_IDS.filter((id) => {
-        const tag = openTagContaining(html, `id="btn-focus-chip-${id}"`);
-        return tag.includes('aria-current="true"');
-      });
-      expect(current).toEqual(['drum']);
-      for (const id of MIX_LAYER_IDS) {
-        if (id === 'drum') continue;
-        const tag = openTagContaining(html, `id="btn-focus-chip-${id}"`);
-        expect(tag).not.toContain('aria-current');
-      }
-    } finally {
-      useAppStore.setState({ focusTrack: 'synth' });
+  test('exactly one item carries aria-current, matching the target', () => {
+    useAppStore.setState({ focusTrack: 'synth', inputTargetPin: 'drum' });
+    const html = render();
+    const current = MIX_LAYER_IDS.filter((id) =>
+      openTagContaining(html, `id="btn-focus-chip-${id}"`).includes('aria-current="true"'),
+    );
+    expect(current).toEqual(['drum']);
+  });
+
+  test('linked: the link icon, the idle style, pressed as "Follow selection"', () => {
+    const html = render();
+    const link = openTagContaining(html, 'id="btn-input-target-link"');
+    expect(link).toContain('aria-label="Follow selection"');
+    expect(link).toContain('aria-pressed="true"');
+    expect(link).toContain('title="Follow selection"');
+    expect(link).not.toContain('btn-accent');
+    expect(openTagContaining(html, 'id="btn-focus-chip"')).not.toContain('btn-accent');
+    expect(html).toContain('lucide-link2');
+    expect(html).not.toContain('lucide-unlink2');
+  });
+
+  test('pinned: the unlink icon and the accent style on both halves of the group', () => {
+    useAppStore.setState({ inputTargetPin: 'chord' });
+    const html = render();
+    const link = openTagContaining(html, 'id="btn-input-target-link"');
+    expect(link).toContain('aria-pressed="false"');
+    expect(link).toContain('title="Pinned — follow selection again"');
+    expect(link).toContain('btn-soft btn-accent');
+    expect(openTagContaining(html, 'id="btn-focus-chip"')).toContain('btn-soft btn-accent');
+    expect(html).toContain('lucide-unlink2');
+    expect(html).toContain('>Chord</span>');
+  });
+
+  test('the chip and the link are one joined group', () => {
+    const html = render();
+    expect(openTagContaining(html, 'id="btn-focus-chip"')).toContain('join-item');
+    expect(openTagContaining(html, 'id="btn-input-target-link"')).toContain('join-item');
+    expect(html).toContain('id="input-target-group"');
+    expect(openTagContaining(html, 'id="input-target-group"')).toContain('join');
+  });
+});
+
+describe('pickInputTarget', () => {
+  function recorder() {
+    const calls: [string, unknown][] = [];
+    return {
+      calls,
+      setFocusTrack: (id: MixLayerId) => calls.push(['focus', id]),
+      setInputTargetPin: (id: MixLayerId | null) => calls.push(['pin', id]),
+    };
+  }
+
+  test('linked: picking selects the track (and so navigates)', () => {
+    const r = recorder();
+    pickInputTarget('chord', false, r);
+    expect(r.calls).toEqual([['focus', 'chord']]);
+  });
+
+  test('pinned: picking re-pins and never touches focus', () => {
+    const r = recorder();
+    pickInputTarget('chord', true, r);
+    expect(r.calls).toEqual([['pin', 'chord']]);
+  });
+});
+
+describe('nextInputTargetPin', () => {
+  test('unlinking pins the current target; re-linking clears the pin', () => {
+    expect(nextInputTargetPin(null, 'fx')).toBe('fx');
+    expect(nextInputTargetPin('fx', 'fx')).toBeNull();
+    expect(nextInputTargetPin('bass', 'synth')).toBeNull();
+  });
+});
+
+describe('panelForTarget', () => {
+  test('drum → drums, every other track → keyboard', () => {
+    for (const id of MIX_LAYER_IDS) {
+      expect(panelForTarget(id)).toBe(id === 'drum' ? 'drums' : 'keyboard');
     }
   });
 });
@@ -172,7 +239,7 @@ describe('the mobile keyboard surface', () => {
   const chord = { ...keyboardProps, keyboardMode: 'chord' as const };
 
   test('chord mode on mobile shows the chords only, in a surface that does not scroll', () => {
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    useAppStore.setState({ isInputPanelOpen: true });
     const html = renderToString(
       <BottomInputDock keyboardProps={chord} drumProps={drumProps} keyboardVariant="mobile" />,
     );
@@ -182,7 +249,7 @@ describe('the mobile keyboard surface', () => {
   });
 
   test('chord mode on desktop keeps the melody keys and the scrolling surface', () => {
-    useAppStore.setState({ isInputPanelOpen: true, inputPanelMode: 'keyboard' });
+    useAppStore.setState({ isInputPanelOpen: true });
     const html = renderToString(<BottomInputDock keyboardProps={chord} drumProps={drumProps} />);
     for (const key of MELODY_KEYS) expect(html).toContain(`id="chord-key-${key}"`);
     expect(html).toContain('overflow-x-auto');

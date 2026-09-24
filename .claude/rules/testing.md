@@ -32,7 +32,8 @@ values — `useAppStore.setState(...)` before the render has **no effect**, sile
 Nothing in `bun run verify` catches this; the test just asserts against the wrong state. <!-- R257 -->
 
 If a component must reflect state set by a test, it has to serve `getState()` for *both*
-snapshots — see the `useLiveStore` helper and its comment in `src/components/ui/BottomInputDock.tsx`,
+snapshots — see the `useLiveStore` helper (`src/components/ui/useLiveStore.ts`) and the dock's
+hook that reads through it, `src/components/ui/useBottomInputDock.ts`,
 and the note at the top of `src/components/TransportBar.test.tsx` explaining which cases cannot
 be exercised through a rendered component at all.
 

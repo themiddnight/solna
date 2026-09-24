@@ -11,7 +11,6 @@ import type {
   ViewMode,
   CustomChordProgressionItem,
   KeyboardMode,
-  InputPanelMode,
   PadInterval,
   PadMode,
   PadVoicing,
@@ -557,10 +556,10 @@ export interface UiSlice {
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
-  // The bottom input dock's open state and active tab. Session-only by design:
-  // an input-surface preference, not composition data (see partializeAppState).
+  // The bottom input dock's open state. Session-only by design: an
+  // input-surface preference, not composition data (see partializeAppState).
+  // Which panel it shows is not state: it is derived from the input target.
   isInputPanelOpen: boolean;
-  inputPanelMode: InputPanelMode;
   /**
    * Session-only (never in partializeAppState): true while the vibe picker
    * previews. Gates QWERTY notes, QWERTY drum pads and MIDI note-on/CC at
@@ -590,7 +589,6 @@ export interface UiSlice {
   setIsMidiSettingsOpen: (open: boolean) => void;
   setMidiLearnTargetId: (id: string | null) => void;
   setIsInputPanelOpen: (open: boolean) => void;
-  setInputPanelMode: (mode: InputPanelMode) => void;
   setSelectedMidiInputId: (id: string) => void;
 }
 

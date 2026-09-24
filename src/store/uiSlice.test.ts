@@ -163,11 +163,11 @@ describe('follow-playhead preference', () => {
 });
 
 describe('input deck dock state', () => {
-  test('defaults to a closed keyboard panel', () => {
+  test('defaults to closed, with no stored panel (the panel is derived from the target)', () => {
     const calls: Record<string, unknown>[] = [];
     const slice = createUiSlice(((partial: Record<string, unknown>) => calls.push(partial)) as never);
     expect(slice.isInputPanelOpen).toBe(false);
-    expect(slice.inputPanelMode).toBe('keyboard');
+    expect('inputPanelMode' in slice).toBe(false);
   });
 
   test('setIsInputPanelOpen updates the flag', () => {
@@ -191,12 +191,6 @@ describe('input deck dock state', () => {
     expect(applied).toEqual({ inputTargetPin: null });
   });
 
-  test('setInputPanelMode updates the mode', () => {
-    let applied: Record<string, unknown> | undefined;
-    const slice = createUiSlice(((partial: Record<string, unknown>) => { applied = partial; }) as never);
-    slice.setInputPanelMode('drums');
-    expect(applied).toEqual({ inputPanelMode: 'drums' });
-  });
 });
 
 describe('track solo state', () => {

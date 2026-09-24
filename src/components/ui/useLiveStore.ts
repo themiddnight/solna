@@ -7,7 +7,7 @@ import type { AppStore } from '@/store/types';
  * BOTH snapshots. zustand's own hook serves getInitialState() as the server
  * snapshot, so under renderToString a plain useAppStore(selector) renders
  * creation-time values and a test's setState() has no effect — see
- * .claude/rules/testing.md and BottomInputDock.tsx.
+ * .claude/rules/testing.md and useBottomInputDock.ts.
  */
 export function useLiveStore<T>(selector: (state: AppStore) => T): T {
   return useSyncExternalStore(
