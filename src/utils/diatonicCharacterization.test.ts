@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 import { ROOTS, getDiatonicChordForDegree } from './musicTheory';
 import { DIATONIC_CHARACTERIZATION } from './diatonicCharacterizationFixture';
 
@@ -19,7 +20,7 @@ describe('getDiatonicChordForDegree — characterization lock', () => {
     for (const scaleType of Object.keys(SCALES)) {
       for (const root of ROOTS) {
         for (const use7ths of [false, true]) {
-          const cells = SCALES[scaleType].intervals.map((_, degree) => {
+          const cells = scaleEntry(scaleType).intervals.map((_, degree) => {
             const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
             return `${chord.root}:${chord.quality}:${chord.degreeName}`;
           });

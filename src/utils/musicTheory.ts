@@ -16,13 +16,6 @@ import {
   type ChordQuality,
 } from '@/musicCore';
 import { ChordItem } from '../types';
-// SCALES is authored content and lives in src/data/, below this file in the
-// layering: data -> audio -> store -> components. Reading DOWN into it, as
-// this line does, is the allowed direction. The other way is not: src/data/
-// may only `import type` from here (see src/data/bassPatterns.ts,
-// chordRhythms.ts, drumGrids.ts importing `MeterId`), which is erased at
-// compile and is what keeps every data file an independent leaf.
-import { SCALES } from '@/data/scales';
 import { spellPitchClassInKey, type SpellingKey } from './noteSpelling';
 
 // Backward-compatible re-exports: these three names are now owned by Music
@@ -241,9 +234,9 @@ export function parentDegreesFor(
   degree: number,
 ): { parentKey: string; degrees: number[] } {
   const resolvedKey = resolveScaleKey(scaleType);
-  const scale = SCALES[resolvedKey];
+  const scale = scaleEntry(resolvedKey);
   const parentKey = scale.parent ?? resolvedKey;
-  const degrees = nearestDegrees(SCALES[parentKey].intervals, scale.intervals[degree]);
+  const degrees = nearestDegrees(scaleEntry(parentKey).intervals, scale.intervals[degree]);
   return { parentKey, degrees };
 }
 
@@ -260,7 +253,7 @@ export function resolveParentDegreeQuality(
   parentDegree: number,
   use7ths: boolean,
 ): ChordQuality {
-  const notes = scaleNotesForTonal('C', SCALES[parentKey].tonal);
+  const notes = scaleNotesForTonal('C', scaleEntry(parentKey).tonal);
   const chordRoot = notes[parentDegree];
   const third = intervalDistance(chordRoot, notes[(parentDegree + 2) % 7]);
   const fifth = intervalDistance(chordRoot, notes[(parentDegree + 4) % 7]);
@@ -342,7 +335,7 @@ const MAJOR_REFERENCE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
  */
 export function degreeToRoman(scaleType: string, normDegree: number, quality: ChordQuality): string {
   const resolvedType = resolveScaleKey(scaleType);
-  const scale = SCALES[resolvedType];
+  const scale = scaleEntry(resolvedType);
   const numDegrees = scale.intervals.length;
 
   const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
@@ -380,7 +373,7 @@ export function getDiatonicChordForDegree(
   // redo the same fallback for itself — two copies of one rule, and only one
   // of them would move if the rule ever changed.
   const resolvedType = resolveScaleKey(scaleType);
-  const scale = SCALES[resolvedType];
+  const scale = scaleEntry(resolvedType);
   const numDegrees = scale.intervals.length;
 
   const normDegree = ((degreeIndex % numDegrees) + numDegrees) % numDegrees;

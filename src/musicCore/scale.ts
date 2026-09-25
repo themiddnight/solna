@@ -1,4 +1,28 @@
 import { SCALES, type ScaleDefinition } from '@/data/scales';
+import { scaleSemitonesForTonal } from './tonalAdapter';
+
+/**
+ * A SCALES entry plus the intervals its `tonal` name derives. SCALES states no
+ * intervals: `tonal` is their one source, and src/data/scales.test.ts pins the
+ * legacy scales' intervals so a saved project keeps sounding as it did.
+ */
+export type ResolvedScale = ScaleDefinition & { readonly intervals: readonly number[] };
+
+function resolveScale(definition: ScaleDefinition): ResolvedScale {
+  return Object.freeze({
+    ...definition,
+    intervals: Object.freeze(scaleSemitonesForTonal(definition.tonal)),
+  });
+}
+
+/**
+ * Every SCALES entry, resolved once at module load. A `tonal` name that does
+ * not resolve throws here, so a bad library entry fails the first import
+ * rather than playing silence.
+ */
+export const SCALE_LIBRARY: Readonly<Record<string, ResolvedScale>> = Object.freeze(
+  Object.fromEntries(Object.entries(SCALES).map(([key, definition]) => [key, resolveScale(definition)])),
+);
 
 /**
  * The ONE place an unrecognised scale type falls back to Major.
@@ -16,7 +40,7 @@ export function resolveScaleKey(scaleType: string): string {
   return Object.hasOwn(SCALES, scaleType) ? scaleType : 'Major';
 }
 
-/** The SCALES entry a scale type names, with the same fallback. */
-export function scaleEntry(scaleType: string): ScaleDefinition {
-  return SCALES[resolveScaleKey(scaleType)];
+/** The resolved library entry a scale type names, with the same fallback. */
+export function scaleEntry(scaleType: string): ResolvedScale {
+  return SCALE_LIBRARY[resolveScaleKey(scaleType)];
 }

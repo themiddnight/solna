@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { SCALES } from '@/data/scales';
-import { resolveScaleKey, scaleEntry } from './scale';
+import { SCALE_LIBRARY, resolveScaleKey, scaleEntry } from './scale';
+import { scaleSemitonesForTonal } from './tonalAdapter';
 
 describe('resolveScaleKey', () => {
   test('echoes a known scale type', () => {
@@ -22,18 +23,39 @@ describe('resolveScaleKey', () => {
   });
 });
 
+describe('SCALE_LIBRARY', () => {
+  test('has exactly the SCALES keys, in the same order', () => {
+    expect(Object.keys(SCALE_LIBRARY)).toEqual(Object.keys(SCALES));
+  });
+
+  test('each entry is its SCALES definition plus the intervals its tonal name derives', () => {
+    for (const [key, definition] of Object.entries(SCALES)) {
+      const { intervals, ...rest } = SCALE_LIBRARY[key];
+      expect(rest, key).toEqual(definition);
+      expect(intervals, key).toEqual(scaleSemitonesForTonal(definition.tonal));
+    }
+  });
+
+  test('is frozen, entries and interval arrays included', () => {
+    expect(Object.isFrozen(SCALE_LIBRARY)).toBe(true);
+    expect(Object.isFrozen(SCALE_LIBRARY['Major'])).toBe(true);
+    expect(Object.isFrozen(SCALE_LIBRARY['Major'].intervals)).toBe(true);
+  });
+});
+
 describe('scaleEntry', () => {
-  test('returns the SCALES entry for a known scale type', () => {
-    expect(scaleEntry('Minor Pentatonic')).toBe(SCALES['Minor Pentatonic']);
+  test('returns the resolved library entry for a known scale type', () => {
+    expect(scaleEntry('Minor Pentatonic')).toBe(SCALE_LIBRARY['Minor Pentatonic']);
+    expect(scaleEntry('Minor Pentatonic').intervals).toEqual([0, 3, 5, 7, 10]);
   });
 
   test('returns the Major entry for an unrecognized scale type', () => {
-    expect(scaleEntry('not-a-scale')).toBe(SCALES['Major']);
+    expect(scaleEntry('not-a-scale')).toBe(SCALE_LIBRARY['Major']);
   });
 
   test('returns the Major entry, not the inherited property, for an Object.prototype key', () => {
-    expect(scaleEntry('constructor')).toBe(SCALES['Major']);
-    expect(scaleEntry('constructor').intervals).toEqual(SCALES['Major'].intervals);
-    expect(scaleEntry('toString').intervals).toEqual(SCALES['Major'].intervals);
+    expect(scaleEntry('constructor')).toBe(SCALE_LIBRARY['Major']);
+    expect(scaleEntry('constructor').intervals).toEqual([0, 2, 4, 5, 7, 9, 11]);
+    expect(scaleEntry('toString').intervals).toEqual([0, 2, 4, 5, 7, 9, 11]);
   });
 });

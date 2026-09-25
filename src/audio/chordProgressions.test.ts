@@ -4,7 +4,7 @@ import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById, resolveProgression } from './chordProgressions';
 import { SCALES } from '@/data/scales';
 import { degreeToRoman, getDiatonicChordForDegree, TONAL_CHORD_ALIASES } from '../utils/musicTheory';
-import { resolveScaleKey, type ChordQuality } from '@/musicCore';
+import { resolveScaleKey, scaleEntry, type ChordQuality } from '@/musicCore';
 
 describe('CHORD_PROGRESSIONS structure', () => {
   test('ids are unique and non-empty, and every entry has steps', () => {
@@ -31,7 +31,7 @@ describe('CHORD_PROGRESSIONS structure', () => {
   test('referenceScale is a real scale and minScaleLength matches its length', () => {
     for (const p of CHORD_PROGRESSIONS) {
       expect(SCALES[p.referenceScale]).toBeDefined();
-      expect(p.minScaleLength).toBe(SCALES[p.referenceScale].intervals.length);
+      expect(p.minScaleLength).toBe(scaleEntry(p.referenceScale).intervals.length);
     }
   });
 
@@ -62,7 +62,7 @@ describe('CHORD_PROGRESSIONS structure', () => {
 
 function expectedRomanNumeral(referenceScale: string, degree: number, quality: ChordQuality | undefined): string {
   const resolvedType = resolveScaleKey(referenceScale);
-  const numDegrees = SCALES[resolvedType].intervals.length;
+  const numDegrees = scaleEntry(resolvedType).intervals.length;
   const normDegree = ((degree % numDegrees) + numDegrees) % numDegrees;
   const resolvedQuality = quality ?? getDiatonicChordForDegree(degree, 'C', referenceScale, false).quality;
   return degreeToRoman(referenceScale, normDegree, resolvedQuality);

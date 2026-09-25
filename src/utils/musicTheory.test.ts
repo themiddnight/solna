@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CHORD_QUALITY_GROUPS, isChordQuality, type ChordQuality } from '@/musicCore';
+import { CHORD_QUALITY_GROUPS, isChordQuality, scaleEntry, type ChordQuality } from '@/musicCore';
 import { ROOTS, TONAL_CHORD_ALIASES, degreeToRoman, formatChordLabel, formatChordQuality, generateBlockChordNotes, getBorrowedChords, getDiatonicChordForDegree, getScaleNotes, isNoteInScale, parentDegreesFor, remapNoteByScaleDegree, resolveDegreeQuality, resolveParentDegreeQuality, rootSemitone, snapProgressionToScale, transposeNoteBySemitones, transposeProgression } from './musicTheory';
 import { MAX_BPM, MIN_BPM, STEPS_PER_BAR, barDurationSec, clampBpm, sixteenthNoteMs, stepDurationSec } from './tempo';
 import { SCALES } from '@/data/scales';
@@ -11,7 +11,7 @@ import type { ChordItem } from '../types';
 const SCALE_KEYS = Object.keys(SCALES);
 
 function inScalePaletteEntries(root: string, scaleType: string): Set<string> {
-  const numDegrees = SCALES[scaleType]?.intervals.length ?? 7;
+  const numDegrees = scaleEntry(scaleType).intervals.length;
   const entries = new Set<string>();
   for (let degree = 0; degree < numDegrees; degree++) {
     for (const use7ths of [false, true]) {
@@ -132,8 +132,7 @@ describe('formatChordLabel', () => {
 
 describe('Hirajoshi', () => {
   test('is a five-degree World & Exotic scale on [0, 2, 3, 7, 8]', () => {
-    const scale = SCALES['Hirajoshi'];
-    expect(scale).toBeDefined();
+    const scale = scaleEntry('Hirajoshi');
     expect(scale.category).toBe('World & Exotic');
     expect(scale.intervals).toEqual([0, 2, 3, 7, 8]);
   });
@@ -141,8 +140,8 @@ describe('Hirajoshi', () => {
   test('is a strict subset of natural minor, at degrees 1, 2, 3, 5, 6', () => {
     // This is why the qualities are inherited from the parent 7-note scale,
     // exactly as Major/Minor Pentatonic already do.
-    const parent = SCALES['Natural Minor'].intervals;
-    for (const interval of SCALES['Hirajoshi'].intervals) {
+    const parent = scaleEntry('Natural Minor').intervals;
+    for (const interval of scaleEntry('Hirajoshi').intervals) {
       expect(parent).toContain(interval);
     }
   });
@@ -302,7 +301,7 @@ describe('transposeProgression', () => {
 
   test('each chord keeps its scale degree in the new key', () => {
     const degreeOf = (chordRoot: string, keyRoot: string) =>
-      SCALES['Natural Minor'].intervals.indexOf(
+      scaleEntry('Natural Minor').intervals.indexOf(
         (rootSemitone(chordRoot) - rootSemitone(keyRoot) + 12) % 12,
       );
     const moved = transposeProgression(A_MINOR_PROGRESSION, 'A', 'F#');
@@ -647,7 +646,7 @@ describe('resolveDegreeQuality', () => {
   test('reproduces nine of the eleven scales exactly', () => {
     expect(Object.keys(REPRODUCED).length).toBe(9);
     for (const [key, expected] of Object.entries(REPRODUCED)) {
-      const scale = SCALES[key];
+      const scale = scaleEntry(key);
       expect(scale.intervals.map((_, d) => resolveDegreeQuality(key, d, false)), key).toEqual(expected.triads);
       expect(scale.intervals.map((_, d) => resolveDegreeQuality(key, d, true)), key).toEqual(expected.sevenths);
     }
@@ -660,16 +659,16 @@ describe('resolveDegreeQuality', () => {
   // reason — a `7` on the tonic is a blues idiom, and an idiom belongs in a
   // progression's explicit `quality`, not in a scale's diatonic palette.
   test('Blues changes at four degrees', () => {
-    expect(SCALES['Blues'].intervals.map((_, d) => resolveDegreeQuality('Blues', d, false)))
+    expect(scaleEntry('Blues').intervals.map((_, d) => resolveDegreeQuality('Blues', d, false)))
       .toEqual(['min', 'maj', 'min', 'min', 'min', 'maj']);
-    expect(SCALES['Blues'].intervals.map((_, d) => resolveDegreeQuality('Blues', d, true)))
+    expect(scaleEntry('Blues').intervals.map((_, d) => resolveDegreeQuality('Blues', d, true)))
       .toEqual(['min7', 'maj7', 'min7', 'min7', 'min7', '7']);
   });
 
   test('Hirajoshi changes at degree 3 and nowhere else', () => {
-    expect(SCALES['Hirajoshi'].intervals.map((_, d) => resolveDegreeQuality('Hirajoshi', d, false)))
+    expect(scaleEntry('Hirajoshi').intervals.map((_, d) => resolveDegreeQuality('Hirajoshi', d, false)))
       .toEqual(['min', 'dim', 'maj', 'min', 'maj']);
-    expect(SCALES['Hirajoshi'].intervals.map((_, d) => resolveDegreeQuality('Hirajoshi', d, true)))
+    expect(scaleEntry('Hirajoshi').intervals.map((_, d) => resolveDegreeQuality('Hirajoshi', d, true)))
       .toEqual(['min7', 'm7b5', 'maj7', 'min7', 'maj7']);
   });
 
@@ -707,7 +706,7 @@ describe('resolveDegreeQuality', () => {
 describe('resolveDegreeQuality output vs. the chord-quality registry', () => {
   test('every triad and seventh quality every scale can emit is a registered, picker-representable token', () => {
     for (const scaleType of SCALE_KEYS) {
-      const numDegrees = SCALES[scaleType].intervals.length;
+      const numDegrees = scaleEntry(scaleType).intervals.length;
       for (let degree = 0; degree < numDegrees; degree++) {
         for (const use7ths of [false, true]) {
           const quality = resolveDegreeQuality(scaleType, degree, use7ths);
