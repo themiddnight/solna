@@ -226,6 +226,16 @@ export function startMidiInputBridge(): void {
   }
   started = true;
 
+  // Chrome logs a "Deprecated feature used" issue (NoSysexWebMIDIWithoutPermission:
+  // "Web MIDI will ask a permission to use even if the sysex is not specified")
+  // on this call, and it cannot be silenced from here: Blink reports it, once per
+  // page, for any secure-context requestMIDIAccess() without `sysex: true`,
+  // even when permission is already granted (navigator_web_midi.cc,
+  // crbug.com/1420307). The only way out is `{ sysex: true }`, which asks for
+  // the stronger "control and reprogram your MIDI devices" permission — Solna
+  // reads notes and CCs only, so it keeps the plain request and accepts the
+  // notice. It is informational: the permission prompt it announces has
+  // already shipped.
   (navigator as Navigator & { requestMIDIAccess?: () => Promise<MIDIAccess> })
     .requestMIDIAccess?.()
     .then((access) => {
