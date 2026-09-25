@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { StoreApi } from 'zustand';
 import { audioEngine } from '../audio/engine';
 import { createChordsSlice } from './chordsSlice';
@@ -134,6 +134,9 @@ beforeAll(() => {
   // the fake installed above.
   storeModule = import(`./store?bust=${Date.now()}`);
 });
+
+// bun runs every file in one process; a leaked `window` crashes axe-core (jsx-a11y) later.
+afterAll(() => { Reflect.deleteProperty(globalThis, 'window'); });
 
 beforeEach(async () => {
   fakeLocalStorage.clear();

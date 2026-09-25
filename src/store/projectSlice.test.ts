@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { setOperationFailureSink } from '@/incidents/operationFailure';
 import { createMemoryBackend, createProjectStore } from './projectStore';
@@ -24,6 +24,9 @@ beforeAll(() => {
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
   storeModule = import(`./store?bust=${Date.now()}`);
 });
+
+// bun runs every file in one process; a leaked `window` crashes axe-core (jsx-a11y) later.
+afterAll(() => { Reflect.deleteProperty(globalThis, 'window'); });
 
 /** A fresh slice bound to the live store but to ITS OWN memory backend. */
 async function sliceWithBackend(seed?: ProjectBody | ProjectSlotRecord) {

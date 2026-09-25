@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { createMemoryBackend, createProjectStore } from './projectStore';
 import { SAVE_FAILED_MESSAGE, SAVE_HANDLE_DENIED_MESSAGE } from './projectSlice';
 import { UNTITLED_SOURCE } from './projectSource';
@@ -16,6 +16,9 @@ beforeAll(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: new FakeLocalStorage(), configurable: true });
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
 });
+
+// bun runs every file in one process; a leaked `window` crashes axe-core (jsx-a11y) later.
+afterAll(() => { Reflect.deleteProperty(globalThis, 'window'); });
 
 /**
  * A REAL FileSystemFileHandle keeps its methods on the prototype, so the fake

@@ -39,6 +39,15 @@ recorded as risk R2, which assumed the golden would only ever run on the machine
   content tests, `check:drums` and `check:levels` for fast contributor feedback. It is not part of
   `verify`, because `bun test` already covers it. The card's "seven rows × 16 steps" rule was out
   of date: rows are optional, there are eleven voices, and 3/4 and 6/8 grids are 12 steps.
+- **Test isolation across files.** The first CI run also showed the suite depended on local file
+  order. `bun test` runs every file in one process, in filesystem order. Three leaks surfaced:
+  - Five store tests left `window = globalThis` behind, so axe-core, loaded through
+    `eslint-plugin-jsx-a11y`, crashed on import in every later ESLint-API test.
+  - `mixdownSnapshot.test.ts` left a drum solo in the shared store, and solo outranks mute.
+  - `leadRecord.test.ts` trusted the lead step resolution left by the previous file.
+
+  Each of these tests now cleans up after itself or sets what it relies on. The suite was re-run
+  green in reverse and in shuffled file orders.
 - **Taste is reviewed, not gated.** `CONTRIBUTING.md` defines a listening review: the maintainer
   auditions each content addition against the pull-request template's description before merge.
 - **One contributor document.** `CONTRIBUTING.md` holds the how-to for each content type.
@@ -68,6 +77,9 @@ code is reused. Apache-2.0 was preferred over MIT for its explicit trademark and
   `public/assets/` are trademarks outside the licence (`NOTICE`, `TRADEMARKS.md`).
 - **R355** — `CONTRIBUTING.md` is the contributor guide; `CLAUDE.md` points at it, and a change to how
   a content type is added updates it in the same change.
+
+- **R356** — `bun test` has no fixed file order: a test file removes the globals it installs and
+  restores the shared store state it changes, and sets the state it depends on itself.
 
 ## Sources
 

@@ -43,6 +43,16 @@ The `localStorage` write is coalesced to an idle callback, so storage lags the s
 idle window: call `flushPersistedWrites()` before asserting on `localStorage`, in a test or a live
 page. <!-- R213 --> ([ADR-0022](../../docs/decisions/0022-persist-write-path-and-guarded-storage.md))
 
+## One process, no fixed file order
+
+`bun test` runs every file in one process, and the file order comes from the filesystem, so it
+differs between machines (CI's order is not a local order). A test file that installs a global
+(`window`, `localStorage`, `AudioContext`) removes it in `afterAll`, and a test that writes shared
+store state it does not own puts it back in `finally` or `afterEach`. A test that depends on store
+state sets that state itself in `beforeEach`, rather than trusting the file before it. To reproduce
+an order-dependent failure, pass the files explicitly with `./` prefixes: `bun test ./a.test.ts
+./b.test.ts` runs them in that order. <!-- R356 --> ([ADR-0053](../../docs/decisions/0053-contributor-readiness.md))
+
 ## The audio engine harness
 
 `src/audio/testFakes.ts` is a fake `AudioContext` and is what makes engine tests possible without
@@ -76,3 +86,4 @@ Two scripts import straight from source and must keep passing:
 
 - Expecting `useAppStore.setState(...)` before a `renderToString` render to take effect in a plain selector <!-- R257 -->
 - Asserting on `localStorage` without `flushPersistedWrites()` <!-- R213 -->
+- A test file that leaves a global it installed, or shared store state it changed, for the next file <!-- R356 -->

@@ -48,12 +48,19 @@ describe('buildMixdownSnapshot', () => {
   });
 
   test('solo does not leak into the export; mute does', () => {
+    const { soloTracks, chordMuted, bassMuted } = useAppStore.getState();
     useAppStore.setState({ soloTracks: ['drums'], chordMuted: false, bassMuted: true });
-    const snapshot = buildMixdownSnapshot(useAppStore.getState());
-    // Solo is a session-only monitoring gesture; it never reaches the export.
-    expect(snapshot.buses.find((b) => b.source === 'chord')?.muted).toBe(false);
-    // Mute is arrangement intent and does.
-    expect(snapshot.buses.find((b) => b.source === 'bass')?.muted).toBe(true);
+    try {
+      const snapshot = buildMixdownSnapshot(useAppStore.getState());
+      // Solo is a session-only monitoring gesture; it never reaches the export.
+      expect(snapshot.buses.find((b) => b.source === 'chord')?.muted).toBe(false);
+      // Mute is arrangement intent and does.
+      expect(snapshot.buses.find((b) => b.source === 'bass')?.muted).toBe(true);
+    } finally {
+      // bun runs every test file in one process against one store: a solo left
+      // behind here outranks mute in every later file's audibility checks.
+      useAppStore.setState({ soloTracks, chordMuted, bassMuted });
+    }
   });
 
   test('resolves stepsPerBar from the meter, so the renderer never parses a meter string', () => {
