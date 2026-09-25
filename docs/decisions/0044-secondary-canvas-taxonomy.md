@@ -1,6 +1,6 @@
 # ADR-0044: Secondary-canvas taxonomy
 
-**Status:** Accepted — 2026-09-24. Amends [ADR-0041](0041-mobile-frame.md) (R320).
+**Status:** Accepted — 2026-09-24. Amends [ADR-0041](0041-mobile-frame.md) (R320). R327 and R328 amended by [ADR-0055](0055-shared-popup-and-listbox.md).
 
 ## Context
 

@@ -5,7 +5,9 @@ import { renderToString } from 'react-dom/server';
 import { TabButton } from './Header';
 import { projectDisplayName, ProjectNameLabel, UNTITLED_PROJECT_LABEL } from './header/ProjectNameLabel';
 import { FollowPlayheadToggle } from './header/FollowPlayheadToggle';
-import { ScaleMenu, ScaleSelects } from './header/ScaleMenu';
+import { RootSelect, ScaleMenu, ScaleMenuPanel } from './header/ScaleMenu';
+import { ScaleTypeListbox } from './header/ScaleTypeListbox';
+import { commitScaleType } from './header/useScaleTypeListbox';
 import { HEADER_TOOLS } from './header/headerTools';
 import { ExportButton } from './export/ExportButton';
 import { PatternSegmentRow } from './ui/SegmentedControl';
@@ -13,7 +15,7 @@ import { LOOP_TABS, SONG_TABS } from '../types';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
-import { SCALES, SCALE_CATEGORIES } from '@/data/scales';
+import { SCALES } from '@/data/scales';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -289,32 +291,23 @@ describe('the header tabs cover every view', () => {
   });
 });
 
+
 describe('key picker', () => {
-  test('offers the dual label while storing the sharp name', () => {
-    const html = renderToString(<ScaleSelects idPrefix="test" />);
+  test('the root select offers the dual label while storing the sharp name', () => {
+    const html = renderToString(<RootSelect id="test-root" />);
     expect(html).toContain('<option value="C#">C#/Db</option>');
     expect(html).toContain('<option value="C">C</option>');
   });
 
-  // Both copies render — the inline pair from xl up and the dropdown below —
-  // each under its own id prefix, so the hidden copy never duplicates an id.
-  // The scale select groups its options by category; the root select has no
-  // groups. Static content, so no store state is involved (R257).
-  test('the scale select renders one optgroup per category, in order', () => {
-    const html = renderToString(<ScaleSelects idPrefix="test" />);
-    const labels = [...html.matchAll(/<optgroup label="([^"]*)"/g)].map(([, label]) => label);
-    expect(labels).toEqual([...SCALE_CATEGORIES]);
-  });
-
-  test('both breakpoint copies group their scale options', () => {
-    const html = renderToString(<ScaleMenu />);
-    expect(html.match(/<optgroup /g) ?? []).toHaveLength(SCALE_CATEGORIES.length * 2);
-  });
-
-  test('the key/scale menu renders both breakpoint copies', () => {
+  // Both breakpoint copies render — the inline field from xl up, the compact
+  // trigger below it — each under its own ids, so the hidden copy never
+  // duplicates one. The compact panel mounts only while open.
+  test('the key/scale menu renders the inline field and the compact trigger', () => {
     const html = renderToString(<ScaleMenu />);
     expect(html).toContain('id="select-master-scale-root"');
-    expect(html).toContain('id="select-master-scale-compact-root"');
+    expect(html).toContain('id="btn-scale-type"');
+    expect(html).toContain('id="btn-scale-dropdown"');
+    expect(html).not.toContain('role="listbox"');
   });
 
   // The dropdown trigger stands beside the loop picker / project name, which
@@ -322,7 +315,7 @@ describe('key picker', () => {
   // content-box `h-8`, so both come out the same height on every frame.
   test('the dropdown trigger wears the field box at the select height', () => {
     const html = renderToString(<ScaleMenu />);
-    expect(html).toMatch(new RegExp(`<summary id="btn-scale-dropdown" class="${HEADER_FIELD_SHELL} box-content h-8 `));
+    expect(html).toContain(`id="btn-scale-dropdown" class="${HEADER_FIELD_SHELL} box-content h-8 `);
   });
 
   // The compact trigger shows the scale's authored abbreviation, never a cut of
@@ -334,35 +327,96 @@ describe('key picker', () => {
     expect(html).toContain(`max-[390px]:hidden">${SCALES[scaleType].abbr}</span>`);
   });
 
-  // The header pair is FIXED width, and the scale name ellipsises inside it.
-  // Both halves are one mechanism, which is why they are one test: daisyUI's
-  // `.select` sizes itself (`clamp(3rem, 20rem, 100%)`, `flex-shrink: 1`), so
-  // a `min-w-*` let the navbar decide the width AND meant the label never
-  // overflowed anything to be clipped against.
+  // daisyUI gives `.dropdown-open > [tabindex]:first-child` pointer-events:
+  // none. A trigger carrying tabindex would let a click on it while open fall
+  // through to whatever lies beneath instead of toggling the popup shut.
+  test('neither trigger carries a tabindex', () => {
+    const html = renderToString(<ScaleMenu />);
+    const buttons = [...html.matchAll(/<button[^>]*>/g)].map(([tag]) => tag);
+    expect(buttons).toHaveLength(2);
+    for (const tag of buttons) expect(tag).not.toContain('tabindex');
+  });
+});
+
+describe('key picker widths', () => {
+  // The header pair is FIXED width, and the names ellipsise inside it:
+  // daisyUI's `.select` sizes itself (`clamp(3rem, 20rem, 100%)`), so a
+  // `min-w-*` let the navbar decide the width AND meant the label never
+  // overflowed anything to be clipped against. The numbers are a design call
+  // and get retuned; ONE fixed width per control, and no min-width, is the rule.
   test('the inline pair is fixed width, not min-width', () => {
-    const html = renderToString(<ScaleSelects idPrefix="test" />);
-    // The two numbers are a design call and get retuned; that each select
-    // carries ONE of them, and that neither is a min-width, is the rule.
-    const widths = html.match(/\bw-\d+\b/g) ?? [];
-    expect(widths).toHaveLength(2);
-    expect(html).not.toContain('min-w-');
+    const root = renderToString(<RootSelect id="test-root" />);
+    const trigger = openTagContaining(renderToString(<ScaleTypeListbox />), 'id="btn-scale-type"');
+    expect(root.match(/\bw-\d+\b/g) ?? []).toHaveLength(1);
+    expect(trigger.match(/\bw-\d+\b/g) ?? []).toHaveLength(1);
+    expect(root + trigger).not.toContain('min-w-');
   });
 
   // `appearance-none` is load-bearing, not decoration — see HEADER_SELECT's
   // comment. Without it daisyUI opts the select into Chrome's customizable
-  // select, whose label is clipped by a `selectedcontent` rule that matches
-  // nothing unless the author writes that markup, and the scale name paints
-  // over the chevron and out past the border.
-  test('both selects opt out of the customizable-select rendering', () => {
-    const html = renderToString(<ScaleSelects idPrefix="test" />);
-    expect(html.match(/appearance-none/g) ?? []).toHaveLength(2);
+  // select, and the root name paints over the chevron and out past the border.
+  test('the root select opts out of the customizable-select rendering', () => {
+    const html = renderToString(<RootSelect id="test-root" />);
+    expect(html.match(/appearance-none/g) ?? []).toHaveLength(1);
   });
 
-  // The dropdown copy has a panel to fill and no navbar to hold still, so it
-  // takes the full width instead of the header's two fixed ones.
-  test('the stacked copy fills its dropdown instead', () => {
-    const html = renderToString(<ScaleSelects idPrefix="test" stacked />);
-    expect(html.match(/w-full/g) ?? []).toHaveLength(2);
+  // The panel copy has a panel to fill and no navbar to hold still.
+  test('the stacked root select fills its panel instead', () => {
+    const html = renderToString(<RootSelect id="test-root" stacked />);
+    expect(html.match(/w-full/g) ?? []).toHaveLength(1);
     expect(html).not.toMatch(/\bw-\d+\b/);
+  });
+});
+
+describe('scale type listbox', () => {
+  test('the xl trigger announces a listbox and shows the full scale name', () => {
+    const { scaleType } = useAppStore.getInitialState();
+    const html = renderToString(<ScaleTypeListbox />);
+    const trigger = openTagContaining(html, 'id="btn-scale-type"');
+    expect(trigger).toContain('aria-haspopup="listbox"');
+    expect(trigger).toContain('aria-expanded="false"');
+    // The visible text is only the scale name; the old select was named "Scale Type".
+    expect(trigger).toContain(`aria-label="Scale Type: ${SCALES[scaleType].name}"`);
+    expect(html).toContain(`<span class="truncate">${SCALES[scaleType].name}</span>`);
+    expect(html).not.toContain('dropdown-content');
+  });
+
+  test('every scale is an option, with its description', () => {
+    const html = renderToString(
+      <ScaleMenuPanel scaleType="Dorian" listboxRef={{ current: null }} onCommit={() => {}} />,
+    );
+    // renderToString escapes `&` (Major Blues reads "… R&B").
+    const escaped = (text: string) => text.replace(/&/g, '&amp;');
+    for (const scale of Object.values(SCALES)) {
+      expect(html).toContain(`>${escaped(scale.name)}</div>`);
+      expect(html).toContain(`<div class="text-xs text-base-content/70">${escaped(scale.description)}</div>`);
+    }
+  });
+
+  test('the compact panel holds the heading, the root select and the scale listbox', () => {
+    const html = renderToString(
+      <ScaleMenuPanel scaleType="Dorian" listboxRef={{ current: null }} onCommit={() => {}} />,
+    );
+    expect(html).toContain('Master Key &amp; Scale');
+    expect(html).toContain('id="select-master-scale-compact-root"');
+    expect(html).toContain('id="listbox-master-scale-type-compact" role="listbox" aria-label="Scale Type"');
+    expect(html.match(/aria-selected="true"/g) ?? []).toHaveLength(1);
+    expect(html).toContain('<div class="text-sm font-medium text-primary">Dorian</div>');
+  });
+});
+
+describe('scale type commit', () => {
+  test('a different scale is written', () => {
+    const writes: string[] = [];
+    commitScaleType('Major', 'Dorian', (type) => writes.push(type));
+    expect(writes).toEqual(['Dorian']);
+  });
+
+  // A native select fires no change for its current value; the listbox must
+  // not either, or re-picking the scale would run changeKey and a set() for nothing.
+  test('re-committing the current scale writes nothing', () => {
+    const writes: string[] = [];
+    commitScaleType('Dorian', 'Dorian', (type) => writes.push(type));
+    expect(writes).toEqual([]);
   });
 });

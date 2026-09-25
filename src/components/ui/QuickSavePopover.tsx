@@ -2,8 +2,6 @@ import React from "react";
 import { Bookmark } from "lucide-react";
 import { useQuickSavePopover } from "./useQuickSavePopover";
 
-export { isDismissKey, popupShift, panelNaturalRect } from "./useQuickSavePopover";
-
 /** The trigger button a call site hands the popover; it renders it, so the
  * `dropdown` wrapper and the panel share one anchor point (R328). */
 interface QuickSaveTrigger {
