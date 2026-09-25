@@ -154,7 +154,7 @@ export function spellNoteInKey(note: string, rootNote: string, scaleType: string
  *
  * No surface renders a whole spelled scale today: this is the shape the
  * spelling characterization is generated and asserted over, which is why it
- * exists ahead of its first caller. Every 12 x 11 pair it covers reaches
+ * exists ahead of its first caller. Every (root x scale) pair it covers reaches
  * spellPitchClassInKey, so the lock is over the function that does ship.
  *
  * getScaleNotes must keep returning sharp names — ui/Keyboard.tsx does

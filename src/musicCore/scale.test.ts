@@ -53,6 +53,14 @@ describe('scaleEntry', () => {
     expect(scaleEntry('not-a-scale')).toBe(SCALE_LIBRARY['Major']);
   });
 
+  // A display name or a tonal scale name is not a key, even when it names a
+  // real scale: it falls back like any unknown string, never half-resolves.
+  test('returns the Major entry for a display name or a tonal name', () => {
+    for (const notAKey of ['Minor Blues', 'Locrian ♯2', 'vietnamese 1', 'major pentatonic']) {
+      expect(scaleEntry(notAKey), notAKey).toBe(SCALE_LIBRARY['Major']);
+    }
+  });
+
   test('returns the Major entry, not the inherited property, for an Object.prototype key', () => {
     expect(scaleEntry('constructor')).toBe(SCALE_LIBRARY['Major']);
     expect(scaleEntry('constructor').intervals).toEqual([0, 2, 4, 5, 7, 9, 11]);

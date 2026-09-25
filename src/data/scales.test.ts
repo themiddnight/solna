@@ -8,6 +8,8 @@ import { parentDegreesFor, resolveDegreeQuality, resolveParentDegreeQuality } fr
 // project names its scale by key, so each of these must keep sounding exactly
 // as it did: a tonal upgrade that shifts one fails here, never in a user's ear.
 // Copied verbatim from src/data/scales.ts as it stood; never regenerate it.
+// Scales added later have no pin here: a tonal upgrade that shifts one moves
+// its entries in the diatonic and spelling characterization fixtures instead.
 const LEGACY_INTERVALS: Record<string, readonly number[]> = {
   'Major': [0, 2, 4, 5, 7, 9, 11],
   'Natural Minor': [0, 2, 3, 5, 7, 8, 10],
