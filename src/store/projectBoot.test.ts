@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { audioEngine } from '../audio/engine';
 import { createMemoryBackend, createProjectStore, type ProjectStoreBackend } from './projectStore';
 import { factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
@@ -16,6 +16,9 @@ beforeAll(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: new FakeLocalStorage(), configurable: true });
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
 });
+
+// bun runs every file in one process; a leaked `window` crashes axe-core (jsx-a11y) later.
+afterAll(() => { Reflect.deleteProperty(globalThis, 'window'); });
 
 let stopSource: ReturnType<typeof spyOn>;
 beforeEach(() => {

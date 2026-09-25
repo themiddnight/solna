@@ -67,6 +67,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0050](0050-melody-grid-touch-gestures.md) | Pattern-grid touch gestures | One shared classifier and session rule touch on the Lead/FX matrix and the custom Chord/Bass lane: a tap edits on pointerup, a swipe scrolls and writes nothing, a long-press paints (Lead) or resizes a note or event; mouse and pen are unchanged. |
 | [0051](0051-theme-picker.md) | Theme picker | The wordmark opens a modal with the theme picker and About lines; any Solna or daisyUI theme, System by default, previewed then applied; palettes follow the scheme through CSS selectors bound to a registry by test. |
 | [0052](0052-midi-permission-on-settings-open.md) | MIDI permission on settings open | One shared MIDIAccess request; the bridge connects at load only on an already-granted permission, and only opening MIDI settings raises the prompt. |
+| [0053](0053-contributor-readiness.md) | Contributor readiness | CI runs `verify` on every PR; per-platform WAV golden; code under Apache-2.0 with the Solna and murva brand reserved; content invariants are tests, `check:content` is a fast subset; a listening review for taste. |
 
 ## Adding or changing a decision
 

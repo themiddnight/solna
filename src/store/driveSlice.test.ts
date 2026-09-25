@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { DRIVE_DENIED_MESSAGE, DriveAuthError, type DriveAuth } from './driveAuth';
 import { SOLNA_DRIVE_MIME, type DriveClient, type DriveFileMeta } from './driveClient';
 import { DRIVE_NOT_CONFIGURED_MESSAGE, type DriveSliceDeps } from './driveSlice';
@@ -19,6 +19,9 @@ beforeAll(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: new FakeLocalStorage(), configurable: true });
   Object.defineProperty(globalThis, 'window', { value: globalThis, configurable: true });
 });
+
+// bun runs every file in one process; a leaked `window` crashes axe-core (jsx-a11y) later.
+afterAll(() => { Reflect.deleteProperty(globalThis, 'window'); });
 
 const META: DriveFileMeta = {
   id: 'drive-1',

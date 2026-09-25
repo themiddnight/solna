@@ -3,7 +3,7 @@ import { useAppStore } from './store';
 import { startMelodyRecordBridges, leadClockActive, leadMarkerFollowsClock, RECORD_ARM_NAV_SOURCES } from './leadRecord';
 import { emitNoteInput, resetNoteInputListeners } from '../audio/playback/noteInputBus';
 import { getMeter } from '../utils/timeSignature';
-import { LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
+import { DEFAULT_LEAD_STEP_RESOLUTION, LEAD_TICKS_PER_BAR, TICKS_PER_SIXTEENTH } from '../utils/stepResolution';
 import { leadStoredIndexAt } from '../audio/playback/leadMelody';
 import type { LeadNote } from '../audio/playback/leadMelody';
 
@@ -30,6 +30,9 @@ beforeEach(() => {
     meterId: '4/4',
     leadMelodySteps: Array.from({ length: LEAD_TICKS_PER_BAR }, () => [] as LeadNote[]),
     leadLoopLength: 1,
+    // The length assertions below are written at the 1/16 grid; another file
+    // (leadSlice.test.ts) can leave a different resolution in the shared store.
+    leadStepResolution: DEFAULT_LEAD_STEP_RESOLUTION,
     leadMelodyView: 'chromatic',
     leadMelodyOctave: 3,
     leadCursor: 0,

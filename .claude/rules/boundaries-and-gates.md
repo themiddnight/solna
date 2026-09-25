@@ -1,5 +1,9 @@
 ---
 paths:
+  - ".github/**"
+  - "CONTRIBUTING.md"
+  - "TRADEMARKS.md"
+  - "package.json"
   - "eslint.config.js"
   - "knip.json"
   - "src/architecture/**"
@@ -22,6 +26,16 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 - `react-hooks/exhaustive-deps` and `complexity` stay `warn`; each legitimate exception carries a line disable naming its reason; never relax either rule for everybody. <!-- R010 -->
 
 ([ADR-0029](../../docs/decisions/0029-verify-gate-and-lint-severity.md))
+
+## CI, contributors and licence
+
+- CI (`.github/workflows/ci.yml`) runs `bun run verify` as one step on every pull request and push to `main`; change the gate in `package.json`, never by running a subset in the workflow. <!-- R351 -->
+- A platform-dependent golden records one value per platform; a new platform's value is added only when its platform-independent evidence matches, in a commit that changes nothing else. <!-- R352 -->
+- A content-table invariant is a test, not a separate `check:*` script; `check:content` is a fast subset for contributors and stays out of `verify`, whose `bun test` already runs it. <!-- R353 -->
+- The code is Apache-2.0; the Solna and murva names and the images under `public/assets/` are trademarks outside the licence (`NOTICE`, `TRADEMARKS.md`). <!-- R354 -->
+- `CONTRIBUTING.md` is the contributor guide; `CLAUDE.md` points at it, and a change to how a content type is added updates it in the same change. <!-- R355 -->
+
+([ADR-0053](../../docs/decisions/0053-contributor-readiness.md))
 
 ## Import bans
 
@@ -58,6 +72,11 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 
 ## Prohibited
 
+- A CI workflow that runs anything other than the whole `bun run verify` <!-- R351 -->
+- Re-recording a platform's golden value to make a failure pass, or in a commit that changes anything else <!-- R352 -->
+- A `check:*` script that duplicates a content test, or `check:content` added to `verify` <!-- R353 -->
+- Licensing the brand names or `public/assets/` images under the code licence <!-- R354 -->
+- Changing how a content type is added without updating `CONTRIBUTING.md` <!-- R355 -->
 - Finishing with any ESLint warning, or dismissing one as pre-existing <!-- R005 --> <!-- R264 -->
 - A rule other than `react-hooks/exhaustive-deps` or `complexity` configured `warn` after the change that empties it <!-- R005 --> <!-- R008 -->
 - Relaxing `exhaustive-deps` or `complexity` for everybody instead of a reasoned line disable <!-- R010 -->

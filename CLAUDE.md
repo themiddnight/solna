@@ -30,6 +30,7 @@ bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # Beat-preset audible-separation check
 bun run check:contrast # Beat-voice and module palette AA contrast floor (both Solna palettes)
 bun run check:levels   # calibration trim table still matches today's Beat-preset defaults
+bun run check:content  # fast subset for content edits: src/data tests, check:drums, check:levels
 bun run check:dead-code             # unused files, exports, types and dependencies across app + tooling
 bun run check:dead-code:production  # strict shipped-code file and dependency graph
 bun run verify         # all tests, static/domain checks, both dead-code scans, and the production build
@@ -47,7 +48,13 @@ bun run verify         # all tests, static/domain checks, both dead-code scans, 
 - Both Knip scans (`check:dead-code`, `check:dead-code:production`) hold a zero-finding
   baseline. <!-- R006 -->
 
-Details: `.claude/rules/boundaries-and-gates.md`; why: `docs/decisions/0029-verify-gate-and-lint-severity.md`.
+- CI runs `bun run verify` as one step on every pull request and push to `main`. <!-- R351 -->
+
+Details: `.claude/rules/boundaries-and-gates.md`; why: `docs/decisions/0029-verify-gate-and-lint-severity.md`,
+`docs/decisions/0053-contributor-readiness.md`.
+
+**Contributors:** how to add each content type, the listening review and the licence/trademark
+split live in [`CONTRIBUTING.md`](CONTRIBUTING.md) — point there, do not duplicate it here. <!-- R355 -->
 
 ## Architecture
 
