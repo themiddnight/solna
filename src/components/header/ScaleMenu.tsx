@@ -3,6 +3,7 @@ import { useAppStore } from '@/store/store';
 import { SCALES } from '@/data/scales';
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
 import { HEADER_FIELD_SHELL, HEADER_SELECT } from '@/components/ui/fieldClasses';
+import { ScaleTypeOptions } from '@/components/ui/ScaleTypeOptions';
 
 /**
  * The dropdown trigger inside its field box: a content-box `h-8`, the
@@ -58,11 +59,7 @@ export function ScaleSelects({
         className={`${HEADER_SELECT} text-base-content/80 ${stacked ? 'w-full' : 'w-36'}`}
         title="Scale Type"
       >
-        {Object.keys(SCALES).map((s) => (
-          <option key={s} value={s}>
-            {SCALES[s].name}
-          </option>
-        ))}
+        <ScaleTypeOptions />
       </select>
     </>
   );
@@ -102,7 +99,7 @@ export function ScaleMenu() {
               note, the full name in the `title`, and both selects one tap
               away in the dropdown. */}
           <span className="text-[10px] text-base-content/70 max-w-12 truncate max-[390px]:hidden">
-            {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
+            {SCALES[scaleType]?.abbr ?? scaleType}
           </span>
           <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
         </summary>

@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425).
+Accepted — 2026-09-22. Recorded retroactively from CLAUDE.md (DEV-425). R061 amended by
+[0054](0054-derived-scale-intervals.md): `SCALES` no longer states intervals; they are derived
+from `tonal` in Music Core.
 
 ## Context
 

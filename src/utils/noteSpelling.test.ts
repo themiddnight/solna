@@ -5,6 +5,7 @@ import { ROOTS, getScaleNotes } from './musicTheory';
 import { SPELLING_CHARACTERIZATION } from './spellingCharacterizationFixture';
 import {
   KEY_OPTIONS,
+  formatKeyLabel,
   getKeyAccidental,
   getTonicSpelling,
   spellMidiInKey,
@@ -170,8 +171,8 @@ describe('spelling never changes which pitches a scale contains', () => {
 });
 
 describe('spelling characterization', () => {
-  test('pins all 132 (root x scale) pairs', () => {
-    expect(Object.keys(SPELLING_CHARACTERIZATION).length).toBe(132);
+  test('pins all 288 (root x scale) pairs', () => {
+    expect(Object.keys(SPELLING_CHARACTERIZATION).length).toBe(288);
     const actual: Record<string, string> = {};
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
@@ -181,7 +182,7 @@ describe('spelling characterization', () => {
     expect(actual).toEqual(SPELLING_CHARACTERIZATION);
   });
 
-  test('changes at least one note name in 68 of the 132 pairs', () => {
+  test('changes at least one note name in 166 of the 288 pairs', () => {
     let changed = 0;
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
@@ -189,10 +190,10 @@ describe('spelling characterization', () => {
         if (spellScaleNotes(root, scaleType).join(' ') !== sharp) changed++;
       }
     }
-    expect(changed).toBe(68);
+    expect(changed).toBe(166);
   });
 
-  test('exactly two pairs reach a double accidental and take the fallback', () => {
+  test('exactly eleven pairs reach a double accidental and take the fallback', () => {
     const fallbacks: string[] = [];
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
@@ -201,6 +202,36 @@ describe('spelling characterization', () => {
         if (raw.some((n) => /##|bb/.test(n))) fallbacks.push(`${root}|${scaleType}`);
       }
     }
-    expect(fallbacks.sort()).toEqual(['D#|Blues', 'G#|Harmonic Minor']);
+    expect(fallbacks.sort()).toEqual([
+      'B|Lydian Augmented',
+      'C#|Harmonic Major',
+      'C#|Mixolydian b6',
+      'C#|Phrygian Dominant',
+      'D#|Blues',
+      'D#|Locrian',
+      'D#|Locrian #2',
+      'F#|Lydian Augmented',
+      'G#|Harmonic Minor',
+      'G#|Melodic Minor',
+      'G#|Phrygian Dominant',
+    ]);
+  });
+});
+
+describe('formatKeyLabel', () => {
+  // The short form renders the key itself (the header summary); the long form
+  // swaps in the display name (its tooltip). Both spell the tonic by the
+  // scale's tonality.
+  test('a new key reads as ASCII short and as its display name long', () => {
+    expect(formatKeyLabel('A#', 'Locrian #2')).toBe('Bb Locrian #2');
+    expect(formatKeyLabel('A#', 'Locrian #2', { long: true })).toBe('Bb Locrian ♯2');
+    expect(formatKeyLabel('D#', 'Phrygian Dominant')).toBe('Eb Phrygian Dominant');
+    expect(formatKeyLabel('C#', 'Egyptian')).toBe('C# Egyptian');
+  });
+
+  test('a legacy key keeps its key in short form and takes the new display name long', () => {
+    expect(formatKeyLabel('A', 'Blues')).toBe('A Blues');
+    expect(formatKeyLabel('A', 'Blues', { long: true })).toBe('A Minor Blues');
+    expect(formatKeyLabel('A#', 'Major', { long: true })).toBe('Bb Major');
   });
 });

@@ -21,7 +21,7 @@ What may live in `src/data/` and what a file there may do.
 
 ([ADR-0005](../../docs/decisions/0005-music-core-and-tonal-confinement.md))
 
-- `src/utils/` sits outside the layer chain, above `data/`: it may read `data/` at runtime (`musicTheory.ts` imports `SCALES`); `data/` reads `utils/` only through `import type` (e.g. `MeterId`). <!-- R058 -->
+- `src/utils/` sits outside the layer chain, above `data/`: it may read `data/` at runtime (`noteSpelling.ts` imports `SCALES`); `data/` reads `utils/` only through `import type` (e.g. `MeterId`). <!-- R058 -->
 
 ([ADR-0004](../../docs/decisions/0004-utils-placement-and-store-constant-inversion.md))
 

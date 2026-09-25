@@ -95,7 +95,7 @@ import { BASS_PATTERNS } from '@/data/bassPatterns';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { ROOTS } from '../utils/musicTheory';
-import { SCALES } from '../data/scales';
+import { scaleEntry } from '@/musicCore';
 import { DRUM_GRIDS } from '@/data/drumGrids';
 
 describe('authored random data', () => {
@@ -141,7 +141,7 @@ describe('authored random data', () => {
   // otherwise vanish from the pool with no signal at all.
   test('every pooled progression fits the vibe\'s scale', () => {
     for (const v of RESOLVED_VIBES) {
-      const degrees = SCALES[v.scaleType].intervals.length;
+      const degrees = scaleEntry(v.scaleType).intervals.length;
       for (const id of v.random!.progressions) {
         const p = CHORD_PROGRESSIONS.find((c) => c.id === id)!;
         expect(p.minScaleLength, `${v.id}/${id}`).toBeLessThanOrEqual(degrees);

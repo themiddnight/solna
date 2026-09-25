@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 import { ROOTS, getDiatonicChordForDegree } from './musicTheory';
 import { DIATONIC_CHARACTERIZATION } from './diatonicCharacterizationFixture';
 
@@ -10,8 +11,8 @@ import { DIATONIC_CHARACTERIZATION } from './diatonicCharacterizationFixture';
  */
 describe('getDiatonicChordForDegree — characterization lock', () => {
   test('covers every scale x 12 roots x {triad, 7th}', () => {
-    expect(Object.keys(DIATONIC_CHARACTERIZATION).length).toBe(264);
-    expect(Object.keys(SCALES).length * ROOTS.length * 2).toBe(264);
+    expect(Object.keys(DIATONIC_CHARACTERIZATION).length).toBe(576);
+    expect(Object.keys(SCALES).length * ROOTS.length * 2).toBe(576);
   });
 
   test('every degree of every key still resolves to the pinned root, quality and numeral', () => {
@@ -19,7 +20,7 @@ describe('getDiatonicChordForDegree — characterization lock', () => {
     for (const scaleType of Object.keys(SCALES)) {
       for (const root of ROOTS) {
         for (const use7ths of [false, true]) {
-          const cells = SCALES[scaleType].intervals.map((_, degree) => {
+          const cells = scaleEntry(scaleType).intervals.map((_, degree) => {
             const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
             return `${chord.root}:${chord.quality}:${chord.degreeName}`;
           });

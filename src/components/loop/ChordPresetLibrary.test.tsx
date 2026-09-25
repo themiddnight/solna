@@ -12,6 +12,7 @@ import {
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById } from '@/audio/chordProgressions';
 import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 
 const source = readFileSync(
   join(process.cwd(), 'src/components/loop/ChordPresetLibrary.tsx'),
@@ -110,8 +111,8 @@ describe('isProgressionAvailable', () => {
   });
 
   test('a seven-degree progression is available in every seven-degree scale', () => {
-    for (const [scaleType, scale] of Object.entries(SCALES)) {
-      if (scale.intervals.length !== 7) continue;
+    for (const scaleType of Object.keys(SCALES)) {
+      if (scaleEntry(scaleType).intervals.length !== 7) continue;
       expect(isProgressionAvailable(sevenNote, scaleType)).toBe(true);
     }
   });

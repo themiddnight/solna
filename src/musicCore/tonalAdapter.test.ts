@@ -11,6 +11,7 @@ import {
   pitchClassOfNote,
   resolveTonalChord,
   scaleNotesForTonal,
+  scaleSemitonesForTonal,
   transposeByInterval,
 } from './tonalAdapter';
 
@@ -72,6 +73,17 @@ describe('tonalAdapter', () => {
 
   test('scaleNotesForTonal matches Scale.get(...).notes', () => {
     expect(scaleNotesForTonal('C', 'major')).toEqual(Scale.get('C major').notes);
+  });
+
+  test('scaleSemitonesForTonal measures Scale.get(C name).intervals in semitones', () => {
+    expect(scaleSemitonesForTonal('major')).toEqual([0, 2, 4, 5, 7, 9, 11]);
+    expect(scaleSemitonesForTonal('minor pentatonic')).toEqual(
+      Scale.get('C minor pentatonic').intervals.map((i) => Interval.semitones(i)),
+    );
+  });
+
+  test('scaleSemitonesForTonal throws on a name tonal does not know', () => {
+    expect(() => scaleSemitonesForTonal('not-a-scale')).toThrow("tonal has no scale named 'not-a-scale'");
   });
 
   test('resolveTonalChord narrows Chord.getChord to { empty, intervals }', () => {

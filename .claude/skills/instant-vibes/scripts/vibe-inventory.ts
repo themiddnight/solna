@@ -20,6 +20,7 @@ import { DRUM_GRIDS } from '@/data/drumGrids';
 import { EFFECT_CHAINS } from '@/data/effectChains';
 import { VIBES } from '@/data/vibes';
 import { SCALES } from '@/data/scales';
+import { scaleEntry } from '@/musicCore';
 
 const arg = process.argv[2];
 
@@ -28,11 +29,11 @@ if (!arg) {
   const scales = [...new Set(CHORD_PROGRESSIONS.map((p) => p.referenceScale))].sort();
   for (const s of scales) {
     const playable = CHORD_PROGRESSIONS.filter(
-      (p) => p.referenceScale === s && p.minScaleLength <= SCALES[s].intervals.length,
+      (p) => p.referenceScale === s && p.minScaleLength <= scaleEntry(s).intervals.length,
     );
     const vibes = VIBES.filter((v) => v.scaleType === s).map((v) => v.id);
     console.log(
-      `${s.padEnd(15)} ${String(SCALES[s].intervals.length)} degrees  ` +
+      `${s.padEnd(15)} ${String(scaleEntry(s).intervals.length)} degrees  ` +
         `${String(playable.length).padStart(2)} progressions   used by: ${vibes.join(', ') || '(none)'}`,
     );
   }
@@ -45,7 +46,7 @@ if (!SCALES[arg]) {
   process.exit(1);
 }
 
-const len = SCALES[arg].intervals.length;
+const len = scaleEntry(arg).intervals.length;
 console.log(`SCALE ${arg} — ${len} degrees\n`);
 
 const pool = CHORD_PROGRESSIONS.filter((p) => p.referenceScale === arg && p.minScaleLength <= len);

@@ -5,13 +5,14 @@
 // regenerated and the DIFF is reviewed. A key that moves without a decision
 // behind it is the bug this file exists to make visible.
 import { SCALES } from '../src/data/scales';
+import { scaleEntry } from '../src/musicCore';
 import { ROOTS, getDiatonicChordForDegree } from '../src/utils/musicTheory';
 
 const lines: string[] = [];
 for (const scaleType of Object.keys(SCALES)) {
   for (const root of ROOTS) {
     for (const use7ths of [false, true]) {
-      const cells = SCALES[scaleType].intervals.map((_, degree) => {
+      const cells = scaleEntry(scaleType).intervals.map((_, degree) => {
         const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
         return `${chord.root}:${chord.quality}:${chord.degreeName}`;
       });

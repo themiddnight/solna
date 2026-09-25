@@ -41,7 +41,7 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 
 ## Degree qualities and spelling
 
-- `SCALES` states `intervals` (pinned by `src/data/scales.test.ts`), `tonal`, `tonality` and, for scales under seven degrees, a 7-note `parent`; it states no chord qualities. <!-- R061 -->
+- `SCALES` states `name`, `abbr` (the compact trigger's label: unique, at most seven characters, never a cut of `name`), `description`, `category`, `tonal`, `tonality` and, for scales under seven degrees, a 7-note `parent`; it states neither intervals — `src/musicCore/scale.ts` derives them from `tonal` once at load, and `src/data/scales.test.ts` pins the legacy scales' intervals — nor chord qualities. <!-- R061 -->
 - `resolveDegreeQuality` maps a degree onto the parent by semitone offset, stacks thirds over spelled names and measures with `Interval.distance`; never index `degree % 7` (wrong quality, right shape). <!-- R062 -->
 - An unmapped interval tuple throws (no `maj` fallback); `SCALES` gets no override fields. <!-- R063 -->
 - A sharp name is an identity: everything generated, computed or persisted is `ROOTS`-spelled. <!-- R064 -->
@@ -50,7 +50,7 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - The progression quick-save name is built from the raw root and is not spelled (it is persisted). <!-- R067 -->
 - Nothing spelled is persisted, so spelling never moves the persist `version` or `.solna` `formatVersion`. <!-- R068 -->
 
-([ADR-0006](../../docs/decisions/0006-derived-degree-qualities-and-display-spelling.md))
+([ADR-0006](../../docs/decisions/0006-derived-degree-qualities-and-display-spelling.md), [ADR-0054](../../docs/decisions/0054-derived-scale-intervals.md))
 
 ## Chord notes are derived
 
@@ -92,7 +92,8 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - Mixing musical intent, derived representation and playable event in one value <!-- R051 -->
 - A hand-rolled note-name regex outside `src/musicCore/` <!-- R082 -->
 - A core function substituting a default instead of returning `null`/`NaN` <!-- R084 -->
-- Chord qualities or override fields in `SCALES` <!-- R061 --> <!-- R063 -->
+- Intervals, chord qualities or override fields in `SCALES`, or reading `SCALES[key].intervals` instead of `scaleEntry(key).intervals` <!-- R061 --> <!-- R063 -->
+- Cutting a scale's display name for a label instead of reading its `abbr` <!-- R061 -->
 - Indexing `degree % 7` into a parent scale <!-- R062 -->
 - Persisting, comparing or keying on a spelled note name <!-- R064 --> <!-- R066 -->
 - Spelling the progression quick-save name <!-- R067 -->

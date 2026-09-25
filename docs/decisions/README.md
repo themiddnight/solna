@@ -68,6 +68,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0051](0051-theme-picker.md) | Theme picker | The wordmark opens a modal with the theme picker and About lines; any Solna or daisyUI theme, System by default, previewed then applied; palettes follow the scheme through CSS selectors bound to a registry by test. |
 | [0052](0052-midi-permission-on-settings-open.md) | MIDI permission on settings open | One shared MIDIAccess request; the bridge connects at load only on an already-granted permission, and only opening MIDI settings raises the prompt. |
 | [0053](0053-contributor-readiness.md) | Contributor readiness | CI runs `verify` on every PR; per-platform WAV golden; code under Apache-2.0 with the Solna and murva brand reserved; content invariants are tests, `check:content` is a fast subset; a listening review for taste. |
+| [0054](0054-derived-scale-intervals.md) | Scale intervals are derived from tonal | `SCALES` states name, abbreviation, description, category, `tonal`, tonality and parent; Music Core derives intervals once at load; a golden pin keeps the legacy scales' intervals; amends ADR-0006's R061. |
 
 ## Adding or changing a decision
 

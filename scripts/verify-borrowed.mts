@@ -2,6 +2,7 @@
 // Run: bun run scripts/verify-borrowed.mts
 import { Chord, Note, Scale } from 'tonal';
 import { SCALES } from '../src/data/scales';
+import { scaleEntry } from '../src/musicCore';
 import {
   getBorrowedChords,
   getDiatonicChordForDegree,
@@ -17,10 +18,10 @@ const subset = (a: number[], b: number[]): boolean => a.every((p) => b.includes(
 console.log('=== EXACT DUPLICATES: borrowed (root,quality) == diatonic (root,quality) ===');
 for (const scaleType of Object.keys(SCALES)) {
   for (const root of ['C', 'F#']) {
-    const diatTriads = SCALES[scaleType].intervals.map((_, i) =>
+    const diatTriads = scaleEntry(scaleType).intervals.map((_, i) =>
       getDiatonicChordForDegree(i, root, scaleType, false),
     );
-    const diat7 = SCALES[scaleType].intervals.map((_, i) =>
+    const diat7 = scaleEntry(scaleType).intervals.map((_, i) =>
       getDiatonicChordForDegree(i, root, scaleType, true),
     );
     const borrowed = getBorrowedChords(root, scaleType);

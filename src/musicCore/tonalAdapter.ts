@@ -69,6 +69,19 @@ export function scaleNotesForTonal(tonic: string, tonalScaleName: string): strin
   return Scale.get(`${tonic} ${tonalScaleName}`).notes;
 }
 
+/**
+ * The semitone offsets of `Scale.get('C ' + name).intervals`, tonic first.
+ * Throws on a name tonal does not know: a scale library entry that resolves
+ * to nothing is a typo, and it must fail at load rather than sound as silence.
+ */
+export function scaleSemitonesForTonal(name: string): number[] {
+  const scale = Scale.get(`C ${name}`);
+  if (scale.empty || scale.intervals.length === 0) {
+    throw new Error(`tonal has no scale named '${name}'`);
+  }
+  return scale.intervals.map((interval) => Interval.semitones(interval));
+}
+
 /** A Tonal chord-lookup result, narrowed to the two fields any caller needs. */
 export interface TonalChordResult {
   empty: boolean;

@@ -6,6 +6,7 @@ import type { LeadNote } from '../audio/playback/leadMelody';
 import { MAX_STEPS_PER_BAR } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
 import { changeKey, harmonizeChordsToKey, type KeyChangeSource } from './keyChange';
+import { getScaleNotes } from '../utils/musicTheory';
 
 const chord = (id: string, root: string, quality: ChordQuality, extra: Partial<ChordItem> = {}): ChordItem =>
   ({ id, root, quality, bars: 1, ...extra });
@@ -49,6 +50,14 @@ describe('harmonizeChordsToKey', () => {
       .toEqual(['Amaj', 'Emaj', 'Bmin', 'F#min']);
   });
 
+  // A 7-note scale to a new 5-note one: every chord snaps onto a degree of
+  // A Egyptian (A B D E G) with the quality its Dorian parent gives there.
+  test('a change to a 5-note scale snaps every chord into it', () => {
+    const out = harmonizeChordsToKey(PROGRESSION, A_MINOR, { ...A_MINOR, scaleType: 'Egyptian' });
+    expect(names(out)).toEqual(['Amin', 'Emin', 'Bmin', 'Gmaj']);
+    for (const c of out ?? []) expect(getScaleNotes('A', 'Egyptian')).toContain(c.root);
+  });
+
   test('both changed transposes first, then snaps — the order is pinned', () => {
     const both = harmonizeChordsToKey(PROGRESSION, A_MINOR, { root: 'C', scaleType: 'Major' });
     expect(names(both)).toEqual(['Cmaj', 'Gmaj', 'Dmin', 'Amin']);
@@ -76,6 +85,16 @@ describe('changeKey', () => {
     expect('scaleType' in patch).toBe(false);
     expect(patch.leadMelodySteps![0]).toEqual([{ note: 'C3', len: 1 }, { note: 'D#3', len: 1 }]);
     expect(patch.fxMelodySteps![0]).toEqual([{ note: 'G3', len: 1 }]);
+  });
+
+  // Melody remaps by degree index, exactly as for Minor Pentatonic: C4 (degree
+  // 2 of A minor) lands on D4 (degree 2 of A Egyptian), E4 (degree 4) on G4.
+  test('a change to a 5-note scale remaps melodies by degree', () => {
+    const patch = changeKey(source(), { scaleType: 'Egyptian' }, { harmonizeChords: true });
+    expect(patch.scaleType).toBe('Egyptian');
+    expect(patch.leadMelodySteps![0]).toEqual([{ note: 'A3', len: 1 }, { note: 'D4', len: 1 }]);
+    expect(patch.fxMelodySteps![0]).toEqual([{ note: 'G4', len: 1 }]);
+    expect(names(patch.chords)).toEqual(['Amin', 'Emin', 'Bmin', 'Gmaj']);
   });
 
   test('harmonizeChords: false leaves chords out of the patch', () => {

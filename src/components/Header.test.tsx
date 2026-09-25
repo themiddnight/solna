@@ -13,6 +13,7 @@ import { LOOP_TABS, SONG_TABS } from '../types';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
+import { SCALES, SCALE_CATEGORIES } from '@/data/scales';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -297,6 +298,19 @@ describe('key picker', () => {
 
   // Both copies render — the inline pair from xl up and the dropdown below —
   // each under its own id prefix, so the hidden copy never duplicates an id.
+  // The scale select groups its options by category; the root select has no
+  // groups. Static content, so no store state is involved (R257).
+  test('the scale select renders one optgroup per category, in order', () => {
+    const html = renderToString(<ScaleSelects idPrefix="test" />);
+    const labels = [...html.matchAll(/<optgroup label="([^"]*)"/g)].map(([, label]) => label);
+    expect(labels).toEqual([...SCALE_CATEGORIES]);
+  });
+
+  test('both breakpoint copies group their scale options', () => {
+    const html = renderToString(<ScaleMenu />);
+    expect(html.match(/<optgroup /g) ?? []).toHaveLength(SCALE_CATEGORIES.length * 2);
+  });
+
   test('the key/scale menu renders both breakpoint copies', () => {
     const html = renderToString(<ScaleMenu />);
     expect(html).toContain('id="select-master-scale-root"');
@@ -309,6 +323,15 @@ describe('key picker', () => {
   test('the dropdown trigger wears the field box at the select height', () => {
     const html = renderToString(<ScaleMenu />);
     expect(html).toMatch(new RegExp(`<summary id="btn-scale-dropdown" class="${HEADER_FIELD_SHELL} box-content h-8 `));
+  });
+
+  // The compact trigger shows the scale's authored abbreviation, never a cut of
+  // its display name: a four-letter cut read 'Mino' for three different scales.
+  // Reads the creation-time scale, which is what renderToString sees (R257).
+  test('the compact trigger shows the scale abbreviation', () => {
+    const { scaleType } = useAppStore.getInitialState();
+    const html = renderToString(<ScaleMenu />);
+    expect(html).toContain(`max-[390px]:hidden">${SCALES[scaleType].abbr}</span>`);
   });
 
   // The header pair is FIXED width, and the scale name ellipsises inside it.
