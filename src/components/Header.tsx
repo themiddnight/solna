@@ -93,7 +93,7 @@ export const Header = React.memo(function Header() {
           loop picker on the loop layer, the project name on the song layer,
           exactly one of the two per layer), then what Arrange does with it
           while it plays and export (song layer only), then the key it is in
-          (loop layer only), per `HEADER_TOOLS`' order; then the theme. This
+          (loop layer only), per `HEADER_TOOLS`' order. This
           run is what tells the two layers apart at a glance. */}
       <div className="flex items-center gap-1.5 shrink-0">
         {headerToolsOn(layerForTab(activeTab)).map(({ id, Component }) => (

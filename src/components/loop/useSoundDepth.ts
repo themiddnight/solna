@@ -104,7 +104,7 @@ export interface DepthStorage {
  * Reaching `window.localStorage` can itself throw (Safari private mode,
  * blocked cookies, embedded webviews), which is why this is never a
  * default-parameter expression — a default argument is evaluated before the
- * guard can catch it, the same rule `header/useTheme.ts`'s theme helpers follow.
+ * guard can catch it, the same rule `settings/useThemeChoice.ts`'s theme helpers follow.
  */
 function ambientStorage(): DepthStorage | null {
   return typeof window === 'undefined' ? null : window.localStorage;

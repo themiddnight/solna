@@ -6,11 +6,9 @@ import { ExportButton } from '@/components/export/ExportButton';
 import { LoopCopyButton } from '@/components/loop/LoopCopyButton';
 import { VibesButton } from '@/components/vibes/VibesButton';
 import { FollowPlayheadToggle } from './FollowPlayheadToggle';
-import { ThemeToggle } from './ThemeToggle';
 
 const ROW_TOOLS: Array<[string, ComponentType<ToolVariantProps>, string, string]> = [
   ['LoopCopyButton', LoopCopyButton, 'btn-copy-loop', 'Copy loop'],
-  ['ThemeToggle', ThemeToggle, 'btn-toggle-theme', 'Theme'],
   ['FollowPlayheadToggle', FollowPlayheadToggle, 'btn-follow-playhead', 'Follow the playing loop'],
   ['ExportButton', ExportButton, 'btn-export', 'Export'],
   ['VibesButton', VibesButton, 'btn-vibes', 'Vibes'],

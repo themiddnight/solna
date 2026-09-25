@@ -8,10 +8,9 @@ import { VibesButton } from '@/components/vibes/VibesButton';
 import { FollowPlayheadToggle } from './FollowPlayheadToggle';
 import { ProjectNameLabel } from './ProjectNameLabel';
 import { ScaleMenu } from './ScaleMenu';
-import { ThemeToggle } from './ThemeToggle';
 
 export type HeaderToolId =
-  | 'vibes' | 'loop-copy' | 'loop-selector' | 'project-name' | 'follow-playhead' | 'export' | 'scale' | 'theme';
+  | 'vibes' | 'loop-copy' | 'loop-selector' | 'project-name' | 'follow-playhead' | 'export' | 'scale';
 
 export interface HeaderTool {
   readonly id: HeaderToolId;
@@ -23,7 +22,6 @@ export interface HeaderTool {
 
 const LOOP: readonly Layer[] = ['loop'];
 const SONG: readonly Layer[] = ['song'];
-const BOTH: readonly Layer[] = ['loop', 'song'];
 
 /**
  * The Header's right-hand tools, in desktop order (R317). The desktop Header
@@ -40,7 +38,6 @@ export const HEADER_TOOLS: readonly HeaderTool[] = [
   { id: 'follow-playhead', Component: FollowPlayheadToggle, layers: SONG },
   { id: 'export', Component: ExportButton, layers: SONG },
   { id: 'scale', Component: ScaleMenu, layers: LOOP },
-  { id: 'theme', Component: ThemeToggle, layers: BOTH },
 ];
 
 /** Every tool available on `layer`, in list order. */
