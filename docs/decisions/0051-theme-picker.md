@@ -1,6 +1,6 @@
 # ADR-0051: Theme picker — every daisyUI theme, System default, preview then apply
 
-**Status:** Accepted — 2026-09-25. No issue.
+**Status:** Accepted — 2026-09-25. No issue. R328 amended by [ADR-0055](0055-shared-popup-and-listbox.md) (new popups build on `ui/Popup`; this picker's top-layer exception stands).
 
 ## Context
 

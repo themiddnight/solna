@@ -119,11 +119,17 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   of the body; a submit button pinned there names its form through `form`. The non-modal sheet takes `open:flex`, never `flex`, which would show it
   closed. <!-- R339 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
 - A preset library is a `PresetLibrary` side drawer on both frames, never a sheet; a quick
-  in-place pick is a native `<select>`; a surface with a user library that can be deleted from
-  gets a drawer, even where a quick pick also exists. <!-- R327 -->
-- A popup is a daisyUI `dropdown` anchored to its trigger (`dropdown-open` when controlled), kept
-  inside the viewport horizontally by a pure helper; no popover API or CSS anchor positioning
-  while the browser floor lacks them. The one exception is a popup that must sit above an open
+  in-place pick is a native `<select>` or a `ui/Listbox` — a `Listbox` when the options need a
+  description or more than one line of text, a native `<select>` for any pick inside a `Modal`;
+  a surface with a user library that can be deleted from gets a drawer, even where a quick pick
+  also exists. <!-- R327 -->
+- A popup is built on `ui/Popup` (its hook `ui/usePopup.ts`): a daisyUI `dropdown` anchored to
+  its trigger (`dropdown-open` while open), kept inside the viewport horizontally by `popupShift`
+  (`ui/popupGeometry.ts`), closed by Escape, a pointerdown outside it or focus leaving it, and
+  handing focus back on close. No hand-rolled dismissal or placement, no `<details>` as a popup,
+  and no popover API or CSS anchor positioning while the browser floor lacks them. Not yet on
+  `ui/Popup` (sub-project 3 of ADR-0055): the two `DockMenu`s in `ui/BottomInputDock.tsx`,
+  `project/ProjectMenu.tsx` and `ui/QuickSavePopover.tsx`. The one exception is a popup that must sit above an open
   `Modal`: a React portal still renders under the dialog's native top layer, so it is a
   `popover="auto"` element instead, positioned by a pure geometry helper the colocated hook wires
   up on the popover's `toggle` event and on `resize`/`scroll` while open — never CSS anchor
@@ -132,6 +138,11 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   whenever the panel fits below; only when it does not fit below does it choose whichever side has
   more room. A popup never renders inside a bottom sheet — a tool that reaches the sheet renders
   inline controls for its `row` variant instead. <!-- R328 -->
+- A custom listbox is `ui/Listbox` only: DOM focus stays on its `role="listbox"` root, which
+  names the highlighted option through `aria-activedescendant`; option ids come from the flat
+  index, never the value; keys go through `listboxKey` (`ui/listboxKeys.ts`) — arrows, Home, End,
+  type-ahead and hover move only the highlight, and a value commits only on Enter, Space or a
+  click. <!-- R357 -->
 - Feedback is a toast, a snackbar (at most one action) or a banner (in flow, persistent until
   handled); an alert rendered inside a modal, drawer or card body is content, not feedback. While
   any `Modal` or modal `BottomSheet` is open, entries queue in the host with their timers held, so a
@@ -152,7 +163,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   with a one-off z-index. <!-- R331 -->
 
 ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md); R328's top-layer-escape
-case: [ADR-0051](../../docs/decisions/0051-theme-picker.md))
+case: [ADR-0051](../../docs/decisions/0051-theme-picker.md); `ui/Popup`, `ui/Listbox` and R357:
+[ADR-0055](../../docs/decisions/0055-shared-popup-and-listbox.md))
 
 ## Prohibited
 
@@ -196,9 +208,14 @@ case: [ADR-0051](../../docs/decisions/0051-theme-picker.md))
   scroll region inside `Modal`/`BottomSheet`, a `modal-action` row inside a `Modal`'s scrolling body,
   or a bare `flex` on a non-modal sheet's `<dialog>` <!-- R339 -->
 - A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
+- A quick pick that is neither a native `<select>` nor `ui/Listbox`, or a `Listbox` inside a `Modal` <!-- R327 -->
 - A popup rendered inside a bottom sheet; a popup positioned via the popover API or CSS anchor
   positioning anywhere but the top-layer-escape case above; that case positioned via CSS anchor
   positioning <!-- R328 -->
+- A new popup not built on `ui/Popup` — its own dismissal listeners or placement math — or a
+  `<details>` used as a popup <!-- R328 -->
+- A custom listbox other than `ui/Listbox`, DOM focus moved onto its options, an option id built
+  from its value, or a value committed by an arrow key, Home/End, type-ahead or hover <!-- R357 -->
 - A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an
   inline alert there instead of going through `showFeedback` <!-- R329 -->
 - A daisyUI `toast` class, a fixed alert outside `FeedbackHost`, or a toast/snackbar bypassing `showFeedback` <!-- R330 -->

@@ -69,6 +69,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0052](0052-midi-permission-on-settings-open.md) | MIDI permission on settings open | One shared MIDIAccess request; the bridge connects at load only on an already-granted permission, and only opening MIDI settings raises the prompt. |
 | [0053](0053-contributor-readiness.md) | Contributor readiness | CI runs `verify` on every PR; per-platform WAV golden; code under Apache-2.0 with the Solna and murva brand reserved; content invariants are tests, `check:content` is a fast subset; a listening review for taste. |
 | [0054](0054-derived-scale-intervals.md) | Scale intervals are derived from tonal | `SCALES` states name, abbreviation, description, category, `tonal`, tonality and parent; Music Core derives intervals once at load; a golden pin keeps the legacy scales' intervals; amends ADR-0006's R061. |
+| [0055](0055-shared-popup-and-listbox.md) | Shared Popup and Listbox primitives | Popups build on `ui/Popup` (a controlled daisyUI dropdown with one dismissal, focus and placement hook); a custom listbox is `ui/Listbox` (active descendant, explicit commit); the header Scale Type is the first consumer; amends ADR-0044's R327 and R328. |
 
 ## Adding or changing a decision
 

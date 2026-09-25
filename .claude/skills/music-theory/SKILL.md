@@ -74,8 +74,9 @@ Helpers: `getScaleNotes(root, scaleType)`, `isNoteInScale(note, root, scaleType)
 
 `src/store/musicContextSlice.ts` — `scaleRoot` (default `'A'`), `scaleType` (default `'Natural Minor'`),
 `projectTitle`, plus `applyTemplate(name)` which sets bpm + root + scale + title in one atomic `set()`.
-`header/ScaleMenu.tsx` renders the pickers from `KEY_OPTIONS` / `ui/ScaleTypeOptions.tsx` (one optgroup
-per category). The sequencer is **not**
+`header/ScaleMenu.tsx` renders the root picker from `KEY_OPTIONS`; the header scale type is a `ui/Listbox`
+(`header/ScaleTypeListbox.tsx`) showing each scale's name and description, grouped by `SCALE_GROUPS`
+(`ui/scaleGroups.ts`); `song/KeyChangeDialog.tsx` keeps the native `song/ScaleTypeOptions.tsx`. The sequencer is **not**
 scale-aware; only the chord tools, the bass engine and the scale-locked keyboard read these.
 
 ## Chord generation
