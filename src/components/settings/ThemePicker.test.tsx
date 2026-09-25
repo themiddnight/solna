@@ -18,19 +18,22 @@ const render = (preview: ThemeChoice, resolved: ThemeId, isPreviewing: boolean) 
   );
 
 describe('ThemePicker', () => {
-  test('the trigger is a focusable span (iOS Safari), labelled with the current choice', () => {
+  test('the trigger is a button that opens the panel popover, labelled with the current choice', () => {
     const trigger = openTag(render('solna-dark', 'solna-dark', false), 'id="btn-theme-picker"');
-    expect(trigger.startsWith('<span')).toBe(true);
-    expect(trigger).toContain('role="button"');
-    expect(trigger).toContain('tabindex="0"');
+    expect(trigger.startsWith('<button')).toBe(true);
+    expect(trigger).toContain('type="button"');
+    // React 19.2's `react-dom/server` does not lowercase this one attribute name (no entry in
+    // its `aliases` map, unlike e.g. `htmlFor`); HTML attribute names are case-insensitive, so a
+    // real browser reads `popoverTarget=` exactly like `popovertarget=` either way.
+    expect(trigger).toContain('popoverTarget="theme-picker-panel"');
     expect(trigger).toContain('aria-label="Theme: Solna Dark"');
   });
 
-  test('the panel is a focusable radiogroup dropdown whose list scrolls at 360px', () => {
+  test('the panel is a top-layer popover radiogroup whose list scrolls at 360px', () => {
     const html = render('solna-dark', 'solna-dark', false);
     const panel = openTag(html, 'role="radiogroup"');
-    expect(panel).toContain('tabindex="0"');
-    expect(panel).toContain('dropdown-content');
+    expect(panel).toContain('id="theme-picker-panel"');
+    expect(panel).toContain('popover="auto"');
     expect(html).toContain('max-h-90 space-y-1 overflow-y-auto');
   });
 

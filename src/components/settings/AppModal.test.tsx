@@ -26,16 +26,25 @@ describe('AppModal', () => {
     expect(openTag(html, 'id="app-modal-tab-about"')).toContain('aria-selected="false"');
   });
 
-  test('Settings holds the theme picker and the min-height its open panel needs', () => {
+  test('Settings holds the theme picker, visible and not inert', () => {
     const panel = openTag(html, 'id="app-modal-panel-settings"');
     expect(panel).toContain('role="tabpanel"');
-    expect(panel).toContain('min-h-120');
-    expect(panel).not.toContain('hidden');
+    expect(panel).not.toContain('min-h-120');
+    expect(panel).not.toContain('invisible');
+    expect(panel).not.toContain('inert');
     expect(html).toContain('id="btn-theme-picker"');
   });
 
-  test('About is rendered hidden with the name, description, author and repo link', () => {
-    expect(openTag(html, 'id="app-modal-panel-about"')).toContain('hidden=""');
+  test('both tab panels render stacked in one grid cell; the inactive one is invisible and inert', () => {
+    expect(html).toContain('grid');
+    expect(openTag(html, 'id="app-modal-panel-settings"')).toContain('col-start-1 row-start-1');
+    expect(openTag(html, 'id="app-modal-panel-about"')).toContain('col-start-1 row-start-1');
+  });
+
+  test('About is rendered invisible and inert, with the name, description, author and repo link', () => {
+    const panel = openTag(html, 'id="app-modal-panel-about"');
+    expect(panel).toContain('invisible');
+    expect(panel).toContain('inert=""');
     expect(html).toContain('A browser audio workstation');
     expect(html).toContain('Made by Pathompong Thitithan');
     const link = openTag(html, 'id="link-app-repo"');

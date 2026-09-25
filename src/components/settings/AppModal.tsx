@@ -44,27 +44,36 @@ export function AppModal() {
           </button>
         ))}
       </div>
-      {/* min-h-120 holds the open theme panel: the modal body scrolls, so it
-          would otherwise clip the absolutely positioned dropdown. */}
-      <div
-        id="app-modal-panel-settings"
-        role="tabpanel"
-        aria-labelledby="app-modal-tab-settings"
-        hidden={tab !== 'settings'}
-        className="min-h-120 space-y-2"
-      >
-        <h4 className="text-sm font-semibold">Theme</h4>
-        <ThemePicker
-          key={String(open)}
-          preview={theme.preview}
-          resolved={theme.resolved}
-          isPreviewing={theme.isPreviewing}
-          onSelect={theme.select}
-          onApply={theme.apply}
-        />
-      </div>
-      <div id="app-modal-panel-about" role="tabpanel" aria-labelledby="app-modal-tab-about" hidden={tab !== 'about'}>
-        <AboutPanel />
+      {/* Both panels stack in one grid cell so the dialog's height is the
+          tallest panel's and never changes on a tab switch (R348); the
+          inactive one is `invisible` + `inert` instead of `hidden`. */}
+      <div className="grid">
+        <div
+          id="app-modal-panel-settings"
+          role="tabpanel"
+          aria-labelledby="app-modal-tab-settings"
+          inert={tab !== 'settings'}
+          className={cx('col-start-1 row-start-1 space-y-2', tab !== 'settings' && 'invisible')}
+        >
+          <h4 className="text-sm font-semibold">Theme</h4>
+          <ThemePicker
+            key={String(open)}
+            preview={theme.preview}
+            resolved={theme.resolved}
+            isPreviewing={theme.isPreviewing}
+            onSelect={theme.select}
+            onApply={theme.apply}
+          />
+        </div>
+        <div
+          id="app-modal-panel-about"
+          role="tabpanel"
+          aria-labelledby="app-modal-tab-about"
+          inert={tab !== 'about'}
+          className={cx('col-start-1 row-start-1', tab !== 'about' && 'invisible')}
+        >
+          <AboutPanel />
+        </div>
       </div>
     </Modal>
   );

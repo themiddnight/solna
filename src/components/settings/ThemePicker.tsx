@@ -9,6 +9,7 @@ const SCHEME_TABS: readonly { readonly id: ThemeScheme; readonly label: string }
 ];
 
 const DOT = 'h-3 w-3 rounded-full border border-base-100';
+const PANEL_ID = 'theme-picker-panel';
 
 /** Colour dots painted by whichever theme the nearest `data-theme` names. */
 function Swatches({ accent }: { accent: boolean }) {
@@ -62,21 +63,22 @@ export interface ThemePickerProps {
 }
 
 /**
- * The Settings tab's theme row, modelled on murva's ThemePicker: a dropdown
- * trigger showing the previewed choice, and Apply. Picking a row previews it
- * at once; only Apply persists (R346).
+ * The Settings tab's theme row, modelled on murva's ThemePicker: a trigger
+ * showing the previewed choice that opens the theme list as a `popover="auto"`
+ * panel (R328), and Apply. Picking a row previews it at once; only Apply
+ * persists (R346).
  */
 export function ThemePicker({ preview, resolved, isPreviewing, onSelect, onApply }: ThemePickerProps) {
-  const { scheme, selectScheme, themes } = useThemePicker(resolved);
+  const { scheme, selectScheme, themes, triggerRef, panelRef } = useThemePicker(resolved);
   const label = themeChoiceLabel(preview);
   return (
     <div className="flex items-center gap-2">
-      <div className="dropdown flex-1">
-        {/* A focusable <span>, not a <button>: see DROPDOWN_TRIGGER_NOTE in ui/BottomInputDock.tsx. */}
-        <span
+      <div className="flex-1">
+        <button
+          ref={triggerRef}
           id="btn-theme-picker"
-          role="button"
-          tabIndex={0}
+          type="button"
+          popoverTarget={PANEL_ID}
           aria-label={`Theme: ${label}`}
           className={cx('btn btn-outline w-full justify-between gap-2 font-normal', isPreviewing && 'border-warning/50')}
         >
@@ -89,15 +91,19 @@ export function ThemePicker({ preview, resolved, isPreviewing, onSelect, onApply
             {isPreviewing && <span className="badge badge-warning badge-sm">Previewing</span>}
             <ChevronDown className="w-4 h-4 opacity-60" aria-hidden="true" />
           </span>
-        </span>
+        </button>
         <div
-          // Focusable so a tap inside keeps the dropdown's :focus-within
-          // (Safari never focuses a tapped <button>). Picking a row does NOT
-          // blur, unlike DockMenu: the panel stays open while the user previews.
-          tabIndex={0}
+          ref={panelRef}
+          id={PANEL_ID}
+          popover="auto"
           role="radiogroup"
           aria-label="Theme"
-          className="dropdown-content z-50 mt-2 w-full space-y-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+          // Reset the UA popover default (`inset: 0; margin: auto`); the
+          // colocated hook sets top/left/width once it measures the trigger
+          // (placePopover — no CSS anchor positioning, Firefox support is
+          // incomplete).
+          style={{ position: 'fixed', inset: 'auto', margin: 0 }}
+          className="space-y-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
         >
           <ThemeOption
             id="theme-option-system"
