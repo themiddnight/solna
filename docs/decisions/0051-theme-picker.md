@@ -11,7 +11,8 @@ palettes exist only for the two Solna themes, and `<meta name="theme-color">` wa
 
 ## Decision
 
-- The wordmark is a `<button>` that opens an app modal (Settings | About), on both frames; the
+- The wordmark is a `<button>` that opens an app modal, on both frames: the theme picker, a
+  divider, then the About lines (description, author, repo link) — one page, no tabs; the
   project menu moves to a chevron trigger beside it (desktop) and stays in the ☰ sheet (mobile).
   `ThemeToggle` and the `theme` `HEADER_TOOLS` row are removed.
 - The roster is `THEMES` in `components/settings/themes.ts`: Solna Dark, Solna Light, then every
@@ -37,24 +38,23 @@ palettes exist only for the two Solna themes, and `<meta name="theme-color">` wa
   side has room for the whole list: the panel is a flex column, and the list — `min-h-0`, its own
   `max-h-90` staying as the content-driven upper bound — is what actually shrinks and scrolls. No
   CSS anchor positioning: Firefox support is incomplete.
-- **Both `AppModal` tab panels render stacked in one grid cell** (R349: `grid`; each panel
-  `col-start-1 row-start-1`), so the dialog's height is always the tallest panel's and never
-  changes on a tab switch. The inactive panel is `invisible` + `inert` instead of `hidden`;
-  `inert` alone hides it from the accessibility tree (the HTML spec, not a React quirk), so no
-  extra `aria-hidden` is needed. This also drops the Settings panel's `min-h-120`, which existed
-  only to keep the modal's scrolling body from clipping the old dropdown.
+- **The modal body holds no `min-h`**: the panel escapes the dialog in the top layer, so nothing
+  needs to reserve room for the list, and the dialog is only as tall as its content.
 
 Rejected:
 
 - **A runtime `data-palette` attribute** chosen by scheme: the bootstrap would need the roster's
   schemes too, duplicating the registry inside `index.html`, and a second attribute to keep in step.
 - **Persist on select** (murva's behaviour is preview-first; a stray click would otherwise stick).
-- **Keeping the header toggle** beside Settings: two controls for one choice, and a two-state
+- **Keeping the header toggle** beside the modal: two controls for one choice, and a two-state
   toggle cannot express every daisyUI built-in theme plus the two Solna themes and System.
 - **`themes: all`** in the daisyUI plugin: the roster would not be a list a test can compare.
 - **A React portal of the theme panel to `document.body`**: a portal still renders in the normal
   DOM tree, under `AppModal`'s native top layer, so it would still be clipped by the dialog.
 - **CSS anchor positioning** for the panel: Firefox support is incomplete.
+- **Settings | About tabs**: tried first; two short panels behind tabs cost a click and a
+  stable-height workaround (both panels stacked in one grid cell) for no gain, so the About lines
+  sit under the theme picker, after a divider.
 
 ## Consequences
 
@@ -67,7 +67,7 @@ Rejected:
 - An unknown stored id paints with daisyUI's default until React mounts and corrects it.
 - The theme panel requires the Popover API: a browser lacking it (e.g. Safari before the version
   that shipped `popover`) cannot open the panel from the trigger button — accepted, since the
-  panel is the only reason for the requirement and Settings has no other theme control.
+  panel is the only reason for the requirement and the app has no other theme control.
 
 ## Rules this implies
 
@@ -75,8 +75,7 @@ Rejected:
 - **R345** — `solna_theme` holds a validated `ThemeChoice`; the bootstrap mirrors `resolveTheme` (`theming.md`).
 - **R346** — select previews, Apply persists, close reverts; theme state never in a slice (`theming.md`).
 - **R347** — `theme-color` follows the painted theme as `rgb()` (`theming.md`).
-- **R348** — the wordmark opens the app modal; the theme is chosen only in Settings (`components.md`).
-- **R349** — `AppModal`'s tab panels share one grid cell, inactive `invisible` + `inert`, never `hidden`; the dialog's height never changes on a tab switch (`components.md`).
+- **R348** — the wordmark opens the app modal; the theme is chosen only there (`components.md`).
 
 ## Sources
 

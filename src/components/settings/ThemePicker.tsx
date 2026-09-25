@@ -66,7 +66,7 @@ export interface ThemePickerProps {
 }
 
 /**
- * The Settings tab's theme row, modelled on murva's ThemePicker: a trigger
+ * The app modal's theme row, modelled on murva's ThemePicker: a trigger
  * showing the previewed choice that opens the theme list as a `popover="auto"`
  * panel (R328), and Apply. Picking a row previews it at once; only Apply
  * persists (R346).

@@ -182,7 +182,7 @@ function Workspace() {
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
 
-      {/* The wordmark's Settings | About modal; owns the live theme (R346). */}
+      {/* The wordmark's settings-and-about modal; owns the live theme (R346). */}
       <AppModal />
     </div>
   );

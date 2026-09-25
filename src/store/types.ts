@@ -556,7 +556,7 @@ export interface UiSlice {
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
-  /** The wordmark's Settings | About modal. Session-only: never persisted (not in partializeAppState). */
+  /** The wordmark's settings-and-about modal. Session-only: never persisted (not in partializeAppState). */
   isAppModalOpen: boolean;
   // The bottom input dock's open state. Session-only by design: an
   // input-surface preference, not composition data (see partializeAppState).

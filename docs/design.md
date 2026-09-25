@@ -10,7 +10,7 @@
 
 ## 2. Color System & Theme Architecture
 
-Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes (Solna Dark and Solna Light) plus every daisyUI built-in theme, chosen in Settings (ADR-0051), designed to reduce eye strain during extended creative sessions while maintaining high contrast.
+Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes (Solna Dark and Solna Light) plus every daisyUI built-in theme, chosen in the app modal the wordmark opens (ADR-0051), designed to reduce eye strain during extended creative sessions while maintaining high contrast.
 
 ### 🌌 Solna-Dark (`solna-dark`) — Plum Shadow & Rising Gold
 The hour before sunrise, with some of the night still in the shadows. A warm

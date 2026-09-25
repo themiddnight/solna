@@ -16,35 +16,29 @@ function openTag(html: string, needle: string): string {
 const html = renderToString(<AppModal />);
 
 describe('AppModal', () => {
-  test('a Modal titled Solna with Settings then About tabs, Settings selected', () => {
+  test('a Modal titled Solna with no tabs', () => {
     expect(html).toContain('<dialog class="modal"');
     expect(html).toContain('max-w-2xl'); // size lg
     expect(html).toContain('Solna</h3>');
-    expect(html).toContain('role="tablist"');
-    expect(html.indexOf('id="app-modal-tab-settings"')).toBeLessThan(html.indexOf('id="app-modal-tab-about"'));
-    expect(openTag(html, 'id="app-modal-tab-settings"')).toContain('aria-selected="true"');
-    expect(openTag(html, 'id="app-modal-tab-about"')).toContain('aria-selected="false"');
+    // The picker's own Dark | Light switcher is the only tablist.
+    expect(html.match(/role="tablist"/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Scheme"');
+    expect(html).not.toContain('role="tabpanel"');
   });
 
-  test('Settings holds the theme picker, visible and not inert', () => {
-    const panel = openTag(html, 'id="app-modal-panel-settings"');
-    expect(panel).toContain('role="tabpanel"');
-    expect(panel).not.toContain('min-h-120');
-    expect(panel).not.toContain('invisible');
-    expect(panel).not.toContain('inert');
-    expect(html).toContain('id="btn-theme-picker"');
+  test('the theme picker, then a divider, then About — all visible and not inert', () => {
+    const theme = html.indexOf('id="app-modal-theme"');
+    const divider = html.indexOf('class="divider"');
+    const about = html.indexOf('id="app-modal-about"');
+    expect(theme).toBeGreaterThan(-1);
+    expect(theme).toBeLessThan(html.indexOf('id="btn-theme-picker"'));
+    expect(html.indexOf('id="btn-theme-picker"')).toBeLessThan(divider);
+    expect(divider).toBeLessThan(about);
+    expect(html).not.toContain('invisible');
+    expect(html).not.toContain('inert');
   });
 
-  test('both tab panels render stacked in one grid cell; the inactive one is invisible and inert', () => {
-    expect(html).toContain('grid');
-    expect(openTag(html, 'id="app-modal-panel-settings"')).toContain('col-start-1 row-start-1');
-    expect(openTag(html, 'id="app-modal-panel-about"')).toContain('col-start-1 row-start-1');
-  });
-
-  test('About is rendered invisible and inert, with the name, description, author and repo link', () => {
-    const panel = openTag(html, 'id="app-modal-panel-about"');
-    expect(panel).toContain('invisible');
-    expect(panel).toContain('inert=""');
+  test('About holds the description, author and repo link', () => {
     expect(html).toContain('A browser audio workstation');
     expect(html).toContain('Made by Pathompong Thitithan');
     const link = openTag(html, 'id="link-app-repo"');
