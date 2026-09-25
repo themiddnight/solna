@@ -1,10 +1,5 @@
-import { SCALES, SCALE_CATEGORIES } from '@/data/scales';
-
-/** Each category with its SCALES keys, in display order. Built once: SCALES is static content. */
-const SCALE_GROUPS = SCALE_CATEGORIES.map((category) => ({
-  category,
-  keys: Object.keys(SCALES).filter((key) => SCALES[key].category === category),
-}));
+import { SCALES } from '@/data/scales';
+import { SCALE_GROUPS } from '@/components/ui/scaleGroups';
 
 /**
  * The scale-type `<option>`s for a native `<select>`, one `<optgroup>` per
