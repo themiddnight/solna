@@ -12,8 +12,9 @@ palettes exist only for the two Solna themes, and `<meta name="theme-color">` wa
 ## Decision
 
 - The wordmark is a `<button>` that opens an app modal, on both frames: the theme picker, a
-  divider, then the About lines (description, author, repo link) — one page, no tabs; the
-  project menu moves to a chevron trigger beside it (desktop) and stays in the ☰ sheet (mobile).
+  divider, then the About lines (description, author, repo link, a UTM-tagged murva link) — one
+  page, no tabs; the project menu moves to a chevron trigger beside it (desktop) and stays in
+  the ☰ sheet (mobile).
   `ThemeToggle` and the `theme` `HEADER_TOOLS` row are removed.
 - The roster is `THEMES` in `components/settings/themes.ts`: Solna Dark, Solna Light, then every
   daisyUI built-in of the installed major. Sync tests bind `index.css` and the installed daisyUI

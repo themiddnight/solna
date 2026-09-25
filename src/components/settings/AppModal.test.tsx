@@ -46,6 +46,17 @@ describe('AppModal', () => {
     expect(link).toContain('target="_blank"');
     expect(link).toContain('rel="noopener noreferrer"');
   });
+
+  test('About links to murva, tagged with UTM, after the repo link', () => {
+    const link = openTag(html, 'id="link-murva"');
+    expect(link).toContain(
+      'href="https://murva-beta.themiddnight.dev/?utm_source=solna&amp;utm_medium=referral&amp;utm_content=about"',
+    );
+    expect(link).toContain('target="_blank"');
+    expect(link).toContain('rel="noopener noreferrer"');
+    expect(html.indexOf('id="link-app-repo"')).toBeLessThan(html.indexOf('id="link-murva"'));
+    expect(html).toContain('Make music together with friends, in real time.');
+  });
 });
 
 // Review Focus 2: Escape, the backdrop and the close button all end in
