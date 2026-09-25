@@ -132,8 +132,10 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   `popover="auto"` element instead, positioned by a pure geometry helper the colocated hook wires
   up on the popover's `toggle` event and on `resize`/`scroll` while open — never CSS anchor
   positioning, for the same Firefox-support reason (the theme picker panel,
-  `settings/ThemePicker.tsx` + `settings/placePopover.ts`). A popup never renders inside a bottom
-  sheet — a tool that reaches the sheet renders inline controls for its `row` variant instead. <!-- R328 -->
+  `settings/ThemePicker.tsx` + `settings/placePopover.ts`). That helper opens below the trigger
+  whenever the panel fits below; only when it does not fit below does it choose whichever side has
+  more room. A popup never renders inside a bottom sheet — a tool that reaches the sheet renders
+  inline controls for its `row` variant instead. <!-- R328 -->
 - Feedback is a toast, a snackbar (at most one action) or a banner (in flow, persistent until
   handled); an alert rendered inside a modal, drawer or card body is content, not feedback. While
   any `Modal` or modal `BottomSheet` is open, entries queue in the host with their timers held, so a

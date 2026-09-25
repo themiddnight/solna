@@ -97,15 +97,25 @@ describe('resolveColorStringToRgb', () => {
     expect(resolveColorStringToRgb('oklch(0.75 0.18 70)')).toBeNull();
   });
 
-  test('the default rasterizer opens a willReadFrequently 2D context and clears the pixel before every paint', () => {
+  test('the default rasterizer opens a willReadFrequently 2D context, clears the pixel before every paint, and returns null (not the previous paint) for a colour that fails to set fillStyle', () => {
     // No DOM here (`testing.md`): a minimal fake `document`/canvas/context,
     // in the same spirit as `src/audio/testFakes.ts`'s fake `AudioContext`,
     // just to observe the arguments the default rasterizer passes — not a
-    // DOM or testing-library addition.
+    // DOM or testing-library addition. The rasterizer caches its canvas
+    // module-wide, so both scenarios are exercised through the one fake
+    // canvas in this one test rather than two separate `test()` blocks.
     const contextCalls: unknown[] = [];
     const callOrder: string[] = [];
+    let fillStyleValue = '';
     const fakeCtx = {
-      fillStyle: '',
+      get fillStyle() {
+        return fillStyleValue;
+      },
+      set fillStyle(v: string) {
+        // Mimics an engine where assigning an unrecognised CSS colour is a
+        // silent no-op rather than a throw: 'garbage' never sticks.
+        if (v !== 'garbage') fillStyleValue = v;
+      },
       clearRect: (...args: unknown[]) => callOrder.push(`clearRect(${args.join(',')})`),
       fillRect: (...args: unknown[]) => callOrder.push(`fillRect(${args.join(',')})`),
       getImageData: () => ({ data: Uint8ClampedArray.from([9, 8, 7, 255]) }),
@@ -123,15 +133,21 @@ describe('resolveColorStringToRgb', () => {
     globalThis.document = { createElement: () => fakeCanvas };
 
     try {
-      const result = resolveColorStringToRgb('oklch(0.75 0.18 70)');
-      expect(result).toEqual({ r: 9, g: 8, b: 7 });
+      expect(resolveColorStringToRgb('oklch(0.75 0.18 70)')).toEqual({ r: 9, g: 8, b: 7 });
+      // The previous paint's pixel (9, 8, 7) must not leak through as this call's result.
+      expect(resolveColorStringToRgb('garbage')).toBeNull();
     } finally {
       globalThis.document = originalDocument;
     }
 
-    expect(contextCalls).toEqual([{ contextId: '2d', options: { willReadFrequently: true } }]);
-    // clearRect must run before fillRect, or a translucent colour could blend with a stale pixel.
-    expect(callOrder).toEqual(['clearRect(0,0,1,1)', 'fillRect(0,0,1,1)']);
+    expect(contextCalls).toEqual([
+      { contextId: '2d', options: { willReadFrequently: true } },
+      { contextId: '2d', options: { willReadFrequently: true } },
+    ]);
+    // clearRect must run before fillRect, or a translucent colour could blend with a stale
+    // pixel; the second call's fillRect/getImageData never run at all — fillStyle never left
+    // the sentinel, so there is nothing valid to paint or read.
+    expect(callOrder).toEqual(['clearRect(0,0,1,1)', 'fillRect(0,0,1,1)', 'clearRect(0,0,1,1)']);
   });
 });
 

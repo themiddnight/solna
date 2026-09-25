@@ -1,12 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-
-function openTag(html: string, needle: string): string {
-  const idx = html.indexOf(needle);
-  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
-  return html.slice(html.lastIndexOf('<', idx), html.indexOf('>', idx) + 1);
-}
 import { useAppStore } from '@/store/store';
 import { MALFORMED_MESSAGE, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectBody } from '@/store/projectFormat';
@@ -30,6 +24,12 @@ import {
   visibleMenuSections,
   type OpenProjectFile,
 } from './ProjectMenu';
+
+function openTag(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  return html.slice(html.lastIndexOf('<', idx), html.indexOf('>', idx) + 1);
+}
 
 const FAKE_BODY = { id: 'p1', name: 'x', createdAt: 0, updatedAt: 0 } as unknown as ProjectBody;
 

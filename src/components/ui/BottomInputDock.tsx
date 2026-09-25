@@ -48,7 +48,7 @@ const LOCKED_TITLE = 'Recording — the keys stay on the armed track';
  * Safari (iOS and macOS) never focuses a <button> on tap or click, so a
  * <button> trigger leaves the menu shut on an iPhone. The triggers are
  * therefore focusable `role="button"` elements, the same shape as the project
- * menu's chevron trigger and the theme picker's trigger.
+ * menu's chevron trigger.
  */
 
 /**

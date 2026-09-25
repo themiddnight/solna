@@ -40,6 +40,15 @@ describe('placePopover', () => {
     expect(result.maxHeight).toBeLessThan(tallPanel.height); // genuinely capped, not the full panel
   });
 
+  test('fits below but more room above → stays below', () => {
+    // availableAbove (404px) > availableBelow (300px), but 300px is exactly enough for the
+    // 300px-tall panel, so the panel opens below — it does not chase the side with more room.
+    const trigger = rect({ top: 420, left: 200, width: 200, height: 32 });
+    const result = placePopover(trigger, panel, viewport);
+    expect(result.top).toBe(420 + 32 + 8);
+    expect(result.maxHeight).toBeGreaterThanOrEqual(panel.height);
+  });
+
   test('clamp-left: trigger near/off the left edge clamps to the 8px margin', () => {
     const trigger = rect({ top: 100, left: -50, width: 200, height: 32 });
     expect(placePopover(trigger, panel, viewport).left).toBe(8);

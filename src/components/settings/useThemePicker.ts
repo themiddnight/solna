@@ -39,6 +39,11 @@ export function useThemePicker(resolved: ThemeId): UseThemePicker {
     if (!trigger || !panel) return;
 
     const place = () => {
+      // Width first (it drives wrapping/height) and clear the previous
+      // `maxHeight` cap before measuring: a live resize/rotation while open
+      // must not measure the panel through its own stale constraints.
+      panel.style.width = `${trigger.getBoundingClientRect().width}px`;
+      panel.style.maxHeight = '';
       const { top, left, maxHeight } = placePopover(
         trigger.getBoundingClientRect(),
         { width: panel.offsetWidth, height: panel.offsetHeight },
@@ -57,8 +62,6 @@ export function useThemePicker(resolved: ThemeId): UseThemePicker {
     const onToggle = (e: Event) => {
       if (!(e instanceof ToggleEvent)) return;
       if (e.newState === 'open') {
-        // Width first (it drives wrapping/height), then measure and place.
-        panel.style.width = `${trigger.getBoundingClientRect().width}px`;
         place();
         window.addEventListener('resize', place);
         window.addEventListener('scroll', place, true);

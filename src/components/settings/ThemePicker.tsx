@@ -104,12 +104,15 @@ export function ThemePicker({ preview, resolved, isPreviewing, onSelect, onApply
           // Reset the UA popover default (`inset: 0; margin: auto`); the
           // colocated hook sets top/left/width/max-height once it measures
           // the trigger and the viewport (placePopover — no CSS anchor
-          // positioning, Firefox support is incomplete). `flex flex-col`
-          // plus the list's `min-h-0` is what lets the list — not the System
-          // row or the scheme tabs, both `shrink-0` — shrink to fit when
-          // that cap is smaller than the panel's natural height.
+          // positioning, Firefox support is incomplete). `open:flex
+          // open:flex-col` lays out only while `:popover-open` (R339, a bare
+          // `flex` would defeat the UA `[popover]:not(:popover-open)` rule
+          // and leave the closed panel rendered inline); the list's
+          // `min-h-0` is what lets the list — not the System row or the
+          // scheme tabs, both `shrink-0` — shrink to fit when that cap is
+          // smaller than the panel's natural height.
           style={{ position: 'fixed', inset: 'auto', margin: 0 }}
-          className="flex flex-col space-y-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+          className="open:flex open:flex-col space-y-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
         >
           <ThemeOption
             id="theme-option-system"

@@ -31,8 +31,8 @@ const MARGIN = 8;
 
 /**
  * `position: fixed` geometry for a popover anchored to `trigger`: left-aligned
- * to it, just below by default, flipping above when that side has more room
- * (below unless above is strictly larger). Neither side is guaranteed to fit
+ * to it, opens below whenever the panel fits below; only when it does not
+ * fit below does it flip to whichever side has more room. Neither side is guaranteed to fit
  * the whole panel, so the chosen side's available room becomes `maxHeight` —
  * the panel never renders off-screen; its content shrinks and scrolls inside
  * that cap instead. Clamped horizontally inside the viewport with the same
@@ -43,7 +43,8 @@ const MARGIN = 8;
 export function placePopover(trigger: DOMRectLike, panel: PopoverSize, viewport: ViewportSize): PopoverPosition {
   const availableBelow = viewport.height - trigger.bottom - GAP - MARGIN;
   const availableAbove = trigger.top - GAP - MARGIN;
-  const opensUpward = availableAbove > availableBelow;
+  const fitsBelow = availableBelow >= panel.height;
+  const opensUpward = !fitsBelow && availableAbove > availableBelow;
 
   const maxHeight = Math.max(opensUpward ? availableAbove : availableBelow, 0);
   const height = Math.min(panel.height, maxHeight);

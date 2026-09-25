@@ -37,6 +37,19 @@ describe('ThemePicker', () => {
     expect(html).toContain('max-h-90 space-y-1 overflow-y-auto');
   });
 
+  // Review Focus (critical): a bare `flex`/`flex-col` on the popover would override the UA
+  // `[popover]:not(:popover-open){display:none}` rule and leave the closed panel rendered inline.
+  test('the panel lays out only while open: no bare flex class, only open:-prefixed layout', () => {
+    const panel = openTag(render('solna-dark', 'solna-dark', false), 'role="radiogroup"');
+    const classMatch = /class="([^"]*)"/.exec(panel);
+    expect(classMatch).not.toBeNull();
+    const classes = (classMatch as RegExpExecArray)[1].split(/\s+/);
+    expect(classes).toContain('open:flex');
+    expect(classes).toContain('open:flex-col');
+    expect(classes).not.toContain('flex');
+    expect(classes).not.toContain('flex-col');
+  });
+
   test('nothing previewed: no warning, Apply disabled', () => {
     const html = render('solna-dark', 'solna-dark', false);
     expect(html).not.toContain('Previewing');

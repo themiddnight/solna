@@ -31,9 +31,10 @@ palettes exist only for the two Solna themes, and `<meta name="theme-color">` wa
   "Previewing" tag, chevron). Positioning is `position: fixed`, computed by the pure
   `placePopover` (`settings/placePopover.ts`) from the trigger's `getBoundingClientRect()` on the
   popover's `toggle` event and on `resize`/`scroll` while open — the DOM wiring lives in
-  `useThemePicker`, per R265/R266. `placePopover` also caps the panel's height to whichever side
-  (above/below the trigger) it opens into, so it never renders off-screen when neither side has
-  room for the whole list: the panel is a flex column, and the list — `min-h-0`, its own
+  `useThemePicker`, per R265/R266. `placePopover` opens below the trigger whenever the panel fits
+  below; only when it does not fit below does it choose whichever side (above or below) has more
+  room, and it caps the panel's height to that side, so it never renders off-screen when neither
+  side has room for the whole list: the panel is a flex column, and the list — `min-h-0`, its own
   `max-h-90` staying as the content-driven upper bound — is what actually shrinks and scrolls. No
   CSS anchor positioning: Firefox support is incomplete.
 - **Both `AppModal` tab panels render stacked in one grid cell** (R349: `grid`; each panel
@@ -49,7 +50,7 @@ Rejected:
   schemes too, duplicating the registry inside `index.html`, and a second attribute to keep in step.
 - **Persist on select** (murva's behaviour is preview-first; a stray click would otherwise stick).
 - **Keeping the header toggle** beside Settings: two controls for one choice, and a two-state
-  toggle cannot express 37 themes plus System.
+  toggle cannot express every daisyUI built-in theme plus the two Solna themes and System.
 - **`themes: all`** in the daisyUI plugin: the roster would not be a list a test can compare.
 - **A React portal of the theme panel to `document.body`**: a portal still renders in the normal
   DOM tree, under `AppModal`'s native top layer, so it would still be clipped by the dialog.
@@ -64,6 +65,9 @@ Rejected:
 - `check-contrast` measures only the two Solna palettes; a light daisyUI theme shows the light
   palette on its own base colours, which the gate does not measure.
 - An unknown stored id paints with daisyUI's default until React mounts and corrects it.
+- The theme panel requires the Popover API: a browser lacking it (e.g. Safari before the version
+  that shipped `popover`) cannot open the panel from the trigger button — accepted, since the
+  panel is the only reason for the requirement and Settings has no other theme control.
 
 ## Rules this implies
 

@@ -148,13 +148,22 @@ function rasterizeColorToRgb(colorString: string): Rgb | null {
     // Clear the previous paint first: a colour with alpha < 1 would
     // otherwise read back blended with whatever was drawn last call.
     ctx.clearRect(0, 0, 1, 1);
+    // Some engines leave `fillStyle` unchanged (a silent no-op) rather than
+    // throwing when the assigned string is not a colour they understand, so
+    // an unparseable `colorString` would otherwise read back as whatever the
+    // *previous* call painted. A sentinel `fillStyle`, set first and
+    // compared after the real assignment, detects that no-op.
+    // theme-guard-ignore: an arbitrary canvas fillStyle probe value, not a Tailwind class or theme token
+    const sentinel = 'rgba(1, 2, 3, 0.004)';
+    ctx.fillStyle = sentinel;
     ctx.fillStyle = colorString;
+    if (ctx.fillStyle === sentinel) return null;
     ctx.fillRect(0, 0, 1, 1);
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
     return { r, g, b };
   } catch {
-    // An unparseable colour leaves fillStyle unchanged / throws on some
-    // engines; either way there is nothing usable to read back.
+    // An unparseable colour throws on some engines; either way there is
+    // nothing usable to read back.
     return null;
   }
 }
