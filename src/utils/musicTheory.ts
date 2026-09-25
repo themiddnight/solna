@@ -117,10 +117,11 @@ function isInScalePaletteChord(
 }
 
 // The interval tuples a stacked triad can measure to, and the app quality token
-// each one names. Exhaustive over what the eleven scales produce. An unmapped
-// tuple THROWS: a silent fallback to `maj` is how a wrong chord reaches the UI
-// with nothing to notice it, and a twelfth scale whose stacking produces a
-// tuple nobody has named should stop, not guess.
+// each one names. Exhaustive over what every SCALES entry produces, which the
+// harmony invariant in src/data/scales.test.ts pins. An unmapped tuple THROWS:
+// a silent fallback to `maj` is how a wrong chord reaches the UI with nothing
+// to notice it, and a new scale whose stacking produces a tuple nobody has
+// named should stop, not guess.
 const TRIAD_QUALITY_BY_INTERVALS: Record<string, ChordQuality> = {
   '3M 5P': 'maj',
   '3m 5P': 'min',
