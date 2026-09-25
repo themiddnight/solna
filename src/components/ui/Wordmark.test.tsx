@@ -10,7 +10,10 @@ describe('Wordmark', () => {
   // trigger (the project menu has its own chevron) — R348.
   test('is a button that announces a dialog, with a 44px target', () => {
     const html = renderToString(<Wordmark onClick={noop} />);
-    expect(html.startsWith('<button')).toBe(true);
+    // React 19 hoists a `<link rel="preload">` for the <img> ahead of the
+    // markup itself; strip that resource hint before checking the root tag.
+    const markup = html.replace(/^(?:<link[^>]*\/>)+/, '');
+    expect(markup.startsWith('<button')).toBe(true);
     expect(html).toContain('id="btn-app-modal"');
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-haspopup="dialog"');

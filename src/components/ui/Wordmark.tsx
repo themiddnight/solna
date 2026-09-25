@@ -27,11 +27,7 @@ export function Wordmark({ onClick, markOnly = false }: WordmarkProps) {
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
       )}
     >
-      {/* `loading="lazy"` isn't about viewport lazy-loading here (the mark is
-          always above the fold) — it opts the image out of React 19's
-          automatic `<link rel="preload">` resource hint, which would
-          otherwise prepend a sibling tag before this button in server markup. */}
-      <img src="/assets/favicon.svg" alt="" className="h-8 w-8" draggable={false} loading="lazy" />
+      <img src="/assets/favicon.svg" alt="" className="h-8 w-8" draggable={false} />
       {!markOnly && (
         <span className="text-2xl font-normal text-primary leading-none" style={{ letterSpacing: '0.08em' }}>
           solna
