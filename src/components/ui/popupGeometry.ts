@@ -59,3 +59,18 @@ export function panelNaturalRect(
   const left = wrapperLeft + panel.offsetLeft;
   return { left, right: left + panel.offsetWidth };
 }
+
+/**
+ * Whether an event's node lies outside the popup's wrapper: the one test
+ * behind both the outside-pointerdown close and the focus-leave close.
+ * `null` is never outside. A focusout with no `relatedTarget` (Safari
+ * focusing nothing on a click, a click on panel padding, a native select
+ * handing off to its OS picker) has not left the popup, and closing on it
+ * would shut the panel under the user's finger. The trigger sits inside the
+ * wrapper, so a pointerdown on it is not outside either: the trigger's own
+ * click toggles the popup shut, rather than an outside close firing first
+ * and the click reopening it.
+ */
+export function isOutside<T>(node: T | null, contains: (node: T) => boolean): boolean {
+  return node !== null && !contains(node);
+}

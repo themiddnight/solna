@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isDismissKey, panelNaturalRect, popupShift } from './popupGeometry';
+import { isDismissKey, isOutside, panelNaturalRect, popupShift } from './popupGeometry';
 
 describe('isDismissKey', () => {
   test('Escape dismisses; nothing else does', () => {
@@ -69,5 +69,34 @@ describe('panelNaturalRect', () => {
     const afterResize = measure(); // simulated resize event, same geometry
     expect(afterResize).toBe(beforeResize);
     expect(afterResize).not.toBe(0);
+  });
+});
+
+describe('isOutside', () => {
+  // The wrapper holds the trigger and the panel; `contains` stands in for Node.contains.
+  const inWrapper = new Set(['trigger', 'panel', 'option', 'root select']);
+  const contains = (node: string) => inWrapper.has(node);
+
+  test('a node outside the wrapper is outside', () => {
+    expect(isOutside('page button', contains)).toBe(true);
+  });
+
+  test('a node inside the panel is not', () => {
+    expect(isOutside('option', contains)).toBe(false);
+    expect(isOutside('root select', contains)).toBe(false);
+  });
+
+  // The trigger is inside the wrapper, so a pointerdown on it while open does
+  // not close the popup: the trigger's own click toggles it shut instead, and
+  // there is no close-then-reopen.
+  test('a pointerdown on the trigger is not outside', () => {
+    expect(isOutside('trigger', contains)).toBe(false);
+  });
+
+  // Safari focuses nothing on a click, a click on panel padding focuses
+  // nothing, and a phone's native select hands off to its OS picker: each is
+  // a focusout with relatedTarget null, and none of them left the popup.
+  test('a focusout with no relatedTarget is not leaving', () => {
+    expect(isOutside(null, () => false)).toBe(false);
   });
 });
