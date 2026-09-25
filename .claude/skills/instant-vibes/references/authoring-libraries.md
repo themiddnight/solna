@@ -44,7 +44,7 @@ before the closing `];`. Shape:
   category: 'Lofi & R&B',      // ProgressionCategory, a closed union
   referenceScale: 'Major',     // the scale this was authored against; a vibe pooling it must play the same one
   genres: ['lofi'],            // free-form browsing tag; nothing computes from it
-  minScaleLength: 7,           // SCALES[referenceScale].intervals.length
+  minScaleLength: 7,           // scaleEntry(referenceScale).intervals.length
   steps: [step(0, 1, 'maj7'), step(5, 1, 'min7'), step(1, 1, 'min7'), step(4, 1, '7')],
 }
 ```

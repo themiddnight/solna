@@ -61,7 +61,7 @@ interface VibeRandomRule {
   /**
    * Ids into CHORD_PROGRESSIONS. Always contains the vibe's own progressionId.
    * Two invariants hold for every member: `minScaleLength <=
-   * SCALES[scaleType].intervals.length`, and `referenceScale === scaleType`.
+   * scaleEntry(scaleType).intervals.length`, and `referenceScale === scaleType`.
    */
   progressions: string[];
   /** Ids into CHORD_RHYTHMS. Always contains the vibe's own chordRhythmId. */

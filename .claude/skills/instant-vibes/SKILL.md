@@ -147,7 +147,7 @@ vibe, and everything the vibe pools must agree with it. Two invariant tests in
 `vibeVariation.test.ts` enforce that, per pooled progression:
 
 1. `'every pooled progression fits the vibe's scale'` —
-   `minScaleLength <= SCALES[vibe.scaleType].intervals.length`. This matters most
+   `minScaleLength <= scaleEntry(vibe.scaleType).intervals.length`. This matters most
    for `zen-garden` (Hirajoshi, 5 degrees) and the pentatonic scales, where a
    7-degree progression used to vanish from the pool silently.
 2. `'every pooled progression was authored against the vibe's own scale'` —

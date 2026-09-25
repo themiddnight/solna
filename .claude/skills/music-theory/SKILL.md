@@ -26,10 +26,12 @@ reach for **note/interval/chord math** through Music Core's public API (`@/music
 `tonal` takes **interval notation**, not `"N oct"` — octave N up is a perfect `(7N+1)`th (`8P`, `15P`, …).
 Both `shiftNoteOctave` and `src/audio/arpeggiator.ts` depend on this; don't "simplify" it.
 
-`SCALES` states `intervals` (a literal a reader can check by eye, pinned to `tonal` by
-`src/data/scales.test.ts`), the `tonal` scale name that spells it, its `tonality` spelling
-convention, and — for scales with fewer than seven degrees — the 7-note `parent` whose harmony it
-borrows. Per-degree chord qualities are **derived**, not stated:
+`SCALES` states a display `name`, an `abbr` for the compact header trigger, a one-line
+`description`, a `category`, the `tonal` scale name that spells and measures it, its `tonality` spelling convention, and — for scales with fewer than
+seven degrees — the 7-note `parent` whose harmony it borrows. Intervals are **derived**:
+`src/musicCore/scale.ts` resolves each `tonal` name once at load, and `scaleEntry(key).intervals`
+is the only way to read them (`src/data/scales.test.ts` pins the legacy scales' intervals).
+Per-degree chord qualities are **derived** too, not stated:
 `resolveDegreeQuality(scaleType, degree, use7ths)` in `utils/musicTheory.ts` maps a degree to a
 parent degree **by semitone offset** (never by index — `degree % 7` would make Minor Pentatonic
 degree 1 resolve as the parent's ii°), stacks thirds over the parent's spelled note names and
@@ -57,10 +59,10 @@ the whole spelling change needed no persist-version and no `.solna` format bump.
 (exported project JSON carries the string verbatim). The progression-library-degrees project only got
 to correct one bad value (`'Pentatonic Major'` → `'Major Pentatonic'`) in place because this app has
 no users yet — don't take that as license to rename a key casually once it does.
-`Major`, `Natural Minor`, `Harmonic Minor`, `Dorian`, `Mixolydian`, `Lydian`, `Phrygian`,
-`Minor Pentatonic`, `Major Pentatonic`, `Blues`, `Hirajoshi`. Pentatonic/Blues/Hirajoshi have 5–6
-degrees, so never assume 7 — loop `SCALES[scaleType].intervals.length` (unknown key falls back to
-`Major`, which is how `'Pentatonic Major'` ran as Major for months without anyone hearing it).
+The keys are `Object.keys(SCALES)` in `src/data/scales.ts`, grouped by `SCALE_CATEGORIES`. The
+pentatonic, blues and world scales have 5–6 degrees, so never assume 7 — loop
+`scaleEntry(scaleType).intervals.length` (unknown key falls back to `Major`, which is how
+`'Pentatonic Major'` ran as Major for months without anyone hearing it).
 `Hirajoshi` is `[0, 2, 3, 7, 8]` with `parent: 'Natural Minor'` — a strict subset of it at degrees
 1, 2, 3, 5, 6. Degree 3 was once a hand-written `sus4` / `7sus4` deviation and is now `min` /
 `min7`: a five-note scale with two major-third gaps is one most of whose diatonic chords reach
@@ -72,7 +74,8 @@ Helpers: `getScaleNotes(root, scaleType)`, `isNoteInScale(note, root, scaleType)
 
 `src/store/musicContextSlice.ts` — `scaleRoot` (default `'A'`), `scaleType` (default `'Natural Minor'`),
 `projectTitle`, plus `applyTemplate(name)` which sets bpm + root + scale + title in one atomic `set()`.
-`header/ScaleMenu.tsx` renders the pickers from `ROOTS` / `Object.keys(SCALES)`. The sequencer is **not**
+`header/ScaleMenu.tsx` renders the pickers from `KEY_OPTIONS` / `ui/ScaleTypeOptions.tsx` (one optgroup
+per category). The sequencer is **not**
 scale-aware; only the chord tools, the bass engine and the scale-locked keyboard read these.
 
 ## Chord generation
@@ -148,7 +151,7 @@ into `ResolvedBassEvent[]`:
   field — and fall back down the chain `seventh → fifth → third → root`, so pentatonic triads never
   produce a missing note.
 - `approach*` tokens target the **next** chord's root, not the current one (`isApproachToken`).
-  `approachDiatonicUp` walks to the next scale degree above via `SCALES[scaleType].intervals`.
+  `approachDiatonicUp` walks to the next scale degree above via `scaleEntry(scaleType).intervals`.
 - `alternate: true` flips chromatic above/below on odd `chordIndex` — deterministic, not random.
 
 `src/data/chordRhythms.ts` — `CHORD_RHYTHMS` (21, 9 styles) are one-bar 16-step chord-comp patterns of
