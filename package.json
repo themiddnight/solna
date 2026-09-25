@@ -2,7 +2,9 @@
   "name": "solna",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
+  "packageManager": "bun@1.3.11",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,6 +15,7 @@
     "check:drums": "bun scripts/check-drum-kit-separation.ts",
     "check:contrast": "bun scripts/check-contrast.ts",
     "check:levels": "bun scripts/check-levels.ts",
+    "check:content": "bun test src/data src/audio/chordProgressions src/audio/chordRhythms src/audio/bassPatterns src/audio/effectChains src/store/vibes src/store/vibeVariation src/store/instantVibes src/utils/synthPresets scripts/calibration/trimTable.lock && bun run check:drums && bun run check:levels",
     "check:dead-code": "knip",
     "check:dead-code:production": "knip --strict --include files,dependencies,unlisted,binaries,unresolved",
     "calibration:generate": "bun scripts/calibration/generateTrimTable.ts",
