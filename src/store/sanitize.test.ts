@@ -121,6 +121,33 @@ describe('sanitize (shared by persist hydration and project import)', () => {
   });
 });
 
+describe('sanitizeLoops and the scale library', () => {
+  // A scale key added to SCALES is valid on read with no persist version bump
+  // (R035): SCALE_TYPE_SET is built from the table itself.
+  test('keeps a scale key added with the library growth', () => {
+    for (const scaleType of ['Locrian #2', 'Egyptian', 'Vietnamese']) {
+      const [out] = sanitizeLoops([{ ...createDefaultLoop(), scaleType }]) ?? [];
+      expect(out.scaleType).toBe(scaleType);
+    }
+  });
+
+  test('keeps every legacy key', () => {
+    for (const scaleType of ['Major', 'Natural Minor', 'Blues', 'Hirajoshi']) {
+      const [out] = sanitizeLoops([{ ...createDefaultLoop(), scaleType }]) ?? [];
+      expect(out.scaleType).toBe(scaleType);
+    }
+  });
+
+  // A murva value or a display name is not a key: it falls back like any
+  // unknown string, to the default loop's scale.
+  test('rejects a display name or a tonal name in place of a key', () => {
+    for (const scaleType of ['Locrian ♯2', 'Minor Blues', 'vietnamese 1']) {
+      const [out] = sanitizeLoops([{ ...createDefaultLoop(), scaleType }]) ?? [];
+      expect(out.scaleType).toBe(createDefaultLoop().scaleType);
+    }
+  });
+});
+
 describe('sanitizeLoops fills the label fields instead of inventing a name', () => {
   // The fill counts over surviving rows and skips any ordinal an explicit
   // tempName elsewhere in the array already claims (see resolveTempName), so

@@ -358,6 +358,10 @@ describe('getScaleLockedTouchRows — one octave of the scale per row (R340)', (
     ['A', 'Blues', 6],
     ['E', 'Hirajoshi', 5],
     ['F#', 'Minor Pentatonic', 5],
+    ['D', 'Egyptian', 5],
+    ['G', 'Pelog', 5],
+    ['C#', 'Major Blues', 6],
+    ['A#', 'Locrian #2', 7],
   ];
   for (const [root, scaleType, length] of cases) {
     test(`${root} ${scaleType}: both rows are ${length} keys, starting on the tonic`, () => {

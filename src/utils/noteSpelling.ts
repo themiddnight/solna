@@ -87,8 +87,8 @@ export function getKeyAccidental(rootNote: string, scaleType: string): 'sharp' |
     : MAJOR_ACCIDENTALS[chroma];
 }
 
-// Keyed `${pitchClass}|${rootNote}|${scaleType}`, so at most 12 x 12 x 11
-// entries. Correct forever because SCALES is frozen content and tonal is pure.
+// Keyed `${pitchClass}|${rootNote}|${scaleType}`, so at most 12 x 12 x one
+// per SCALES key. Correct forever because SCALES is frozen content and tonal is pure.
 // Without it every call rebuilds a tonal Scale — ~2us a call, and the
 // keyboard spells every cap in the octave on every scale or key change.
 const pitchClassSpellingCache = new Map<string, string>();
@@ -191,7 +191,7 @@ export const KEY_OPTIONS: readonly { value: string; label: string }[] = SHARP_NA
  * The spelled tonic followed by the scale type was open-coded at eight
  * surfaces, so "how a key reads" was a convention rather than a function and
  * any refinement to it was an eight-file edit. `long` swaps the raw type for
- * the SCALES entry's display name ('Major (Ionian)'), which is what the header
+ * the SCALES entry's display name ('Minor (Natural)'), which is what the header
  * tooltip wants; an unknown type still echoes itself rather than resolving to
  * Major, because a label that silently renames the user's scale is worse than
  * one that shows an unfamiliar word.

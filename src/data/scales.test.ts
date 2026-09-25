@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { SCALES } from './scales';
+import { SCALES, SCALE_CATEGORIES } from './scales';
 import { scaleEntry } from '@/musicCore';
-import { parentDegreesFor, resolveParentDegreeQuality } from '@/utils/musicTheory';
+import { parentDegreesFor, resolveDegreeQuality, resolveParentDegreeQuality } from '@/utils/musicTheory';
 
 // The golden pin. These are the interval arrays the eleven legacy scales were
 // hand-authored with before intervals became derived from `tonal`. A saved
@@ -67,8 +67,90 @@ describe('SCALES', () => {
         }
       });
     }
-    // Exactly one tie exists today: Blues degree 3, the b5 at interval 6,
-    // equidistant from Natural Minor's interval 5 and interval 7.
-    expect(ties).toBe(1);
+    // Exactly two ties exist today, and both sides agree in each: Blues
+    // degree 3, the b5 at interval 6, equidistant from Natural Minor's
+    // intervals 5 and 7; and Major Blues degree 2, the blue b3 at interval 3,
+    // equidistant from Major's intervals 2 and 4.
+    expect(ties).toBe(2);
+  });
+
+  test('holds the library keys in display order', () => {
+    expect(Object.keys(SCALES)).toEqual([
+      'Major', 'Natural Minor', 'Harmonic Minor', 'Melodic Minor', 'Harmonic Major',
+      'Dorian', 'Phrygian', 'Lydian', 'Mixolydian', 'Locrian', 'Dorian b2', 'Lydian Dominant',
+      'Lydian Augmented', 'Mixolydian b6', 'Locrian #2', 'Phrygian Dominant',
+      'Major Pentatonic', 'Minor Pentatonic', 'Egyptian',
+      'Major Blues', 'Blues',
+      'Hirajoshi', 'Pelog', 'Vietnamese',
+    ]);
+  });
+
+  test('every scale has 5 to 7 intervals, from 0, strictly increasing, below 12', () => {
+    for (const key of Object.keys(SCALES)) {
+      const { intervals } = scaleEntry(key);
+      expect(intervals.length, key).toBeGreaterThanOrEqual(5);
+      expect(intervals.length, key).toBeLessThanOrEqual(7);
+      expect(intervals[0], key).toBe(0);
+      intervals.forEach((interval, i) => {
+        expect(interval, key).toBeLessThan(12);
+        if (i > 0) expect(interval, key).toBeGreaterThan(intervals[i - 1]);
+      });
+    }
+  });
+
+  test('no parent itself has a parent', () => {
+    for (const [key, scale] of Object.entries(SCALES)) {
+      if (scale.parent === undefined) continue;
+      expect(SCALES[scale.parent].parent, key).toBeUndefined();
+    }
+  });
+
+  // The major third decides, when the scale has one: Major Blues holds the b3
+  // as a blue note beside its major third and is still a major-key scale. A
+  // scale with no third at all (Egyptian) spells as minor.
+  test('tonality agrees with the derived third', () => {
+    for (const [key, scale] of Object.entries(SCALES)) {
+      const expected = scaleEntry(key).intervals.includes(4) ? 'major' : 'minor';
+      expect(scale.tonality, key).toBe(expected);
+    }
+  });
+
+  test('categories run in SCALE_CATEGORIES order, contiguously, none empty', () => {
+    const runs: string[] = [];
+    for (const scale of Object.values(SCALES)) {
+      if (runs[runs.length - 1] !== scale.category) runs.push(scale.category);
+    }
+    expect(runs).toEqual([...SCALE_CATEGORIES]);
+  });
+
+  test('every scale has a name and a one-line description', () => {
+    for (const [key, scale] of Object.entries(SCALES)) {
+      expect(scale.name.trim(), key).not.toBe('');
+      expect(scale.description, key).toMatch(/^\S.* · \S.*$/);
+      expect(scale.description, key).not.toContain('\n');
+    }
+  });
+
+  // The header's short label renders the key itself, so a key must read as
+  // plain text: letters, digits, spaces and '#' only — no '♭' or '♯'.
+  test('every key is readable ASCII', () => {
+    for (const key of Object.keys(SCALES)) {
+      expect(key).toMatch(/^[A-Za-z0-9# ]+$/);
+    }
+  });
+});
+
+describe('harmony', () => {
+  // Every scale must harmonize at every degree: a scale whose derived
+  // interval tuple is missing from the quality tables throws in
+  // resolveDegreeQuality, and that must fail here, not in the chord pads.
+  test('every degree of every scale resolves a triad and a seventh', () => {
+    for (const key of Object.keys(SCALES)) {
+      scaleEntry(key).intervals.forEach((_, degree) => {
+        for (const use7ths of [false, true]) {
+          expect(() => resolveDegreeQuality(key, degree, use7ths), `${key} degree ${degree} 7ths=${use7ths}`).not.toThrow();
+        }
+      });
+    }
   });
 });

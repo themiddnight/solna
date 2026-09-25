@@ -131,9 +131,9 @@ describe('formatChordLabel', () => {
 });
 
 describe('Hirajoshi', () => {
-  test('is a five-degree World & Exotic scale on [0, 2, 3, 7, 8]', () => {
+  test('is a five-degree World scale on [0, 2, 3, 7, 8]', () => {
     const scale = scaleEntry('Hirajoshi');
-    expect(scale.category).toBe('World & Exotic');
+    expect(scale.category).toBe('World');
     expect(scale.intervals).toEqual([0, 2, 3, 7, 8]);
   });
 

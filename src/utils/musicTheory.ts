@@ -227,7 +227,7 @@ function nearestDegrees(intervals: readonly number[], target: number): number[] 
  *
  * Returns every equidistant neighbour when no parent degree matches exactly,
  * so scales.test.ts can assert the tie's sides agree rather than the code
- * picking one. Exactly one such degree exists today: Blues degree 3.
+ * picking one. Two exist today: Blues degree 3 and Major Blues degree 2.
  */
 export function parentDegreesFor(
   scaleType: string,

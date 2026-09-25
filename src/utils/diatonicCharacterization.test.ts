@@ -11,8 +11,8 @@ import { DIATONIC_CHARACTERIZATION } from './diatonicCharacterizationFixture';
  */
 describe('getDiatonicChordForDegree — characterization lock', () => {
   test('covers every scale x 12 roots x {triad, 7th}', () => {
-    expect(Object.keys(DIATONIC_CHARACTERIZATION).length).toBe(264);
-    expect(Object.keys(SCALES).length * ROOTS.length * 2).toBe(264);
+    expect(Object.keys(DIATONIC_CHARACTERIZATION).length).toBe(576);
+    expect(Object.keys(SCALES).length * ROOTS.length * 2).toBe(576);
   });
 
   test('every degree of every key still resolves to the pinned root, quality and numeral', () => {
