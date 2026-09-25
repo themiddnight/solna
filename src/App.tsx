@@ -5,6 +5,7 @@ import { PlaybackHost } from './components/playback/PlaybackHost';
 import { DesktopShell } from './components/shell/DesktopShell';
 import { MobileShell } from './components/shell/MobileShell';
 import { useLayoutMode } from './components/shell/useLayoutMode';
+import { AppModal } from './components/settings/AppModal';
 import { IncidentDialog } from './components/ui/IncidentDialog';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { installGlobalIncidentCapture } from './incidents/globalCapture';
@@ -41,7 +42,7 @@ const FIRST_GESTURE_EVENTS = ['click', 'keydown', 'pointerdown'] as const;
  * teardown on unmount).
  *
  * Exported as a pure, DOM-injectable helper — same pattern as
- * `resolveInitialTheme` in `components/header/useTheme.ts` — so it is unit-testable
+ * `parseThemeChoice` in `components/settings/themes.ts` — so it is unit-testable
  * without a real DOM or testing-library.
  */
 export function registerFirstGesture(
@@ -180,6 +181,9 @@ function Workspace() {
 
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
+
+      {/* The wordmark's settings-and-about modal; owns the live theme (R346). */}
+      <AppModal />
     </div>
   );
 }

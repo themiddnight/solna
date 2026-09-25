@@ -3,10 +3,14 @@
  *
  * Canvas drawing takes CSS colour strings, not Tailwind classes, so canvas
  * code cannot be fixed by swapping class names — it has to read the live
- * theme. daisyUI v5 emits its palette as `oklch(...)`, which some canvas
- * implementations refuse to parse, so we resolve every token through a probe
- * element and read back the computed `color`, which every engine normalises
- * to an `rgb()` / `rgba()` string.
+ * theme. daisyUI v5 emits its palette as `oklch(...)`; current Chrome's
+ * `getComputedStyle` serialises that straight back as `oklch(...)` rather
+ * than normalising it to `rgb()`, so a plain string parse is not enough. We
+ * resolve every token through a probe element (to let the engine collapse
+ * `currentcolor`/relative-colour syntax) and then, when the computed string
+ * still isn't `rgb()`-family, rasterize it — draw it into a 1x1 canvas and
+ * read the pixel back — because canvas `fillStyle` accepts any `<color>` the
+ * browser understands, `oklch()`/`oklab()`/`color()` included.
  *
  * All DOM-touching functions degrade to the solna-dark defaults when there is
  * no document (Bun's test runner and any SSR render), so this module is safe
@@ -112,6 +116,77 @@ export function rgbToCss({ r, g, b }: Rgb, alpha?: number): string {
  * element and read back the computed `color`, which every engine normalises
  * to rgb().
  */
+/**
+ * Lazily-created 1x1 canvas reused by {@link rasterizeColorToRgb}, so
+ * resolving an entire palette (`createThemePalette`) only ever allocates one.
+ */
+let rasterCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * Rasterizes an arbitrary CSS `<color>` string — `oklch()`, `oklab()`,
+ * `color(...)`, anything the browser's 2D canvas can paint — to sRGB bytes
+ * by drawing it into a 1x1 canvas and reading the pixel back. This is the
+ * default rasterizer {@link resolveColorStringToRgb} falls back to; it is
+ * DOM-dependent (unavailable under `bun test`/SSR) so it is kept separate
+ * from the pure parsing/fallback logic, which stays unit-testable via
+ * injection.
+ */
+function rasterizeColorToRgb(colorString: string): Rgb | null {
+  if (typeof document === 'undefined') return null;
+  if (!rasterCanvas) {
+    rasterCanvas = document.createElement('canvas');
+    rasterCanvas.width = 1;
+    rasterCanvas.height = 1;
+  }
+  // willReadFrequently: this canvas is reused across every token/theme
+  // resolution, so Chrome otherwise warns about repeated getImageData
+  // readbacks on the same context.
+  const ctx = rasterCanvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+
+  try {
+    // Clear the previous paint first: a colour with alpha < 1 would
+    // otherwise read back blended with whatever was drawn last call.
+    ctx.clearRect(0, 0, 1, 1);
+    // Some engines leave `fillStyle` unchanged (a silent no-op) rather than
+    // throwing when the assigned string is not a colour they understand, so
+    // an unparseable `colorString` would otherwise read back as whatever the
+    // *previous* call painted. A sentinel `fillStyle`, set first and
+    // compared after the real assignment, detects that no-op.
+    // theme-guard-ignore: an arbitrary canvas fillStyle probe value, not a Tailwind class or theme token
+    const sentinel = 'rgba(1, 2, 3, 0.004)';
+    ctx.fillStyle = sentinel;
+    ctx.fillStyle = colorString;
+    if (ctx.fillStyle === sentinel) return null;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return { r, g, b };
+  } catch {
+    // An unparseable colour throws on some engines; either way there is
+    // nothing usable to read back.
+    return null;
+  }
+}
+
+/**
+ * Resolves any computed CSS colour string to sRGB: the `rgb()`/`rgba()` fast
+ * path via {@link parseRgbString}, then `rasterize` (a real canvas by
+ * default) for anything else — `oklch()`, `oklab()`, `color(...)`, which
+ * Chrome's `getComputedStyle` can serialise back as of daisyUI v5's palette.
+ * Returns null, never a guess, when neither resolves the colour (e.g. no
+ * canvas in the test runtime); callers supply their own fallback.
+ *
+ * `rasterize` is injectable so this can be unit-tested without a DOM.
+ */
+export function resolveColorStringToRgb(
+  colorString: string,
+  rasterize: (colorString: string) => Rgb | null = rasterizeColorToRgb,
+): Rgb | null {
+  const direct = parseRgbString(colorString);
+  if (direct) return direct;
+  return rasterize(colorString);
+}
+
 export function resolveThemeRgb(token: ThemeToken, root?: HTMLElement): Rgb {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
     return FALLBACKS[token];
@@ -125,7 +200,8 @@ export function resolveThemeRgb(token: ThemeToken, root?: HTMLElement): Rgb {
   const direct = parseRgbString(raw);
   if (direct) return direct;
 
-  // Slow path: oklch()/lab()/color() — let the engine convert it for us.
+  // Slow path: let the engine resolve currentcolor/relative-colour syntax
+  // for us, via a probe element's computed `color`.
   const probe = document.createElement('span');
   probe.style.position = 'absolute';
   probe.style.opacity = '0';
@@ -135,7 +211,7 @@ export function resolveThemeRgb(token: ThemeToken, root?: HTMLElement): Rgb {
   const computed = window.getComputedStyle(probe).color;
   host.removeChild(probe);
 
-  return parseRgbString(computed) ?? FALLBACKS[token];
+  return resolveColorStringToRgb(computed) ?? FALLBACKS[token];
 }
 
 /**

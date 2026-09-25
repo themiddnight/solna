@@ -556,6 +556,8 @@ export interface UiSlice {
   midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
+  /** The wordmark's settings-and-about modal. Session-only: never persisted (not in partializeAppState). */
+  isAppModalOpen: boolean;
   // The bottom input dock's open state. Session-only by design: an
   // input-surface preference, not composition data (see partializeAppState).
   // Which panel it shows is not state: it is derived from the input target.
@@ -587,6 +589,7 @@ export interface UiSlice {
   removeMidiMapping: (id: string) => void;
   resetMidiMappings: () => void;
   setIsMidiSettingsOpen: (open: boolean) => void;
+  setIsAppModalOpen: (open: boolean) => void;
   setMidiLearnTargetId: (id: string | null) => void;
   setIsInputPanelOpen: (open: boolean) => void;
   setSelectedMidiInputId: (id: string) => void;

@@ -1,5 +1,5 @@
 import React, { Fragment, useCallback, useRef, useState } from 'react';
-import { Activity, Bug, Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from 'lucide-react';
+import { Activity, Bug, ChevronDown, Cloud, CloudOff, CloudUpload, FileDown, FilePlus, Save, Upload } from 'lucide-react';
 import { reportManualIncident } from '@/store/incidentReporter';
 import { defaultSaveName } from '@/utils/driveBrowser';
 import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProject, type ProjectParseResult } from '@/store/projectFile';
@@ -14,7 +14,6 @@ import { DOWNLOAD_FAILED_MESSAGE, UNREADABLE_FILE_MESSAGE, downloadTextFile, pro
 import { ProjectLoading } from '../ProjectLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useLiveStore } from '../ui/useLiveStore';
-import { Wordmark } from '../ui/Wordmark';
 import { DriveFileBrowserModal, type DriveFileBrowserModalProps } from './DriveFileBrowserModal';
 
 // Compile-time guard: production builds fold `import.meta.env.DEV` to false, so the
@@ -668,7 +667,16 @@ export function ProjectMenu() {
   const menu = useProjectMenu();
   return (
     <div className="dropdown">
-      <Wordmark ariaLabel="Project menu" chevron />
+      {/* A focusable <span>, not a <button>: see DROPDOWN_TRIGGER_NOTE in ui/BottomInputDock.tsx. */}
+      <span
+        id="btn-project-menu"
+        role="button"
+        tabIndex={0}
+        aria-label="Project menu"
+        className="inline-flex min-h-11 min-w-8 items-center justify-center rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <ChevronDown className="w-4 h-4 text-base-content/60" aria-hidden="true" />
+      </span>
       <ul
         // daisyUI's dropdown holds itself open on :focus-within, so the panel
         // must be focusable or the menu closes the moment a pointer-down lands

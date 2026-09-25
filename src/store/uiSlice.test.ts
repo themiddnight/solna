@@ -420,3 +420,19 @@ describe('record arm re-links the input target', () => {
     }
   });
 });
+
+describe('app modal flag', () => {
+  test('starts closed and opens through its setter', () => {
+    expect(useAppStore.getState().isAppModalOpen).toBe(false);
+    useAppStore.getState().setIsAppModalOpen(true);
+    expect(useAppStore.getState().isAppModalOpen).toBe(true);
+    useAppStore.getState().setIsAppModalOpen(false);
+    expect(useAppStore.getState().isAppModalOpen).toBe(false);
+  });
+
+  test('is session-only: in neither partializeAppState nor PROJECT_CONTENT_KEYS', () => {
+    const persisted = partializeAppState(useAppStore.getState()) as unknown as Record<string, unknown>;
+    expect('isAppModalOpen' in persisted).toBe(false);
+    expect(PROJECT_CONTENT_KEYS).not.toContain('isAppModalOpen' as never);
+  });
+});

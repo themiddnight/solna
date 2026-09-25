@@ -5,14 +5,35 @@ paths:
   - "src/**/*.css"
   - "scripts/themeTokenGuard.ts"
   - "scripts/check-contrast.ts"
+  - "index.html"
 ---
 
 # Theming — the hard rule
 
-Two daisyUI themes (`solna-dark`, `solna-light`) declared CSS-first in `src/index.css` via
-`@plugin "daisyui/theme"`. **There is no `tailwind.config.*` and none may be added.**
-`index.html` sets `data-theme` in a blocking head script; it persists to `localStorage` under
-`solna_theme`.
+Two Solna themes (`solna-dark`, `solna-light`) are declared CSS-first in `src/index.css` via
+`@plugin "daisyui/theme"`; every daisyUI built-in in the installed major is listed beside them.
+**There is no `tailwind.config.*` and none may be added.**
+
+## Theme roster and choice
+
+- The roster is `THEMES` in `src/components/settings/themes.ts`: the two Solna themes, then the
+  daisyUI built-ins alphabetically, each with a hand-written `scheme`. `index.css`'s `themes:` list
+  and both light palette selectors (`--key-*`/`--roll-key-*` and `--module-*`/`--drum-*`) repeat
+  it; `themes.test.ts` binds all three to the registry and each built-in's `scheme` to the
+  `color-scheme` in `node_modules/daisyui/theme/<id>.css`. A daisyUI upgrade that adds, drops or
+  re-schemes a theme fails there. Dark themes fall through to the `:root` / `solna-dark` blocks. <!-- R344 -->
+- `solna_theme` holds a `ThemeChoice` — a roster id or `system` — validated on read by
+  `parseThemeChoice` (absent/unknown → `system`); `system` resolves to `solna-light`/`solna-dark`
+  by `prefers-color-scheme`, live. `index.html`'s blocking script mirrors `resolveTheme` and sets
+  any other value verbatim; `themeBootstrap.test.ts` pins the two together. <!-- R345 -->
+- Choosing a theme previews it (`data-theme` on `<html>` only); only **Apply** persists; closing
+  the app modal by any path reverts an unapplied preview. Theme state lives in
+  `useThemeChoice` (`createThemeChoiceStore`), called once by the always-mounted `AppModal`, and
+  never enters a zustand slice. <!-- R346 -->
+- `<meta name="theme-color">` follows the painted theme: the live `--color-base-200` resolved to
+  `rgb()` through `utils/themeColor.ts`, rewritten on every repaint. <!-- R347 -->
+
+([ADR-0051](../../docs/decisions/0051-theme-picker.md))
 
 Components name **roles**, never colours. `scripts/themeTokenGuard.ts` scans
 `src/**/*.{ts,tsx}` and fails the build on: raw hex, Tailwind palette classes (`indigo-*`,
@@ -31,8 +52,8 @@ Run `bun run check:theme` to check this suite alone.
 `--drum-*` and `--module-*` carry their own namespaces and their own gate.
 
 - `bun run check:contrast` measures every `--drum-*` and `--module-*` fill against its own
-  `-content` in both themes and fails below AA 4.5:1; it is a gate a palette can fail, not a
-  report. <!-- R011 -->
+  `-content` in both Solna palettes (the light one also serves every light daisyUI theme) and
+  fails below AA 4.5:1; it is a gate a palette can fail, not a report. <!-- R011 -->
 - Rosters: Beat voices come from `BEAT_VOICE_IDS` (the CSS tokens stay `--drum-*`, with the same
   id strings); module names are parsed from `index.css`, because the CLI gate must not import a
   React component (`Knob`'s `KnobColor`). <!-- R012 -->
@@ -59,3 +80,7 @@ across majors, so confirm against the docs for the version actually installed.
 - A palette below AA 4.5:1, or treating `check:contrast` as a report <!-- R011 -->
 - The contrast CLI importing a React component for its roster <!-- R012 -->
 - A module colour declared in one theme only <!-- R013 -->
+- A theme in `index.css` or a light palette selector that is not in `THEMES`, or the reverse <!-- R344 -->
+- A migration or version bump for `solna_theme`; a bootstrap that disagrees with `resolveTheme` <!-- R345 -->
+- Persisting on select, or a theme value in a zustand slice <!-- R346 -->
+- An `oklch()` or hard-coded `theme-color` written at runtime <!-- R347 -->

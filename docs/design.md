@@ -10,7 +10,7 @@
 
 ## 2. Color System & Theme Architecture
 
-Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes designed to reduce eye strain during extended creative sessions while maintaining high contrast.
+Solna is built using Tailwind CSS and DaisyUI, featuring two custom-crafted warm-tinted themes (Solna Dark and Solna Light) plus every daisyUI built-in theme, chosen in the app modal the wordmark opens (ADR-0051), designed to reduce eye strain during extended creative sessions while maintaining high contrast.
 
 ### 🌌 Solna-Dark (`solna-dark`) — Plum Shadow & Rising Gold
 The hour before sunrise, with some of the night still in the shadows. A warm
@@ -70,7 +70,7 @@ without clinical stark white glare.
 >
 > **Module tints are flat, and they need a surface under them.** `tint-chord` and `tint-bass` paint a 10% module colour as a single-colour image layer over `bg-panel`, for the Synth `SectionCard` in `SoundView` (once — see §6.5) and the progression and Bass Module cards in `ChordView`. They are image layers rather than background-colours because those cards already carry `bg-panel`, and two background-colour utilities on one element is a coin toss decided by Tailwind's sort order. The `ChordView` pair used to be `bg-module-chord/10` and `bg-module-bass/10` with no surface beneath — 10% opaque directly on the canvas, so the sky gradient read straight through the cards and they appeared to be gradients themselves. Any tinted card needs `bg-panel` under the tint for the same reason.
 
-> Both themes are declared CSS-first in `src/index.css` via `@plugin "daisyui/theme" { … }`. There is no `tailwind.config.*` file in this repository and none may be added. The active theme is read from `document.documentElement.dataset.theme` and persisted to `localStorage` under `solna_theme`; `index.html` sets the attribute in a blocking `<head>` script so light-theme users never see a dark first paint.
+> Both themes are declared CSS-first in `src/index.css` via `@plugin "daisyui/theme" { … }`. There is no `tailwind.config.*` file in this repository and none may be added. The active theme is `document.documentElement.dataset.theme`; `solna_theme` in `localStorage` holds the choice (a theme id or `system`), and `index.html` resolves it in a blocking `<head>` script so light-theme users never see a dark first paint.
 
 ---
 
@@ -137,7 +137,7 @@ Typography is shared with murva, and solna is **single-face**: one sans stack fo
 
 Solna is structured into modular, single-responsibility React components:
 
-1. **`Header.tsx`**: Top navigation bar containing the Solna brand logo, project title, primary view tabs (`Sound`, `Pattern`, `Arrange`, `Master FX`), global Key/Scale selector, Project modal trigger, the **Theme Toggle** button, and the song layer's `Export ▾` menu — the header's one arrangement-wide action, offering **Export mixdown (WAV)**, which renders the whole arrangement to a file the browser downloads (`ExportButton`, rendered only when the active layer is the song layer; the menu is shaped for a stem row that v1 does not ship). The right-hand cluster is data — `HEADER_TOOLS` in `header/headerTools.ts`, rendered around the tab nav; each tool's `layers` is its only gate (ADR-0040).
+1. **`Header.tsx`**: Top navigation bar containing the Solna brand logo, project title, primary view tabs (`Sound`, `Pattern`, `Arrange`, `Master FX`), global Key/Scale selector, the wordmark (opens the Settings / About modal) and the project menu's chevron, and the song layer's `Export ▾` menu — the header's one arrangement-wide action, offering **Export mixdown (WAV)**, which renders the whole arrangement to a file the browser downloads (`ExportButton`, rendered only when the active layer is the song layer; the menu is shaped for a stem row that v1 does not ship). The right-hand cluster is data — `HEADER_TOOLS` in `header/headerTools.ts`, rendered around the tab nav; each tool's `layers` is its only gate (ADR-0040).
 2. **`components/vibes/`** — the Vibes Header tool and its picker modal: the genre cards previewed on the current loop, kept on Use, undone on Cancel; the vibes stack one per row, each with its own dice that previews a reroll of that vibe, and the card the loop was loaded from is marked Current.
 3. **`TransportBar.tsx`**: Bottom sticky player controls featuring the app's ONE Play/Stop (the per-tab "Tab Play" transports were deleted with the nav restructure — `Header.tsx` renders no `PlayerTransport` any more), a play-target label naming what Play will start (`Song` on the song layer, the active loop's name on the loop layer — `playTargetLabel` in `components/transportAction.ts`, tied to the button by `aria-describedby`; which action Play runs is the layer itself, read inline in `TransportBar`), a BPM stepper (−/+ buttons around a `40`–`240` number input; there is **no** tap-tempo), a Metronome toggle, a **mono** dBFS level meter (`VuMeter` → `ui/MeterBar.tsx`: a solid RMS fill over a fainter peak fill, both coloured ONCE from `classifyZone(peakDbfs)` — neutral `base-content/30` below −24, `success` from −24 to −6, `warning` in `hot` (−6 to −1), `error` at `over` (≥ −1) — with zone ticks and a decaying peak-hold marker; never a gradient, and no segments: the ten-block bar and `utils/vuMeter.ts` were both deleted), and the Master Output volume fader. Its centre carries `PlayheadReadout`, not the visualizer — the canvas view moved to `EffectsRackView`'s Monitor section (item 7). That is the desktop bar. The mobile frame asks for `variant="mobile"` (R332): ONE row — Play/Stop, the play-target label (truncating), the `IncidentWarning` chip, a read-only `BPM · meter` readout with a dot while the metronome is on, and a chevron — and the readout or the chevron opens the **transport sheet**, a non-modal `BottomSheet` anchored above the bar that holds the BPM stepper, meter select, metronome, MIDI entry, level meter and the master fader with its dB readout, so Play/Stop stay tappable while it is open.
 
@@ -228,7 +228,7 @@ wanted.
 
 ## 6. Token Discipline & Enforcement
 
-Solna has exactly two themes, and every surface must work in both. That is only achievable if **no component names a colour**. Components name *roles*; `src/index.css` maps roles to colours; daisyUI swaps the mapping when `data-theme` changes.
+Every surface must work in every theme — the two Solna themes and every daisyUI built-in. That is only achievable if **no component names a colour**. Components name *roles*; `src/index.css` maps roles to colours; daisyUI swaps the mapping when `data-theme` changes.
 
 ### 6.1 Canonical role map
 

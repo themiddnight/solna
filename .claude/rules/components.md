@@ -63,6 +63,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - The layout mode is `useLayoutMode()` (`components/shell/useLayoutMode.ts`): viewport width at `md`, which `index.css` sets to 46.5rem (744px, iPad mini portrait) rather than Tailwind's 48rem, and `LAYOUT_MODE_QUERY` names the same width; never persisted, never a slice, no user override; nothing else reads the viewport to pick a frame. <!-- R315 -->
 - `Workspace` owns everything that must survive a layout switch — the coordinators, `PlaybackHost` and the app-level dialogs; a shell (`DesktopShell`, `MobileShell`) owns only the visible frame and never mounts one of those. <!-- R316 -->
 - A Header tool is a `HEADER_TOOLS` row (`components/header/headerTools.ts`) whose `layers` is its only availability gate; a new tool is a row, never JSX in `Header.tsx`, and never gates itself on the layer. <!-- R317 -->
+- The wordmark (`ui/Wordmark.tsx`, rendered through `settings/AppWordmark.tsx`) is a `<button>` that opens the app modal (the theme picker, a divider, then the About lines — no tabs; `settings/AppModal.tsx`, open flag `isAppModalOpen`) on both frames; on desktop the project menu's trigger is the chevron `<span role="button">` right after it. The theme is chosen only in the app modal — it is not a `HEADER_TOOLS` row. <!-- R348 --> ([ADR-0051](../../docs/decisions/0051-theme-picker.md))
 - Mobile navigation is `MobileTabBar` (`components/shell/MobileTabBar.tsx`): the `VIEW_ORDER` tabs, each calling `setActiveTab`; the tab implies the layer (`layerForTab`); the mobile frame has no layer switch, no second navigation state and no route logic of its own. <!-- R318 -->
 - The mobile top bar splits `HEADER_TOOLS` by id (`MOBILE_BAR_TOOL_IDS`, `components/shell/useMobileTopBar.ts`): field tools inline, every other available tool in the menu sheet as `variant="row"`; a tool that can reach the menu renders a `MenuRowButton` for `row`; the descriptor gains no placement or label field. <!-- R319 -->
 - The mobile menu sheet is a `BottomSheet`, always rendered and closed only by dismissal; what a row opens renders inside the sheet's dialog — a nested dialog, or `afterBox` for a fixed overlay — never inside a daisyUI `menu` item. <!-- R320 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
@@ -122,8 +123,15 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   gets a drawer, even where a quick pick also exists. <!-- R327 -->
 - A popup is a daisyUI `dropdown` anchored to its trigger (`dropdown-open` when controlled), kept
   inside the viewport horizontally by a pure helper; no popover API or CSS anchor positioning
-  while the browser floor lacks them; a popup never renders inside a bottom sheet — a tool that
-  reaches the sheet renders inline controls for its `row` variant instead. <!-- R328 -->
+  while the browser floor lacks them. The one exception is a popup that must sit above an open
+  `Modal`: a React portal still renders under the dialog's native top layer, so it is a
+  `popover="auto"` element instead, positioned by a pure geometry helper the colocated hook wires
+  up on the popover's `toggle` event and on `resize`/`scroll` while open — never CSS anchor
+  positioning, for the same Firefox-support reason (the theme picker panel,
+  `settings/ThemePicker.tsx` + `settings/placePopover.ts`). That helper opens below the trigger
+  whenever the panel fits below; only when it does not fit below does it choose whichever side has
+  more room. A popup never renders inside a bottom sheet — a tool that reaches the sheet renders
+  inline controls for its `row` variant instead. <!-- R328 -->
 - Feedback is a toast, a snackbar (at most one action) or a banner (in flow, persistent until
   handled); an alert rendered inside a modal, drawer or card body is content, not feedback. While
   any `Modal` or modal `BottomSheet` is open, entries queue in the host with their timers held, so a
@@ -143,7 +151,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   though the popup's own step nominally outranks it — an accepted trade-off, not a bug to chase
   with a one-off z-index. <!-- R331 -->
 
-([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
+([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md); R328's top-layer-escape
+case: [ADR-0051](../../docs/decisions/0051-theme-picker.md))
 
 ## Prohibited
 
@@ -175,6 +184,7 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   plain `justify-center` on a keyboard row that can overflow <!-- R340 -->
 - A second scroll container per frame for the views, scroll positions in a slice or storage, or a
   restore read from `scrollTop` after the switch <!-- R342 -->
+- A theme control outside the app modal, or a wordmark that is not the app modal's button <!-- R348 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
 - An always-visible vibe strip, or a vibe entry point outside the `vibes` HEADER_TOOLS row <!-- R333 -->
 - A vibe picker that is a BottomSheet, a drawer or non-modal, or a Use enabled before a preview <!-- R334 -->
@@ -186,7 +196,9 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   scroll region inside `Modal`/`BottomSheet`, a `modal-action` row inside a `Modal`'s scrolling body,
   or a bare `flex` on a non-modal sheet's `<dialog>` <!-- R339 -->
 - A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
-- A popup rendered inside a bottom sheet, or positioned via the popover API or CSS anchor positioning <!-- R328 -->
+- A popup rendered inside a bottom sheet; a popup positioned via the popover API or CSS anchor
+  positioning anywhere but the top-layer-escape case above; that case positioned via CSS anchor
+  positioning <!-- R328 -->
 - A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an
   inline alert there instead of going through `showFeedback` <!-- R329 -->
 - A daisyUI `toast` class, a fixed alert outside `FeedbackHost`, or a toast/snackbar bypassing `showFeedback` <!-- R330 -->

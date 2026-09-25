@@ -56,16 +56,16 @@ describe('one bottom inset per frame', () => {
 const ids = (tools: readonly { id: string }[]) => tools.map((tool) => tool.id);
 
 describe('the mobile top bar splits HEADER_TOOLS by id', () => {
-  test('loop layer: loop picker and key inline; vibes, copy and theme in the menu', () => {
+  test('loop layer: loop picker and key inline; vibes and copy in the menu', () => {
     const { bar, menu } = mobileHeaderTools('loop');
     expect(ids(bar)).toEqual(['loop-selector', 'scale']);
-    expect(ids(menu)).toEqual(['vibes', 'loop-copy', 'theme']);
+    expect(ids(menu)).toEqual(['vibes', 'loop-copy']);
   });
 
-  test('song layer: project name inline; follow, export and theme in the menu', () => {
+  test('song layer: project name inline; follow and export in the menu', () => {
     const { bar, menu } = mobileHeaderTools('song');
     expect(ids(bar)).toEqual(['project-name']);
-    expect(ids(menu)).toEqual(['follow-playhead', 'export', 'theme']);
+    expect(ids(menu)).toEqual(['follow-playhead', 'export']);
   });
 
   test('every tool lands in exactly one place on every layer it is available on', () => {
@@ -81,16 +81,18 @@ describe('the menu sheet', () => {
   const sheet = (layer: 'loop' | 'song') =>
     renderToString(createElement(MobileMenuSheet, { tools: mobileHeaderTools(layer).menu, open: false, onClose: noop }));
 
-  test('loop layer: copy, theme and the project rows; no song tools', () => {
+  test('loop layer: copy and the project rows; no song tools', () => {
     const html = sheet('loop');
-    for (const id of ['btn-copy-loop', 'btn-toggle-theme', 'project-menu-new', 'project-menu-save']) expect(html).toContain(`id="${id}"`);
+    for (const id of ['btn-copy-loop', 'project-menu-new', 'project-menu-save']) expect(html).toContain(`id="${id}"`);
     for (const id of ['btn-export', 'btn-follow-playhead']) expect(html).not.toContain(`id="${id}"`);
+    expect(html).not.toContain('id="btn-toggle-theme"');
   });
 
-  test('song layer: follow, export, theme and the project rows; no loop tools', () => {
+  test('song layer: follow, export and the project rows; no loop tools', () => {
     const html = sheet('song');
-    for (const id of ['btn-follow-playhead', 'btn-export', 'btn-toggle-theme', 'project-menu-new']) expect(html).toContain(`id="${id}"`);
+    for (const id of ['btn-follow-playhead', 'btn-export', 'project-menu-new']) expect(html).toContain(`id="${id}"`);
     expect(html).not.toContain('id="btn-copy-loop"');
+    expect(html).not.toContain('id="btn-toggle-theme"');
   });
 
   test('is a bottom sheet, with project rows touch-sized and no dialog inside a menu item', () => {
@@ -141,6 +143,7 @@ describe('the mobile frame', () => {
   test('the top bar shows the full wordmark, and its field tools keep their desktop heights', () => {
     const html = renderToString(createElement(MobileShell, SHELL_PROPS));
     expect(html).toContain('solna</span>');
+    expect(html).toContain('id="btn-app-modal"'); // the wordmark opens the app modal on the phone too
     expect(html).not.toContain('[&amp;_select]:min-h-11');
   });
 });

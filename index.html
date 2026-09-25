@@ -87,18 +87,23 @@
     <title>solna — build your music loop</title>
     <script>
       // Pre-paint theme bootstrap. Must stay inline and blocking (no defer/async)
-      // so data-theme is correct before the first paint — otherwise solna-light
-      // users get a dark flash. Header.tsx reads this attribute for its initial
-      // React state, so this is also the single source of truth on first render.
+      // so data-theme is correct before the first paint — otherwise light-theme
+      // users get a dark flash. solna_theme holds a ThemeChoice: a theme id, or
+      // 'system' / nothing, which follows prefers-color-scheme between the two
+      // Solna themes. Any other value is set verbatim: an unknown id still
+      // paints (solna-dark is daisyUI's --default), and useThemeChoice
+      // (src/components/settings) corrects it on mount. themeBootstrap.test.ts
+      // pins this to resolveTheme(parseThemeChoice(stored)).
       (function () {
-        var theme = null;
+        var choice = null;
         try {
-          theme = localStorage.getItem('solna_theme');
+          choice = localStorage.getItem('solna_theme');
         } catch (e) {
           // Private mode / blocked storage: fall through to the media query.
-          theme = null;
+          choice = null;
         }
-        if (theme !== 'solna-dark' && theme !== 'solna-light') {
+        var theme = choice;
+        if (!choice || choice === 'system') {
           theme =
             window.matchMedia &&
             window.matchMedia('(prefers-color-scheme: light)').matches

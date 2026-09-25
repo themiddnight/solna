@@ -25,6 +25,12 @@ import {
   type OpenProjectFile,
 } from './ProjectMenu';
 
+function openTag(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  return html.slice(html.lastIndexOf('<', idx), html.indexOf('>', idx) + 1);
+}
+
 const FAKE_BODY = { id: 'p1', name: 'x', createdAt: 0, updatedAt: 0 } as unknown as ProjectBody;
 
 /** Records every call and answers with a fixed result — `openProjectFile` never actually installs anything here. */
@@ -336,10 +342,15 @@ describe('ProjectMenu rendering', () => {
   // The menu is behind a dropdown that opens on focus, which renderToString
   // never triggers — so the closed state is what is pinned here: the trigger is
   // a labelled button and the file input is present but hidden.
-  test('renders a labelled dropdown trigger and a hidden file picker', () => {
+  test('renders a chevron dropdown trigger, a focusable span, and a hidden file picker', () => {
     const html = renderToString(<ProjectMenu />);
     expect(html).toContain('dropdown');
-    expect(html).toContain('aria-label="Project menu"');
+    const trigger = openTag(html, 'aria-label="Project menu"');
+    expect(trigger.startsWith('<span')).toBe(true);
+    expect(trigger).toContain('id="btn-project-menu"');
+    expect(trigger).toContain('role="button"');
+    expect(trigger).toContain('tabindex="0"');
+    expect(html).not.toContain('solna</span>'); // the wordmark is no longer inside the menu
     expect(html).toContain('type="file"');
     expect(html).toContain('accept=".solna,.json"');
   });

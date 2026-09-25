@@ -28,7 +28,7 @@ bun test -t "reverb decay"                 # one test by name
 bun run check:theme    # theme-token guard suite only
 bun run check:keys     # drum-pad vs synth key-binding collision check
 bun run check:drums    # Beat-preset audible-separation check
-bun run check:contrast # Beat-voice and module palette AA contrast floor (both themes)
+bun run check:contrast # Beat-voice and module palette AA contrast floor (both Solna palettes)
 bun run check:levels   # calibration trim table still matches today's Beat-preset defaults
 bun run check:dead-code             # unused files, exports, types and dependencies across app + tooling
 bun run check:dead-code:production  # strict shipped-code file and dependency graph
@@ -158,7 +158,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `playback.md` | Clock, store→engine bridge, `PlaybackHost`, planned-then-performed playback, song timeline, snapshots, pub/subs |
 | `export.md` | The export job: one session-only job, kinds as data, the shared runner, the dialog and the Header trigger; MIDI export (lanes, channels, GM map); stems (dry bus taps, one ZIP) |
 | `metering.md` | Sample-based meters, tap point, meter scheduler |
-| `theming.md` | Theme tokens and the palette contrast gate |
+| `theming.md` | Theme tokens, the theme roster and choice, and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |
 | `note-input.md` | The note-input dispatcher, focus-routed input and the input target link |
 | `components.md` | Component logic in a colocated hook, narrow store selectors, placement, the layout shell, `HEADER_TOOLS` and the mobile frame |

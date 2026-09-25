@@ -3,41 +3,37 @@ import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { Wordmark } from './Wordmark';
 
+const noop = () => {};
+
 describe('Wordmark', () => {
-  // A focusable span, not a <button>: it is rendered inside daisyUI's
-  // `dropdown`, whose open state is driven by `:focus-within`, and a nested
-  // button would swallow the focus the dropdown needs.
-  test('is a focusable span with a 44px target', () => {
-    const html = renderToString(<Wordmark />);
-    expect(html).toContain('tabindex="0"');
-    expect(html).toContain('role="button"');
+  // A real <button> now: it opens the app modal, and is no longer a dropdown
+  // trigger (the project menu has its own chevron) — R348.
+  test('is a button that announces a dialog, with a 44px target', () => {
+    const html = renderToString(<Wordmark onClick={noop} />);
+    // React 19 hoists a `<link rel="preload">` for the <img> ahead of the
+    // markup itself; strip that resource hint before checking the root tag.
+    const markup = html.replace(/^(?:<link[^>]*\/>)+/, '');
+    expect(markup.startsWith('<button')).toBe(true);
+    expect(html).toContain('id="btn-app-modal"');
+    expect(html).toContain('type="button"');
+    expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('min-h-11 min-w-11');
-    expect(html).toContain('h-8 w-8'); // the mark image is unchanged; padding lives on the trigger
+    expect(html).toContain('h-8 w-8');
+    expect(html).not.toContain('role="button"');
+    expect(html).not.toContain('tabindex');
+  });
+
+  test('its accessible name contains the visible word (label in name)', () => {
+    expect(renderToString(<Wordmark onClick={noop} />)).toContain('aria-label="Solna — settings and about"');
   });
 
   test('shows a hover and focus-visible affordance from theme tokens', () => {
-    const html = renderToString(<Wordmark />);
+    const html = renderToString(<Wordmark onClick={noop} />);
     expect(html).toContain('hover:bg-base-200');
     expect(html).toContain('focus-visible:outline-primary');
   });
 
-  // The wordmark carries no accessible name of its own any more: it is the
-  // ProjectMenu trigger, and that caller is what names the control.
-  test('takes its accessible name from the caller', () => {
-    expect(renderToString(<Wordmark />)).not.toContain('aria-label=');
-    expect(renderToString(<Wordmark ariaLabel="Project menu" />)).toContain('aria-label="Project menu"');
-  });
-
-  test('non-interactive: an image, not a button, and not focusable', () => {
-    const html = renderToString(<Wordmark markOnly interactive={false} />);
-    expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="Solna"');
-    expect(html).not.toContain('role="button"');
-    expect(html).not.toContain('tabindex');
-    expect(html).not.toContain('cursor-pointer');
-  });
-
   test('markOnly drops the text', () => {
-    expect(renderToString(<Wordmark markOnly />)).not.toContain('solna</span>');
+    expect(renderToString(<Wordmark onClick={noop} markOnly />)).not.toContain('solna</span>');
   });
 });

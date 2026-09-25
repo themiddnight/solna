@@ -4,7 +4,7 @@ import type { HeaderTool } from '@/components/header/headerTools';
 import { ProjectMenuEffects, ProjectMenuSections, useProjectMenu } from '@/components/project/ProjectMenu';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { IconButton } from '@/components/ui/IconButton';
-import { Wordmark } from '@/components/ui/Wordmark';
+import { AppWordmark } from '@/components/settings/AppWordmark';
 import { useMobileTopBar } from './useMobileTopBar';
 
 interface MobileMenuSheetProps {
@@ -45,15 +45,15 @@ export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) 
 }
 
 /**
- * The phone's top bar: the wordmark, the layer's field tools (loop picker + key,
- * or the project name), and the menu button. Replaces the desktop Header's
- * tab nav, which the bottom tab bar covers.
+ * The phone's top bar: the wordmark (which opens the app modal), the layer's
+ * field tools (loop picker + key, or the project name), and the menu button.
+ * Replaces the desktop Header's tab nav, which the bottom tab bar covers.
  */
 export const MobileTopBar = React.memo(function MobileTopBar() {
   const { bar, menu, menuOpen, openMenu, closeMenu } = useMobileTopBar();
   return (
     <header className="navbar min-h-0 shrink-0 bg-base-100 border-b border-base-300 px-2 py-1.5 gap-2 select-none sticky top-0 z-40 flex items-center text-sm">
-      <Wordmark interactive={false} />
+      <AppWordmark />
       {/* The field tools keep their desktop heights, so the bar stays short. */}
       <div className="flex flex-1 min-w-0 items-center justify-end gap-1.5">
         {bar.map(({ id, Component }) => (

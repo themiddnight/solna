@@ -40,8 +40,8 @@ function isKeyboardMode(value: string | null): value is KeyboardMode {
 /**
  * Reads the persisted keyboard-mode choice, degrading to `null` (i.e. "no
  * stored preference, or garbage") if storage access throws or the stored
- * value isn't one of the three known modes. Mirrors `readStoredTheme` in
- * `components/header/useTheme.ts` via the shared guarded-storage helpers.
+ * value isn't one of the three known modes. Mirrors `readThemeChoice` in
+ * `components/settings/useThemeChoice.ts` via the shared guarded-storage helpers.
  */
 export function readStoredKeyboardMode(storage?: Pick<Storage, 'getItem'>): KeyboardMode | null {
   return readValidatedStorageValue(KEYBOARD_MODE_STORAGE_KEY, isKeyboardMode, storage);
@@ -86,6 +86,7 @@ export function createUiSlice(set: Set): UiSlice {
     midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
     isMidiSettingsOpen: false,
+    isAppModalOpen: false,
     isInputPanelOpen: false,
     noteInputSuspended: false,
     midiLearnTargetId: null,
@@ -149,6 +150,7 @@ export function createUiSlice(set: Set): UiSlice {
       })),
     resetMidiMappings: () => set({ midiMappings: DEFAULT_MIDI_MAPPINGS }),
     setIsMidiSettingsOpen: (isMidiSettingsOpen) => set({ isMidiSettingsOpen }),
+    setIsAppModalOpen: (isAppModalOpen) => set({ isAppModalOpen }),
     setNoteInputSuspended: (noteInputSuspended) => set({ noteInputSuspended }),
     setMidiLearnTargetId: (midiLearnTargetId) => set({ midiLearnTargetId }),
     setIsInputPanelOpen: (isInputPanelOpen) => set({ isInputPanelOpen }),
