@@ -29,6 +29,8 @@ export const SCALE_CATEGORIES: readonly ScaleCategory[] = ['Diatonic', 'Modes', 
 export interface ScaleDefinition {
   /** Display name, e.g. 'Minor (Natural)'. */
   name: string;
+  /** The compact header trigger's label, e.g. 'MinPent': unique, at most 7 characters. */
+  abbr: string;
   /** One line of mood and genres, e.g. 'Minor but hopeful · jazz, funk, soul'. */
   description: string;
   category: ScaleCategory;
@@ -43,6 +45,7 @@ export interface ScaleDefinition {
 export const SCALES: Record<string, ScaleDefinition> = {
   'Major': {
     name: 'Major',
+    abbr: 'Maj',
     description: 'Bright and uplifting · pop, rock, folk',
     category: 'Diatonic',
     tonal: 'major',
@@ -50,6 +53,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Natural Minor': {
     name: 'Minor (Natural)',
+    abbr: 'Min',
     description: 'Dark and emotional · rock, pop, classical',
     category: 'Diatonic',
     tonal: 'aeolian',
@@ -57,6 +61,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Harmonic Minor': {
     name: 'Harmonic Minor',
+    abbr: 'HarmMin',
     description: 'Dramatic with an exotic pull · classical, metal',
     category: 'Diatonic',
     tonal: 'harmonic minor',
@@ -64,6 +69,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Melodic Minor': {
     name: 'Melodic Minor',
+    abbr: 'MelMin',
     description: 'Smooth and bittersweet · jazz, cinematic',
     category: 'Diatonic',
     tonal: 'melodic minor',
@@ -71,6 +77,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Harmonic Major': {
     name: 'Harmonic Major',
+    abbr: 'HarmMaj',
     description: 'Warm with a classical color · orchestral, jazz',
     category: 'Diatonic',
     tonal: 'harmonic major',
@@ -78,6 +85,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Dorian': {
     name: 'Dorian',
+    abbr: 'Dor',
     description: 'Minor but hopeful · jazz, funk, soul',
     category: 'Modes',
     tonal: 'dorian',
@@ -85,6 +93,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Phrygian': {
     name: 'Phrygian',
+    abbr: 'Phryg',
     description: 'Dark and tense · metal, flamenco',
     category: 'Modes',
     tonal: 'phrygian',
@@ -92,6 +101,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Lydian': {
     name: 'Lydian',
+    abbr: 'Lyd',
     description: 'Dreamy and ethereal · film scores, ambient',
     category: 'Modes',
     tonal: 'lydian',
@@ -99,6 +109,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Mixolydian': {
     name: 'Mixolydian',
+    abbr: 'Mixo',
     description: 'Bright but bluesy · rock, blues, country',
     category: 'Modes',
     tonal: 'mixolydian',
@@ -106,6 +117,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Locrian': {
     name: 'Locrian',
+    abbr: 'Loc',
     description: 'Tense and unresolved · experimental, horror',
     category: 'Modes',
     tonal: 'locrian',
@@ -113,6 +125,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Dorian b2': {
     name: 'Dorian ♭2',
+    abbr: 'Dor♭2',
     description: 'Dark and exotic · ethnic fusion, jazz',
     category: 'Modes',
     tonal: 'dorian b2',
@@ -120,6 +133,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Lydian Dominant': {
     name: 'Lydian Dominant',
+    abbr: 'LydDom',
     description: 'Bright with a bluesy edge · jazz, funk, fusion',
     category: 'Modes',
     tonal: 'lydian dominant',
@@ -127,6 +141,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Lydian Augmented': {
     name: 'Lydian Augmented',
+    abbr: 'Lyd♯5',
     description: 'Mysterious and floating · cinematic, jazz',
     category: 'Modes',
     tonal: 'lydian augmented',
@@ -134,6 +149,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Mixolydian b6': {
     name: 'Mixolydian ♭6',
+    abbr: 'Mixo♭6',
     description: 'Bittersweet and moody · film, fusion',
     category: 'Modes',
     tonal: 'mixolydian b6',
@@ -141,6 +157,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Locrian #2': {
     name: 'Locrian ♯2',
+    abbr: 'Loc♯2',
     description: 'Tense but usable in jazz · modern, fusion',
     category: 'Modes',
     tonal: 'locrian #2',
@@ -148,6 +165,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Phrygian Dominant': {
     name: 'Phrygian Dominant',
+    abbr: 'PhrDom',
     description: 'Intense and passionate · flamenco, metal, cinematic',
     category: 'Modes',
     tonal: 'phrygian dominant',
@@ -155,6 +173,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Major Pentatonic': {
     name: 'Major Pentatonic',
+    abbr: 'MajPent',
     description: 'Open and positive · pop, country, rock',
     category: 'Pentatonic',
     tonal: 'major pentatonic',
@@ -163,6 +182,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Minor Pentatonic': {
     name: 'Minor Pentatonic',
+    abbr: 'MinPent',
     description: 'Soulful and versatile · blues, rock, R&B',
     category: 'Pentatonic',
     tonal: 'minor pentatonic',
@@ -171,6 +191,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Egyptian': {
     name: 'Egyptian',
+    abbr: 'Egypt',
     description: 'Ancient and mysterious · world, experimental',
     category: 'Pentatonic',
     tonal: 'egyptian',
@@ -183,6 +204,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Major Blues': {
     name: 'Major Blues',
+    abbr: 'MajBlu',
     description: 'Cheerful with a bluesy bite · blues, rock',
     category: 'Blues',
     tonal: 'major blues',
@@ -191,6 +213,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Blues': {
     name: 'Minor Blues',
+    abbr: 'MinBlu',
     description: 'Gritty and soulful · blues, rock, jazz',
     category: 'Blues',
     tonal: 'blues',
@@ -199,6 +222,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Hirajoshi': {
     name: 'Hirajoshi (Japanese)',
+    abbr: 'Hira',
     description: 'Sparse and contemplative · ambient, world',
     category: 'World',
     // 1, 2, b3, 5, b6 — step pattern 2-1-4-1-4, two half-steps and two major
@@ -215,6 +239,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Pelog': {
     name: 'Pelog (Indonesian)',
+    abbr: 'Pelog',
     description: 'Mystical and gamelan-like · world, experimental',
     category: 'World',
     tonal: 'pelog',
@@ -224,6 +249,7 @@ export const SCALES: Record<string, ScaleDefinition> = {
   },
   'Vietnamese': {
     name: 'Vietnamese',
+    abbr: 'Viet',
     description: 'Gentle and Southeast Asian · folk, world',
     category: 'World',
     tonal: 'vietnamese 1',

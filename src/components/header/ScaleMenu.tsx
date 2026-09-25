@@ -99,7 +99,7 @@ export function ScaleMenu() {
               note, the full name in the `title`, and both selects one tap
               away in the dropdown. */}
           <span className="text-[10px] text-base-content/70 max-w-12 truncate max-[390px]:hidden">
-            {SCALES[scaleType]?.name?.slice(0, 4) ?? scaleType}
+            {SCALES[scaleType]?.abbr ?? scaleType}
           </span>
           <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
         </summary>

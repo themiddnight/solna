@@ -140,6 +140,19 @@ describe('SCALES', () => {
   });
 });
 
+describe('abbr', () => {
+  // The compact header trigger shows `abbr` in a 3rem slot at 10px: it must fit,
+  // and it must tell every scale apart (a cut of the name read 'Mino' three times).
+  test('every abbreviation is unique, non-blank and at most 7 characters', () => {
+    const abbrs = Object.values(SCALES).map((scale) => scale.abbr);
+    for (const [key, scale] of Object.entries(SCALES)) {
+      expect(scale.abbr.trim(), key).not.toBe('');
+      expect([...scale.abbr].length, key).toBeLessThanOrEqual(7);
+    }
+    expect(new Set(abbrs).size).toBe(abbrs.length);
+  });
+});
+
 describe('harmony', () => {
   // Every scale must harmonize at every degree: a scale whose derived
   // interval tuple is missing from the quality tables throws in

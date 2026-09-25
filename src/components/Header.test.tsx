@@ -13,7 +13,7 @@ import { LOOP_TABS, SONG_TABS } from '../types';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
-import { SCALE_CATEGORIES } from '@/data/scales';
+import { SCALES, SCALE_CATEGORIES } from '@/data/scales';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -323,6 +323,15 @@ describe('key picker', () => {
   test('the dropdown trigger wears the field box at the select height', () => {
     const html = renderToString(<ScaleMenu />);
     expect(html).toMatch(new RegExp(`<summary id="btn-scale-dropdown" class="${HEADER_FIELD_SHELL} box-content h-8 `));
+  });
+
+  // The compact trigger shows the scale's authored abbreviation, never a cut of
+  // its display name: a four-letter cut read 'Mino' for three different scales.
+  // Reads the creation-time scale, which is what renderToString sees (R257).
+  test('the compact trigger shows the scale abbreviation', () => {
+    const { scaleType } = useAppStore.getInitialState();
+    const html = renderToString(<ScaleMenu />);
+    expect(html).toContain(`max-[390px]:hidden">${SCALES[scaleType].abbr}</span>`);
   });
 
   // The header pair is FIXED width, and the scale name ellipsises inside it.
