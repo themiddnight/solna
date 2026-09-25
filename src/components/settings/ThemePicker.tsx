@@ -29,9 +29,11 @@ interface ThemeOptionProps {
   onSelect: () => void;
   /** Paints the row in this theme (daisyUI sets the row's colours from `data-theme`); System has none. */
   theme?: ThemeId;
+  /** `shrink-0` for the System row, which sits outside the scrollable list. */
+  className?: string;
 }
 
-function ThemeOption({ id, label, checked, onSelect, theme }: ThemeOptionProps) {
+function ThemeOption({ id, label, checked, onSelect, theme, className }: ThemeOptionProps) {
   return (
     <button
       id={id}
@@ -43,6 +45,7 @@ function ThemeOption({ id, label, checked, onSelect, theme }: ThemeOptionProps) 
       className={cx(
         'flex w-full min-h-11 items-center justify-between gap-3 rounded-field px-2 text-left text-sm transition-colors hover:bg-base-300',
         checked && 'ring-1 ring-primary/40',
+        className,
       )}
     >
       <span className="flex items-center gap-3">
@@ -99,19 +102,23 @@ export function ThemePicker({ preview, resolved, isPreviewing, onSelect, onApply
           role="radiogroup"
           aria-label="Theme"
           // Reset the UA popover default (`inset: 0; margin: auto`); the
-          // colocated hook sets top/left/width once it measures the trigger
-          // (placePopover — no CSS anchor positioning, Firefox support is
-          // incomplete).
+          // colocated hook sets top/left/width/max-height once it measures
+          // the trigger and the viewport (placePopover — no CSS anchor
+          // positioning, Firefox support is incomplete). `flex flex-col`
+          // plus the list's `min-h-0` is what lets the list — not the System
+          // row or the scheme tabs, both `shrink-0` — shrink to fit when
+          // that cap is smaller than the panel's natural height.
           style={{ position: 'fixed', inset: 'auto', margin: 0 }}
-          className="space-y-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+          className="flex flex-col space-y-2 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
         >
           <ThemeOption
             id="theme-option-system"
             label="System (follows OS)"
             checked={preview === 'system'}
             onSelect={() => onSelect('system')}
+            className="shrink-0"
           />
-          <div role="tablist" aria-label="Scheme" className="tabs tabs-box tabs-sm">
+          <div role="tablist" aria-label="Scheme" className="tabs tabs-box tabs-sm shrink-0">
             {SCHEME_TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -126,7 +133,7 @@ export function ThemePicker({ preview, resolved, isPreviewing, onSelect, onApply
               </button>
             ))}
           </div>
-          <div className="max-h-90 space-y-1 overflow-y-auto overscroll-contain">
+          <div className="min-h-0 max-h-90 space-y-1 overflow-y-auto overscroll-contain">
             {themes.map((entry) => (
               <ThemeOption
                 key={entry.id}

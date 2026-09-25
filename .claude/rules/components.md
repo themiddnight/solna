@@ -64,6 +64,10 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 - `Workspace` owns everything that must survive a layout switch — the coordinators, `PlaybackHost` and the app-level dialogs; a shell (`DesktopShell`, `MobileShell`) owns only the visible frame and never mounts one of those. <!-- R316 -->
 - A Header tool is a `HEADER_TOOLS` row (`components/header/headerTools.ts`) whose `layers` is its only availability gate; a new tool is a row, never JSX in `Header.tsx`, and never gates itself on the layer. <!-- R317 -->
 - The wordmark (`ui/Wordmark.tsx`, rendered through `settings/AppWordmark.tsx`) is a `<button>` that opens the app modal (Settings | About, `settings/AppModal.tsx`, open flag `isAppModalOpen`) on both frames; on desktop the project menu's trigger is the chevron `<span role="button">` right after it. The theme is chosen only in Settings — it is not a `HEADER_TOOLS` row. <!-- R348 --> ([ADR-0051](../../docs/decisions/0051-theme-picker.md))
+- `AppModal`'s Settings and About tab panels share one grid cell (`grid` on the container; each
+  panel `col-start-1 row-start-1`); the inactive panel is `invisible` + `inert`, never
+  `hidden`/`display:none` — so the dialog's height is always the tallest panel's and never
+  changes on a tab switch. <!-- R349 --> ([ADR-0051](../../docs/decisions/0051-theme-picker.md))
 - Mobile navigation is `MobileTabBar` (`components/shell/MobileTabBar.tsx`): the `VIEW_ORDER` tabs, each calling `setActiveTab`; the tab implies the layer (`layerForTab`); the mobile frame has no layer switch, no second navigation state and no route logic of its own. <!-- R318 -->
 - The mobile top bar splits `HEADER_TOOLS` by id (`MOBILE_BAR_TOOL_IDS`, `components/shell/useMobileTopBar.ts`): field tools inline, every other available tool in the menu sheet as `variant="row"`; a tool that can reach the menu renders a `MenuRowButton` for `row`; the descriptor gains no placement or label field. <!-- R319 -->
 - The mobile menu sheet is a `BottomSheet`, always rendered and closed only by dismissal; what a row opens renders inside the sheet's dialog — a nested dialog, or `afterBox` for a fixed overlay — never inside a daisyUI `menu` item. <!-- R320 --> ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
@@ -183,6 +187,7 @@ case: [ADR-0051](../../docs/decisions/0051-theme-picker.md))
 - A second scroll container per frame for the views, scroll positions in a slice or storage, or a
   restore read from `scrollTop` after the switch <!-- R342 -->
 - A theme control outside the app modal's Settings tab, or a wordmark that is not the app modal's button <!-- R348 -->
+- An `AppModal` tab panel hidden with `hidden`/`display:none` instead of the shared grid cell, or a dialog height that changes on a tab switch <!-- R349 -->
 - A description or how-to line shown on the phone frame, a hand-written viewport hide on one, or `HINT_TEXT` on state, feedback or a warning <!-- R323 -->
 - An always-visible vibe strip, or a vibe entry point outside the `vibes` HEADER_TOOLS row <!-- R333 -->
 - A vibe picker that is a BottomSheet, a drawer or non-modal, or a Use enabled before a preview <!-- R334 -->

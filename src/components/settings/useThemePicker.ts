@@ -22,7 +22,11 @@ export interface UseThemePicker {
  * render under `AppModal`'s native top layer, so positioning is imperative
  * DOM wiring here rather than React state — set on the popover's `toggle`
  * event (newState `open`) and kept in sync on `resize`/`scroll` while open,
- * using the pure `placePopover` geometry.
+ * using the pure `placePopover` geometry. `placePopover` also caps the
+ * panel's `max-height` to whichever side (above/below) it opened into, so it
+ * never renders off-screen when neither side fits the whole list; the panel
+ * is a flex column so the list — the only child with `min-h-0` — is what
+ * actually shrinks and scrolls.
  */
 export function useThemePicker(resolved: ThemeId): UseThemePicker {
   const [scheme, selectScheme] = useState<ThemeScheme>(() => themeEntry(resolved).scheme);
@@ -35,13 +39,14 @@ export function useThemePicker(resolved: ThemeId): UseThemePicker {
     if (!trigger || !panel) return;
 
     const place = () => {
-      const { top, left } = placePopover(
+      const { top, left, maxHeight } = placePopover(
         trigger.getBoundingClientRect(),
         { width: panel.offsetWidth, height: panel.offsetHeight },
         { width: window.innerWidth, height: window.innerHeight },
       );
       panel.style.top = `${top}px`;
       panel.style.left = `${left}px`;
+      panel.style.maxHeight = `${maxHeight}px`;
     };
 
     const stopTracking = () => {

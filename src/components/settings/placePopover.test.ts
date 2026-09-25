@@ -10,15 +10,34 @@ function rect(partial: Partial<DOMRectLike> & { top: number; left: number; heigh
 }
 
 describe('placePopover', () => {
-  test('below: plenty of room under the trigger, left-aligned to it', () => {
+  test('below: plenty of room under the trigger, left-aligned to it, uncapped height', () => {
     const trigger = rect({ top: 100, left: 200, width: 200, height: 32 });
-    expect(placePopover(trigger, panel, viewport)).toEqual({ top: 140, left: 200 });
+    const result = placePopover(trigger, panel, viewport);
+    expect(result.top).toBe(140);
+    expect(result.left).toBe(200);
+    expect(result.maxHeight).toBeGreaterThanOrEqual(panel.height);
   });
 
-  test('flip-up: space below is smaller than the panel and space above is larger', () => {
+  test('flip-up: space below is smaller than the panel and space above is larger, both fit', () => {
     const trigger = rect({ top: 650, left: 200, width: 200, height: 40 });
-    // spaceBelow = 768 - 690 = 78 < 300; spaceAbove = 650 > 78
-    expect(placePopover(trigger, panel, viewport)).toEqual({ top: 650 - 300 - 8, left: 200 });
+    const result = placePopover(trigger, panel, viewport);
+    // above (634px available) beats below (62px available); the panel fits above, unclamped.
+    expect(result.top).toBe(650 - 300 - 8);
+    expect(result.left).toBe(200);
+    expect(result.maxHeight).toBeGreaterThanOrEqual(panel.height);
+  });
+
+  test('neither side fits: caps to the chosen side and never renders off-screen', () => {
+    // viewport 800 tall, trigger near the bottom: above (734px usable) beats below (2px usable),
+    // but even 734px is smaller than the 900px-tall panel this test poses (a very long list).
+    const tallViewport = { width: 1280, height: 800 };
+    const tallPanel = { width: 200, height: 900 };
+    const trigger = rect({ top: 750, left: 200, width: 200, height: 32 });
+    const result = placePopover(trigger, tallPanel, tallViewport);
+    expect(result.top).toBeGreaterThanOrEqual(0);
+    expect(result.top).toBe(8); // clamped to the 8px margin, not negative
+    expect(result.maxHeight).toBe(750 - 8 - 8); // availableAbove: trigger.top - GAP - MARGIN
+    expect(result.maxHeight).toBeLessThan(tallPanel.height); // genuinely capped, not the full panel
   });
 
   test('clamp-left: trigger near/off the left edge clamps to the 8px margin', () => {

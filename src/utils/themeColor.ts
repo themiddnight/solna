@@ -138,10 +138,16 @@ function rasterizeColorToRgb(colorString: string): Rgb | null {
     rasterCanvas.width = 1;
     rasterCanvas.height = 1;
   }
-  const ctx = rasterCanvas.getContext('2d');
+  // willReadFrequently: this canvas is reused across every token/theme
+  // resolution, so Chrome otherwise warns about repeated getImageData
+  // readbacks on the same context.
+  const ctx = rasterCanvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return null;
 
   try {
+    // Clear the previous paint first: a colour with alpha < 1 would
+    // otherwise read back blended with whatever was drawn last call.
+    ctx.clearRect(0, 0, 1, 1);
     ctx.fillStyle = colorString;
     ctx.fillRect(0, 0, 1, 1);
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;

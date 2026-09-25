@@ -31,8 +31,12 @@ palettes exist only for the two Solna themes, and `<meta name="theme-color">` wa
   "Previewing" tag, chevron). Positioning is `position: fixed`, computed by the pure
   `placePopover` (`settings/placePopover.ts`) from the trigger's `getBoundingClientRect()` on the
   popover's `toggle` event and on `resize`/`scroll` while open — the DOM wiring lives in
-  `useThemePicker`, per R265/R266. No CSS anchor positioning: Firefox support is incomplete.
-- **Both `AppModal` tab panels render stacked in one grid cell** (`grid`; each panel
+  `useThemePicker`, per R265/R266. `placePopover` also caps the panel's height to whichever side
+  (above/below the trigger) it opens into, so it never renders off-screen when neither side has
+  room for the whole list: the panel is a flex column, and the list — `min-h-0`, its own
+  `max-h-90` staying as the content-driven upper bound — is what actually shrinks and scrolls. No
+  CSS anchor positioning: Firefox support is incomplete.
+- **Both `AppModal` tab panels render stacked in one grid cell** (R349: `grid`; each panel
   `col-start-1 row-start-1`), so the dialog's height is always the tallest panel's and never
   changes on a tab switch. The inactive panel is `invisible` + `inert` instead of `hidden`;
   `inert` alone hides it from the accessibility tree (the HTML spec, not a React quirk), so no
@@ -68,6 +72,7 @@ Rejected:
 - **R346** — select previews, Apply persists, close reverts; theme state never in a slice (`theming.md`).
 - **R347** — `theme-color` follows the painted theme as `rgb()` (`theming.md`).
 - **R348** — the wordmark opens the app modal; the theme is chosen only in Settings (`components.md`).
+- **R349** — `AppModal`'s tab panels share one grid cell, inactive `invisible` + `inert`, never `hidden`; the dialog's height never changes on a tab switch (`components.md`).
 
 ## Sources
 

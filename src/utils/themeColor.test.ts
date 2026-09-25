@@ -96,6 +96,43 @@ describe('resolveColorStringToRgb', () => {
     // and must degrade to null rather than throw.
     expect(resolveColorStringToRgb('oklch(0.75 0.18 70)')).toBeNull();
   });
+
+  test('the default rasterizer opens a willReadFrequently 2D context and clears the pixel before every paint', () => {
+    // No DOM here (`testing.md`): a minimal fake `document`/canvas/context,
+    // in the same spirit as `src/audio/testFakes.ts`'s fake `AudioContext`,
+    // just to observe the arguments the default rasterizer passes — not a
+    // DOM or testing-library addition.
+    const contextCalls: unknown[] = [];
+    const callOrder: string[] = [];
+    const fakeCtx = {
+      fillStyle: '',
+      clearRect: (...args: unknown[]) => callOrder.push(`clearRect(${args.join(',')})`),
+      fillRect: (...args: unknown[]) => callOrder.push(`fillRect(${args.join(',')})`),
+      getImageData: () => ({ data: Uint8ClampedArray.from([9, 8, 7, 255]) }),
+    };
+    const fakeCanvas = {
+      width: 0,
+      height: 0,
+      getContext: (contextId: string, options?: unknown) => {
+        contextCalls.push({ contextId, options });
+        return fakeCtx;
+      },
+    };
+    const originalDocument = globalThis.document;
+    // @ts-expect-error test-only stub of `document.createElement`, not a DOM
+    globalThis.document = { createElement: () => fakeCanvas };
+
+    try {
+      const result = resolveColorStringToRgb('oklch(0.75 0.18 70)');
+      expect(result).toEqual({ r: 9, g: 8, b: 7 });
+    } finally {
+      globalThis.document = originalDocument;
+    }
+
+    expect(contextCalls).toEqual([{ contextId: '2d', options: { willReadFrequently: true } }]);
+    // clearRect must run before fillRect, or a translucent colour could blend with a stale pixel.
+    expect(callOrder).toEqual(['clearRect(0,0,1,1)', 'fillRect(0,0,1,1)']);
+  });
 });
 
 describe('SSR / no-DOM safety', () => {

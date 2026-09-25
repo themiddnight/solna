@@ -45,7 +45,7 @@ export function AppModal() {
         ))}
       </div>
       {/* Both panels stack in one grid cell so the dialog's height is the
-          tallest panel's and never changes on a tab switch (R348); the
+          tallest panel's and never changes on a tab switch (R349); the
           inactive one is `invisible` + `inert` instead of `hidden`. */}
       <div className="grid">
         <div
