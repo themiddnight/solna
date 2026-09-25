@@ -325,6 +325,13 @@ describe('the tabs lead the header, the subject run follows', () => {
     expect(src).not.toContain('id={`layer-');
   });
 
+  test('the wordmark leads, the project chevron sits right after it, then the tab nav', () => {
+    const wordmarkAt = src.indexOf('<AppWordmark />');
+    expect(wordmarkAt).toBeGreaterThan(-1);
+    expect(src.indexOf('<ProjectMenu />')).toBeGreaterThan(wordmarkAt);
+    expect(navAt).toBeGreaterThan(src.indexOf('<ProjectMenu />'));
+  });
+
   // Vibes lead the loop layer (where a project starts), then the subject, then
   // what Arrange does with it while it plays, then export, then the key it is in.
   test('the run is vibes, loop picker, project name, follow toggle, export, key/scale', () => {

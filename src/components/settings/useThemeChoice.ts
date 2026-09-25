@@ -15,7 +15,7 @@ export function persistThemeChoice(choice: ThemeChoice, storage?: Pick<Storage, 
   persistGuardedStorageValue(THEME_STORAGE_KEY, choice, storage);
 }
 
-export interface ThemeChoiceState {
+interface ThemeChoiceState {
   /** What is persisted. */
   readonly applied: ThemeChoice;
   /** What is on screen. */

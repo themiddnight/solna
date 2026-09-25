@@ -141,6 +141,7 @@ describe('the mobile frame', () => {
   test('the top bar shows the full wordmark, and its field tools keep their desktop heights', () => {
     const html = renderToString(createElement(MobileShell, SHELL_PROPS));
     expect(html).toContain('solna</span>');
+    expect(html).toContain('id="btn-app-modal"'); // the wordmark opens the app modal on the phone too
     expect(html).not.toContain('[&amp;_select]:min-h-11');
   });
 });

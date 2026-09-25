@@ -3,6 +3,7 @@ import { layerForTab, LOOP_TABS, SONG_TABS, ViewMode } from "../types";
 import { useAppStore } from "../store/store";
 import { HEADER_GROUP } from "./ui/fieldClasses";
 import { ProjectMenu } from "./project/ProjectMenu";
+import { AppWordmark } from "./settings/AppWordmark";
 import { VIEW_META } from "./viewMeta";
 import { headerToolsOn } from "./header/headerTools";
 
@@ -78,8 +79,12 @@ export const Header = React.memo(function Header() {
           is only one click if the target stays where the hand expects it. */}
       <div className="flex items-center gap-2.5 shrink-0">
         {/* The desktop frame only: the phone has its own top bar
-            (`shell/MobileTopBar.tsx`). */}
-        <ProjectMenu />
+            (`shell/MobileTopBar.tsx`). The wordmark opens the app modal; the
+            chevron right after it is the project menu (R348). */}
+        <div className="flex items-center">
+          <AppWordmark />
+          <ProjectMenu />
+        </div>
         <ViewNav activeTab={activeTab} onSelect={setActiveTab} />
       </div>
 
