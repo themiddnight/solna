@@ -41,6 +41,8 @@ function ScaleTypeTrigger({ name, open, onToggle, onKeyDown }: ScaleTypeTriggerP
       id="btn-scale-type"
       className={SCALE_TYPE_TRIGGER}
       title={`Scale Type — ${name}`}
+      // The visible text is only the name; the select this replaced was named "Scale Type".
+      aria-label={`Scale Type: ${name}`}
       aria-haspopup="listbox"
       aria-expanded={open}
       onClick={onToggle}

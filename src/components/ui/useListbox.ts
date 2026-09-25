@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import type { ListboxGroup, ListboxOption } from './Listbox';
 import { isCommandChord, listboxKey } from './listboxKeys';
 
@@ -58,6 +58,23 @@ export function parseOptionIndex(raw: string | null | undefined, count: number):
   return Number.isInteger(index) && index >= 0 && index < count ? index : null;
 }
 
+/**
+ * The listbox's own `scrollTop` that brings an option fully into view, or the
+ * current one when it already shows. Only the listbox's scroll box moves:
+ * `scrollIntoView` would also scroll every ancestor, including the app's
+ * `overflow-hidden` root on a short screen, with no way to scroll it back.
+ * `option.top` is measured from the top of the scroll content.
+ */
+export function revealScrollTop(
+  box: { scrollTop: number; height: number },
+  option: { top: number; height: number },
+): number {
+  if (option.top < box.scrollTop) return option.top;
+  const bottom = option.top + option.height;
+  if (bottom > box.scrollTop + box.height) return bottom - box.height;
+  return box.scrollTop;
+}
+
 /** The option row under an event target (clicks and hover are delegated to the listbox root). */
 function optionIndexAt(target: EventTarget, count: number): number | null {
   if (!(target instanceof Element)) return null;
@@ -92,9 +109,23 @@ export function useListbox({ id, groups, value, onCommit }: ListboxOptions): Use
   const model = useMemo(() => indexGroups(groups), [groups]);
   const [active, setActive] = useState(() => activeForValue(model.values, value));
 
+  // Hover already points at a visible row; scrolling under the pointer would
+  // make the list jump, so only keyboard and initial moves reveal.
+  const revealRef = useRef(true);
+
   useEffect(() => {
-    if (active < 0) return;
-    document.getElementById(optionId(id, active))?.scrollIntoView({ block: 'nearest' });
+    const reveal = revealRef.current;
+    revealRef.current = true;
+    if (active < 0 || !reveal) return;
+    const option = document.getElementById(optionId(id, active));
+    const box = document.getElementById(id);
+    if (!option || !box) return;
+    const boxRect = box.getBoundingClientRect();
+    const optionRect = option.getBoundingClientRect();
+    box.scrollTop = revealScrollTop(
+      { scrollTop: box.scrollTop, height: box.clientHeight },
+      { top: optionRect.top - boxRect.top - box.clientTop + box.scrollTop, height: optionRect.height },
+    );
   }, [id, active]);
 
   const onKeyDown = useCallback(
@@ -123,9 +154,11 @@ export function useListbox({ id, groups, value, onCommit }: ListboxOptions): Use
   const onPointerMove = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
       const index = optionIndexAt(e.target, model.values.length);
-      if (index !== null) setActive(index);
+      if (index === null || index === active) return;
+      revealRef.current = false;
+      setActive(index);
     },
-    [model],
+    [model, active],
   );
 
   return {

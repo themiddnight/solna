@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ListboxGroup } from './Listbox';
-import { activeForValue, groupHeadingId, indexGroups, optionId, parseOptionIndex } from './useListbox';
+import { activeForValue, groupHeadingId, indexGroups, optionId, parseOptionIndex, revealScrollTop } from './useListbox';
 
 const GROUPS: readonly ListboxGroup[] = [
   {
@@ -62,5 +62,21 @@ describe('parseOptionIndex', () => {
     for (const raw of [null, undefined, '', '1.5', 'x', '3', '-1']) {
       expect(parseOptionIndex(raw, 3)).toBeNull();
     }
+  });
+});
+
+describe('revealScrollTop', () => {
+  // Only the listbox's own scroll box moves: scrollIntoView would also scroll
+  // every ancestor, including the app's overflow-hidden root on a short screen.
+  test('a visible option leaves the scroll where it is', () => {
+    expect(revealScrollTop({ scrollTop: 40, height: 100 }, { top: 60, height: 20 })).toBe(40);
+  });
+
+  test('an option above the view scrolls up to its top', () => {
+    expect(revealScrollTop({ scrollTop: 40, height: 100 }, { top: 10, height: 20 })).toBe(10);
+  });
+
+  test('an option below the view scrolls down until its bottom shows', () => {
+    expect(revealScrollTop({ scrollTop: 40, height: 100 }, { top: 150, height: 20 })).toBe(70);
   });
 });

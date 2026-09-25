@@ -375,6 +375,8 @@ describe('scale type listbox', () => {
     const trigger = openTagContaining(html, 'id="btn-scale-type"');
     expect(trigger).toContain('aria-haspopup="listbox"');
     expect(trigger).toContain('aria-expanded="false"');
+    // The visible text is only the scale name; the old select was named "Scale Type".
+    expect(trigger).toContain(`aria-label="Scale Type: ${SCALES[scaleType].name}"`);
     expect(html).toContain(`<span class="truncate">${SCALES[scaleType].name}</span>`);
     expect(html).not.toContain('dropdown-content');
   });
