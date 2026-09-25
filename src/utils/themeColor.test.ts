@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import type { Rgb } from './themeColor';
 import {
   createThemePalette,
   parseRgbString,
+  resolveColorStringToRgb,
   resolveThemeRgb,
   rgbToCss,
   subscribeToThemeChange,
@@ -55,6 +57,44 @@ describe('rgbToCss', () => {
   test('clamps alpha into 0-1', () => {
     expect(rgbToCss({ r: 0, g: 0, b: 0 }, 1.7)).toBe('rgba(0, 0, 0, 1)');
     expect(rgbToCss({ r: 0, g: 0, b: 0 }, -3)).toBe('rgba(0, 0, 0, 0)');
+  });
+});
+
+describe('resolveColorStringToRgb', () => {
+  test('fast path: an rgb-family string resolves without consulting the rasterizer', () => {
+    const rasterize = (): Rgb | null => {
+      throw new Error('should not be called for an already-parseable colour');
+    };
+    expect(resolveColorStringToRgb('rgb(13 148 136)', rasterize)).toEqual({
+      r: 13,
+      g: 148,
+      b: 136,
+    });
+  });
+
+  test('an oklch() string is handed to the rasterizer and returns its result, not null', () => {
+    const rasterized: Rgb = { r: 10, g: 20, b: 30 };
+    const rasterize = (colorString: string): Rgb | null =>
+      colorString.startsWith('oklch(') ? rasterized : null;
+    expect(resolveColorStringToRgb('oklch(0.75 0.18 70)', rasterize)).toEqual(rasterized);
+  });
+
+  test('an oklab()/color() string is also handed to the rasterizer', () => {
+    const rasterized: Rgb = { r: 1, g: 2, b: 3 };
+    const rasterize = (): Rgb | null => rasterized;
+    expect(resolveColorStringToRgb('oklab(0.6 0.05 -0.1)', rasterize)).toEqual(rasterized);
+    expect(resolveColorStringToRgb('color(display-p3 1 0 0)', rasterize)).toEqual(rasterized);
+  });
+
+  test('returns null, not a guess, when the rasterizer cannot resolve the colour either', () => {
+    const rasterize = (): Rgb | null => null;
+    expect(resolveColorStringToRgb('oklch(0.75 0.18 70)', rasterize)).toBeNull();
+  });
+
+  test('defaults to a real canvas rasterizer when none is injected, and degrades to null without a document', () => {
+    // bun:test has no DOM, so the default rasterizer has nothing to draw with
+    // and must degrade to null rather than throw.
+    expect(resolveColorStringToRgb('oklch(0.75 0.18 70)')).toBeNull();
   });
 });
 
