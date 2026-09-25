@@ -13,6 +13,7 @@ import { LOOP_TABS, SONG_TABS } from '../types';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
+import { SCALE_CATEGORIES } from '@/data/scales';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
 function openTagContaining(html: string, needle: string): string {
@@ -297,6 +298,19 @@ describe('key picker', () => {
 
   // Both copies render — the inline pair from xl up and the dropdown below —
   // each under its own id prefix, so the hidden copy never duplicates an id.
+  // The scale select groups its options by category; the root select has no
+  // groups. Static content, so no store state is involved (R257).
+  test('the scale select renders one optgroup per category, in order', () => {
+    const html = renderToString(<ScaleSelects idPrefix="test" />);
+    const labels = [...html.matchAll(/<optgroup label="([^"]*)"/g)].map(([, label]) => label);
+    expect(labels).toEqual([...SCALE_CATEGORIES]);
+  });
+
+  test('both breakpoint copies group their scale options', () => {
+    const html = renderToString(<ScaleMenu />);
+    expect(html.match(/<optgroup /g) ?? []).toHaveLength(SCALE_CATEGORIES.length * 2);
+  });
+
   test('the key/scale menu renders both breakpoint copies', () => {
     const html = renderToString(<ScaleMenu />);
     expect(html).toContain('id="select-master-scale-root"');

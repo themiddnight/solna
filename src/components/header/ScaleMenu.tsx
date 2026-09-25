@@ -3,6 +3,7 @@ import { useAppStore } from '@/store/store';
 import { SCALES } from '@/data/scales';
 import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from '@/utils/noteSpelling';
 import { HEADER_FIELD_SHELL, HEADER_SELECT } from '@/components/ui/fieldClasses';
+import { ScaleTypeOptions } from '@/components/ui/ScaleTypeOptions';
 
 /**
  * The dropdown trigger inside its field box: a content-box `h-8`, the
@@ -58,11 +59,7 @@ export function ScaleSelects({
         className={`${HEADER_SELECT} text-base-content/80 ${stacked ? 'w-full' : 'w-36'}`}
         title="Scale Type"
       >
-        {Object.keys(SCALES).map((s) => (
-          <option key={s} value={s}>
-            {SCALES[s].name}
-          </option>
-        ))}
+        <ScaleTypeOptions />
       </select>
     </>
   );

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { createDefaultLoop } from '@/store/loopSlice';
 import { KeyChangeDialog } from './KeyChangeDialog';
+import { SCALE_CATEGORIES } from '@/data/scales';
 
 const loops = [
   { ...createDefaultLoop(), name: 'Verse' },
@@ -30,6 +31,13 @@ describe('KeyChangeDialog', () => {
     expect(html).toContain('Verse');
     expect(html).toContain('Chorus');
     expect(html).toContain('fieldset-legend');
+  });
+
+  test('the scale select groups its options, one optgroup per category', () => {
+    const select = html.slice(html.indexOf('id="select-key-change-scale"'));
+    const labels = [...select.slice(0, select.indexOf('</select>')).matchAll(/<optgroup label="([^"]*)"/g)]
+      .map(([, label]) => label);
+    expect(labels).toEqual([...SCALE_CATEGORIES]);
   });
 
   test('Apply and Cancel actions', () => {

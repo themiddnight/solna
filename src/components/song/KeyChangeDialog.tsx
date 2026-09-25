@@ -1,5 +1,5 @@
-import { SCALES } from '@/data/scales';
 import { Modal } from '@/components/ui/Modal';
+import { ScaleTypeOptions } from '@/components/ui/ScaleTypeOptions';
 import { KEY_OPTIONS } from '@/utils/noteSpelling';
 import {
   TRANSPOSE_STEPS,
@@ -33,7 +33,7 @@ function SetKeyFields({ root, scaleType, onRoot, onScale }: {
       </select>
       <select id="select-key-change-scale" aria-label="Scale" value={scaleType}
         onChange={(e) => onScale(e.target.value)} className="select select-sm flex-1 text-xs">
-        {Object.keys(SCALES).map((s) => <option key={s} value={s}>{SCALES[s].name}</option>)}
+        <ScaleTypeOptions />
       </select>
     </div>
   );
