@@ -4,6 +4,12 @@
  * interleaving, graph wiring); the call log localises a failure to the first
  * differing engine call. Re-record only with GOLDEN_UPDATE=1, and only in a
  * commit that changes nothing else (see the DEV-420 spec, risk R2).
+ *
+ * The WAV bytes depend on node-web-audio-api's float behaviour per OS/CPU, so
+ * the hash file holds one line per platform the golden has been recorded on
+ * (`<sha256> <platform>`), and a render passes when it matches any of them.
+ * The call log is platform-independent and stays single. GOLDEN_UPDATE=1 on a
+ * new platform whose call log matches adds that platform's line.
  */
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -32,6 +38,7 @@ const DIR = join(process.cwd(), 'src/audio/export');
 const HASH_FILE = join(DIR, 'renderMixdownGolden.wav.sha256');
 const CALLS_FILE = join(DIR, 'renderMixdownGolden.calls.json');
 const UPDATE = process.env.GOLDEN_UPDATE === '1';
+const PLATFORM = `${process.platform}-${process.arch}`;
 const METHODS = [
   'triggerSynthNoteOn',
   'triggerSynthNoteOff',
@@ -182,6 +189,18 @@ async function sha256(blob: Blob): Promise<string> {
   return hasher.digest('hex');
 }
 
+/** One `<sha256> <platform>` line per platform the WAV has been recorded on. */
+function recordedHashes(text: string): { hash: string; platform: string }[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .map((line) => {
+      const [hash, platform = 'unlabelled'] = line.split(/\s+/);
+      return { hash, platform };
+    });
+}
+
 function readGolden(file: string): string {
   if (!existsSync(file)) {
     throw new Error(`${file} is missing — record it with GOLDEN_UPDATE=1 on the pre-refactor code`);
@@ -194,8 +213,14 @@ describe('renderMixdown golden (DEV-420)', () => {
     const result = await renderMixdown(goldenSnapshot());
     if (!result.ok) throw new Error(`render failed: ${JSON.stringify(result.reason)}`);
     const hash = await sha256(result.blob);
-    if (UPDATE) writeFileSync(HASH_FILE, `${hash}\n`);
-    expect(hash).toBe(readGolden(HASH_FILE).trim());
+    if (UPDATE) {
+      const others = existsSync(HASH_FILE)
+        ? recordedHashes(readFileSync(HASH_FILE, 'utf8')).filter((line) => line.platform !== PLATFORM)
+        : [];
+      const lines = [...others, { hash, platform: PLATFORM }].map((line) => `${line.hash} ${line.platform}`);
+      writeFileSync(HASH_FILE, `${lines.join('\n')}\n`);
+    }
+    expect(recordedHashes(readGolden(HASH_FILE)).map((line) => line.hash)).toContain(hash);
   }, 60_000);
 
   (test as TestWithTimeout)('golden: the fixture makes the recorded engine-call sequence', async () => {
