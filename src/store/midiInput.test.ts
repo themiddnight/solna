@@ -8,8 +8,10 @@ import {
 import {
   computeDisconnectedInputIds,
   createHeldNoteTracker,
+  connectWhenMidiGranted,
+  createMidiAccessRequester,
   __flushCcFramesForTests,
-  startMidiInputBridge,
+  requestMidiAccess,
 } from './midiInput';
 import { useAppStore } from './store';
 import { startEngineSync, stopEngineSync } from './engineSync';
@@ -92,6 +94,102 @@ describe('createHeldNoteTracker', () => {
   });
 });
 
+// A PermissionStatus reduced to what connectWhenMidiGranted reads: `state`
+// and the `change` event.
+class FakePermissionStatus {
+  private onChange: (() => void) | null = null;
+  constructor(public state: PermissionState) {}
+  addEventListener(_type: 'change', handler: () => void): void {
+    this.onChange = handler;
+  }
+  set(state: PermissionState): void {
+    this.state = state;
+    this.onChange?.();
+  }
+}
+
+function fakePermissions(status: FakePermissionStatus): Pick<Permissions, 'query'> {
+  return { query: () => Promise.resolve(status as unknown as PermissionStatus) };
+}
+
+// R350: the bridge never raises the MIDI prompt at load; it connects only on a
+// permission that is already granted, or that becomes granted later.
+describe('connectWhenMidiGranted', () => {
+  test('granted at load: connects once', async () => {
+    let calls = 0;
+    const state = await connectWhenMidiGranted(fakePermissions(new FakePermissionStatus('granted')), () => calls++);
+    expect(state).toBe('granted');
+    expect(calls).toBe(1);
+  });
+
+  test('prompt at load: connects nothing, then connects when the permission turns granted', async () => {
+    let calls = 0;
+    const status = new FakePermissionStatus('prompt');
+    expect(await connectWhenMidiGranted(fakePermissions(status), () => calls++)).toBe('prompt');
+    expect(calls).toBe(0);
+    status.set('granted');
+    expect(calls).toBe(1);
+  });
+
+  test('denied: connects nothing, and a change to anything but granted still connects nothing', async () => {
+    let calls = 0;
+    const status = new FakePermissionStatus('denied');
+    await connectWhenMidiGranted(fakePermissions(status), () => calls++);
+    status.set('prompt');
+    expect(calls).toBe(0);
+  });
+
+  test('no Permissions API, or one that cannot query midi: unknown, connects nothing', async () => {
+    let calls = 0;
+    expect(await connectWhenMidiGranted(undefined, () => calls++)).toBe('unknown');
+    const throwing: Pick<Permissions, 'query'> = { query: () => Promise.reject(new TypeError('midi')) };
+    expect(await connectWhenMidiGranted(throwing, () => calls++)).toBe('unknown');
+    expect(calls).toBe(0);
+  });
+});
+
+describe('createMidiAccessRequester', () => {
+  const grantedAccess = {} as MIDIAccess;
+
+  test('one request for every caller; the access is wired once', async () => {
+    let requests = 0;
+    const wired: MIDIAccess[] = [];
+    const request = createMidiAccessRequester(
+      () => {
+        requests++;
+        return Promise.resolve(grantedAccess);
+      },
+      (a) => wired.push(a),
+    );
+    const first = request();
+    expect(request()).toBe(first);
+    await first;
+    await request();
+    expect(requests).toBe(1);
+    expect(wired).toEqual([grantedAccess]);
+  });
+
+  test('a rejected request is forgotten and warned about, so the next call asks again', async () => {
+    const warn = spyOn(console, 'warn').mockImplementation(() => {});
+    let requests = 0;
+    const wired: MIDIAccess[] = [];
+    const request = createMidiAccessRequester(
+      () => (++requests === 1 ? Promise.reject(new DOMException('dismissed', 'NotAllowedError')) : Promise.resolve(grantedAccess)),
+      (a) => wired.push(a),
+    );
+    const refused = await request().then(
+      () => null,
+      (err: unknown) => err,
+    );
+    expect(refused).toBeInstanceOf(DOMException);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    expect(await request()).toBe(grantedAccess);
+    expect(requests).toBe(2);
+    expect(wired).toEqual([grantedAccess]);
+  });
+});
+
 // The Bun test runtime has no Web MIDI API at all (no navigator.requestMIDIAccess,
 // no MIDIAccess/MIDIInput, no 'statechange' event), so the objects below hand-build
 // just enough of each to drive setupInputs()'s enumeration and access.onstatechange.
@@ -115,17 +213,18 @@ class FakeMidiAccess {
   onstatechange: ((event: { port: FakeMidiInput | null }) => void) | null = null;
 }
 
-// Bound once for the whole file: startMidiInputBridge() is guarded by a
-// module-level `started` flag and binds to whatever requestMIDIAccess
-// resolves with exactly once per process, so every scenario below drives
-// this SAME fake access object rather than restarting the bridge.
+// Bound once for the whole file: requestMidiAccess() is memoized per module
+// and wires whatever requestMIDIAccess resolves with exactly once per
+// process, so every scenario below drives this SAME fake access object
+// rather than reconnecting the bridge. (startMidiInputBridge() itself only
+// decides whether to call it, per R350 — covered by connectWhenMidiGranted.)
 const access = new FakeMidiAccess();
 
 // Bun's test runtime provides `navigator` (used above for MIDI) but no
 // `window`/`document` at all — this repo ships no jsdom/happy-dom. The
 // blur/visibilitychange backstop is guarded on both being defined, so these
 // hand-built EventTargets stand in for them, installed as real globals below
-// BEFORE startMidiInputBridge() runs so its guard sees them.
+// BEFORE requestMidiAccess() runs so its guard sees them.
 class FakeEventTarget {
   private listeners = new Map<string, Set<() => void>>();
   addEventListener(type: string, handler: () => void): void {
@@ -166,10 +265,9 @@ beforeAll(async () => {
   Object.defineProperty(globalThis, 'document', { value: fakeDocument, configurable: true });
   (navigator as unknown as { requestMIDIAccess: () => Promise<FakeMidiAccess> }).requestMIDIAccess = () =>
     Promise.resolve(access);
-  startMidiInputBridge();
-  // requestMIDIAccess().then(...) resolves on a microtask; give it a turn
-  // of the loop before any test touches `access`.
-  await Promise.resolve();
+  await requestMidiAccess();
+  // The bridge's own then-handler was attached first, so it has run by now;
+  // one more turn is belt and braces before any test touches `access`.
   await Promise.resolve();
 });
 
@@ -243,7 +341,7 @@ function spyNotePair() {
   };
 }
 
-describe('startMidiInputBridge releases held notes on disconnect (state flip — Chromium shape)', () => {
+describe('the MIDI input bridge releases held notes on disconnect (state flip — Chromium shape)', () => {
   test('a note held at disconnect is released, by the voice it started', () => {
     const spies = spyNotePair();
     const input = connect('dev-a');
@@ -278,7 +376,7 @@ describe('startMidiInputBridge releases held notes on disconnect (state flip —
   });
 });
 
-describe('startMidiInputBridge releases held notes on disconnect (map removal fallback)', () => {
+describe('the MIDI input bridge releases held notes on disconnect (map removal fallback)', () => {
   test('a note held is released when the port is removed from the map instead of flipped', () => {
     const spies = spyNotePair();
     const input = connect('dev-d');
@@ -307,7 +405,7 @@ describe('startMidiInputBridge releases held notes on disconnect (map removal fa
   });
 });
 
-describe('startMidiInputBridge releases held notes on tab blur / visibilitychange', () => {
+describe('the MIDI input bridge releases held notes on tab blur / visibilitychange', () => {
   test('window blur releases every held note across every input, by the voice it started', () => {
     const spies = spyNotePair();
     const inputA = connect('dev-blur-a');

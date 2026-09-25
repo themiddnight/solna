@@ -29,7 +29,8 @@ export const MidiIndicator = React.memo(function MidiIndicator({ showLabel = fal
           ? "bg-primary/20 border-primary text-primary font-bold shadow-[0_0_12px_rgba(255,179,71,0.4)]"
           : "bg-base-200 border-base-300 text-base-content/60"
       }`}
-      title={active ? "MIDI Event Received! Click to configure mappings" : "MIDI Connected. Click to open MIDI settings & mappings"}
+      // Not "connected": until MIDI permission is granted in MIDI settings, nothing is (R350).
+      title={active ? "MIDI Event Received! Click to configure mappings" : "Open MIDI settings & mappings"}
     >
       <Radio className={`w-3.5 h-3.5 ${active ? "animate-pulse text-primary" : "opacity-70"}`} />
       <span className={`${showLabel ? "inline" : "hidden sm:inline"} text-[10px]`}>MIDI</span>

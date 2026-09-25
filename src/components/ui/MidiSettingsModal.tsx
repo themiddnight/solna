@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sliders, Radio, Trash2, Plus, RotateCcw } from 'lucide-react';
+import { requestMidiAccess } from '@/store/midiInput';
 import { useAppStore } from '@/store/store';
 import type { MidiMapping } from '@/store/types';
 import { SECTION_HEADER } from './fieldClasses';
@@ -21,18 +22,25 @@ interface MidiInput {
   name: string;
 }
 
-/** The Web MIDI device list, re-read on every open and on every state change. */
+/**
+ * The Web MIDI device list, re-read on every open and on every state change.
+ * Opening this modal is the only place the MIDI permission prompt can appear
+ * (R350): the shared requestMidiAccess() asks, and a grant also connects the
+ * input bridge. It listens with addEventListener, never `onstatechange`,
+ * which the bridge owns on the same access object.
+ */
 function useMidiInputs(isOpen: boolean): MidiInput[] {
   const [inputs, setInputs] = useState<MidiInput[]>([]);
 
   useEffect(() => {
-    if (!isOpen || typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
-      return;
-    }
-    (navigator as Navigator & { requestMIDIAccess?: () => Promise<MIDIAccess> })
-      .requestMIDIAccess?.()
-      .then((access) => {
-        if (!access) return;
+    if (!isOpen) return;
+    const request = requestMidiAccess();
+    if (!request) return;
+    let cancelled = false;
+    let detach = (): void => undefined;
+    request.then(
+      (access) => {
+        if (cancelled) return;
         const updateDevices = () => {
           const list: MidiInput[] = [];
           for (const input of access.inputs.values()) {
@@ -41,11 +49,17 @@ function useMidiInputs(isOpen: boolean): MidiInput[] {
           setInputs(list);
         };
         updateDevices();
-        access.onstatechange = updateDevices;
-      })
-      .catch(() => {
-        setInputs([]);
-      });
+        access.addEventListener('statechange', updateDevices);
+        detach = () => access.removeEventListener('statechange', updateDevices);
+      },
+      () => {
+        if (!cancelled) setInputs([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+      detach();
+    };
   }, [isOpen]);
 
   return inputs;

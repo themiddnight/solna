@@ -210,6 +210,84 @@ function applyCcMapping(ccNumber: number, ccValue: number): void {
   }
 }
 
+/**
+ * Calls `connect` if MIDI permission is already granted, and again whenever it
+ * becomes granted later (site settings, or the prompt MIDI settings raised);
+ * never prompts itself (R350). Resolves the state it read — `'unknown'` when
+ * the Permissions API cannot answer for `midi`, which connects nothing: the
+ * first MIDI settings open asks instead.
+ */
+export async function connectWhenMidiGranted(
+  permissions: Pick<Permissions, 'query'> | undefined,
+  connect: () => void,
+): Promise<PermissionState | 'unknown'> {
+  if (!permissions) return 'unknown';
+  let status: PermissionStatus;
+  try {
+    status = await permissions.query({ name: 'midi' });
+  } catch {
+    return 'unknown';
+  }
+  if (status.state === 'granted') connect();
+  status.addEventListener('change', () => {
+    if (status.state === 'granted') connect();
+  });
+  return status.state;
+}
+
+/**
+ * One `requestMIDIAccess()` for however many callers ask: the first call
+ * requests and hands a granted access to `onAccess` once; later calls share
+ * the same promise. A rejected request (prompt dismissed or denied) is
+ * forgotten, so the next MIDI settings open asks again.
+ */
+export function createMidiAccessRequester(
+  request: () => Promise<MIDIAccess>,
+  onAccess: (access: MIDIAccess) => void,
+): () => Promise<MIDIAccess> {
+  let pending: Promise<MIDIAccess> | null = null;
+  return () => {
+    if (!pending) {
+      const attempt = request();
+      pending = attempt;
+      attempt.then(onAccess, (err: unknown) => {
+        if (pending === attempt) pending = null;
+        console.warn('[MIDI] access not available:', err);
+      });
+    }
+    return pending;
+  };
+}
+
+type MidiNavigator = Navigator & { requestMIDIAccess?: (options?: MIDIOptions) => Promise<MIDIAccess> };
+
+let requester: (() => Promise<MIDIAccess>) | null = null;
+
+/**
+ * The session's one MIDIAccess, shared by the input bridge and the MIDI
+ * settings device list (R350); `null` where the browser has no Web MIDI.
+ * Calling it may raise the browser's permission prompt, so only the MIDI
+ * settings open and an already-granted permission call it.
+ *
+ * Chrome logs a "Deprecated feature used" issue (NoSysexWebMIDIWithoutPermission:
+ * "Web MIDI will ask a permission to use even if the sysex is not specified")
+ * on the first request, and it cannot be silenced from here: Blink reports it,
+ * once per page, for any secure-context requestMIDIAccess() without
+ * `sysex: true`, even when permission is already granted (navigator_web_midi.cc,
+ * crbug.com/1420307). The only way out is `{ sysex: true }`, which asks for the
+ * stronger "control and reprogram your MIDI devices" permission — Solna reads
+ * notes and CCs only, so it keeps the plain request and accepts the notice.
+ * A visitor who never grants MIDI never makes the request, so never sees it.
+ */
+export function requestMidiAccess(): Promise<MIDIAccess> | null {
+  if (typeof navigator === 'undefined') return null;
+  const nav = navigator as MidiNavigator;
+  const request = nav.requestMIDIAccess;
+  if (!request) return null;
+  requester ??= createMidiAccessRequester(() => request.call(nav), connectMidiInputs);
+  return requester();
+}
+
 // The MIDI listener lives on the store side of the engine bridge (layering
 // rule 1 forbids src/audio/ from importing the store): the handler reads live
 // MIDI state from the store (input selection, mappings, learn target) and
@@ -220,147 +298,141 @@ function applyCcMapping(ccNumber: number, ccValue: number): void {
 // invisible to anything watching for played notes. Engine methods no-op
 // before init(), so messages arriving ahead of the first user click are
 // harmless.
+//
+// Started once with the engine sync, it never prompts (R350): it connects at
+// load only when MIDI permission is already granted. Otherwise the first MIDI
+// settings open asks, through the same requestMidiAccess(), and a grant lands
+// here.
 export function startMidiInputBridge(): void {
   if (started || typeof navigator === 'undefined' || !('requestMIDIAccess' in navigator)) {
     return;
   }
   started = true;
+  void connectWhenMidiGranted(navigator.permissions, () => {
+    void requestMidiAccess();
+  });
+}
 
-  // Chrome logs a "Deprecated feature used" issue (NoSysexWebMIDIWithoutPermission:
-  // "Web MIDI will ask a permission to use even if the sysex is not specified")
-  // on this call, and it cannot be silenced from here: Blink reports it, once per
-  // page, for any secure-context requestMIDIAccess() without `sysex: true`,
-  // even when permission is already granted (navigator_web_midi.cc,
-  // crbug.com/1420307). The only way out is `{ sysex: true }`, which asks for
-  // the stronger "control and reprogram your MIDI devices" permission — Solna
-  // reads notes and CCs only, so it keeps the plain request and accepts the
-  // notice. It is informational: the permission prompt it announces has
-  // already shipped.
-  (navigator as Navigator & { requestMIDIAccess?: () => Promise<MIDIAccess> })
-    .requestMIDIAccess?.()
-    .then((access) => {
-      if (!access) return;
+// Wires a granted access: every input's messages, the held-note flushes and
+// the device-change handler. Runs once per session — requestMidiAccess()
+// resolves at most one access.
+function connectMidiInputs(access: MIDIAccess): void {
+  // eslint-disable-next-line complexity -- one MIDI message dispatcher: status-byte branches for note/CC/learn, now plus the R336 suspension gate; splitting would scatter one message's decode
+  const handleMessage = (event: MIDIMessageEvent) => {
+    const data = event.data;
+    if (!data || data.length < 3) return;
+    const s = useAppStore.getState();
+    const selectedId = s.selectedMidiInputId;
+    const sourceInput = event.target as MIDIInput | null;
+    if (selectedId && selectedId !== 'all' && sourceInput && sourceInput.id !== selectedId) {
+      return;
+    }
+    s.triggerMidiActivity();
+    const status = data[0];
+    const command = status & 0xF0;
+    const data1 = data[1];
+    const data2 = data[2];
 
-      // eslint-disable-next-line complexity -- one MIDI message dispatcher: status-byte branches for note/CC/learn, now plus the R336 suspension gate; splitting would scatter one message's decode
-      const handleMessage = (event: MIDIMessageEvent) => {
-        const data = event.data;
-        if (!data || data.length < 3) return;
-        const s = useAppStore.getState();
-        const selectedId = s.selectedMidiInputId;
-        const sourceInput = event.target as MIDIInput | null;
-        if (selectedId && selectedId !== 'all' && sourceInput && sourceInput.id !== selectedId) {
-          return;
+    // R336: while the vibe picker previews, a note-on would play over the
+    // audition and a CC would edit state Cancel is about to wipe. A
+    // note-off still passes, so a key held across the open releases.
+    if (s.noteInputSuspended && (command === 0xB0 || (command === 0x90 && data2 > 0))) return;
+
+    // Check if MIDI Learn is active for CC
+    const learnId = s.midiLearnTargetId;
+    if (learnId && command === 0xB0) {
+      const ccNum = data1;
+      s.updateMidiMapping(learnId, { ccNumber: ccNum, type: 'cc' });
+      s.setMidiLearnTargetId(null);
+      return;
+    }
+
+    const mappings = s.midiMappings;
+
+    // Sharp-spelled: this name becomes a stored lead note when Rec is armed, and persisted names are ROOTS-spelled.
+    if (command === 0x90 || command === 0x80) {
+      const noteMapping = mappings.find((m) => m.enabled && m.type === 'note');
+      if (noteMapping) {
+        const noteName = midiToSharpName(data1);
+        if (!noteName) return;
+        const synth = s.synthParams;
+        const velocity = data2;
+        const inputId = sourceInput?.id ?? '';
+        if (command === 0x90 && velocity > 0) {
+          heldNotes.noteOn(
+            inputId,
+            noteName,
+            synthPlaybackNoteOn(noteName, synth, velocity / 127, undefined, 'synth'),
+          );
+        } else {
+          synthPlaybackNoteOff(heldNotes.noteOff(inputId, noteName), noteName, 0.3);
         }
-        s.triggerMidiActivity();
-        const status = data[0];
-        const command = status & 0xF0;
-        const data1 = data[1];
-        const data2 = data[2];
-
-        // R336: while the vibe picker previews, a note-on would play over the
-        // audition and a CC would edit state Cancel is about to wipe. A
-        // note-off still passes, so a key held across the open releases.
-        if (s.noteInputSuspended && (command === 0xB0 || (command === 0x90 && data2 > 0))) return;
-
-        // Check if MIDI Learn is active for CC
-        const learnId = s.midiLearnTargetId;
-        if (learnId && command === 0xB0) {
-          const ccNum = data1;
-          s.updateMidiMapping(learnId, { ccNumber: ccNum, type: 'cc' });
-          s.setMidiLearnTargetId(null);
-          return;
-        }
-
-        const mappings = s.midiMappings;
-
-        // Sharp-spelled: this name becomes a stored lead note when Rec is armed, and persisted names are ROOTS-spelled.
-        if (command === 0x90 || command === 0x80) {
-          const noteMapping = mappings.find((m) => m.enabled && m.type === 'note');
-          if (noteMapping) {
-            const noteName = midiToSharpName(data1);
-            if (!noteName) return;
-            const synth = s.synthParams;
-            const velocity = data2;
-            const inputId = sourceInput?.id ?? '';
-            if (command === 0x90 && velocity > 0) {
-              heldNotes.noteOn(
-                inputId,
-                noteName,
-                synthPlaybackNoteOn(noteName, synth, velocity / 127, undefined, 'synth'),
-              );
-            } else {
-              synthPlaybackNoteOff(heldNotes.noteOff(inputId, noteName), noteName, 0.3);
-            }
-          }
-        } else if (command === 0xB0) {
-          applyCcMapping(data1, data2);
-        }
-      };
-
-      const flushInputNotes = (inputId: string): void => {
-        heldNotes.release(inputId).forEach(({ note, voiceId }) => {
-          synthPlaybackNoteOff(voiceId, note, MIDI_RELEASE_SEC);
-        });
-      };
-
-      const setupInputs = (acc: MIDIAccess) => {
-        const currentIds: string[] = [];
-        for (const input of acc.inputs.values()) {
-          input.onmidimessage = handleMessage;
-          currentIds.push(input.id);
-        }
-        // Defense in depth only: an id missing from the fresh enumeration
-        // means an implementation that drops disconnected ports from the map
-        // (the spec's "should not appear" text is non-normative, so this is
-        // permitted but not guaranteed). Chromium does not do this — it
-        // keeps the port and only flips its `state` — so the statechange
-        // handler below is the detection path that actually fires there.
-        // `heldNotes.release` empties an input's set on first call, so a
-        // device caught by both paths is flushed once, not twice.
-        for (const goneId of computeDisconnectedInputIds(knownInputIds, currentIds)) {
-          flushInputNotes(goneId);
-        }
-        knownInputIds = currentIds;
-      };
-
-      setupInputs(access);
-
-      // A held physical MIDI key is released only by a real 0x80 message or
-      // the disconnect flush above — neither fires on a tab freeze, aggressive
-      // background-tab throttling, or OS sleep, so a note can drone until the
-      // same note or a project reload clears it. useInputDeck's
-      // useHeldNoteRelease backstops the computer-keyboard/on-screen-keyboard
-      // input the same way for the same reason; this mirrors it for the
-      // separate `heldNotes` tracker MIDI uses. `window`/`document` are
-      // guarded because this module runs under Bun's test runtime, which has
-      // neither.
-      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-        const releaseAllHeldMidiNotes = () => {
-          heldNotes.releaseAll().forEach(({ note, voiceId }) => {
-            synthPlaybackNoteOff(voiceId, note, MIDI_RELEASE_SEC);
-          });
-        };
-        window.addEventListener('blur', releaseAllHeldMidiNotes);
-        document.addEventListener('visibilitychange', () => {
-          if (document.hidden) releaseAllHeldMidiNotes();
-        });
       }
+    } else if (command === 0xB0) {
+      applyCcMapping(data1, data2);
+    }
+  };
 
-      access.onstatechange = (event) => {
-        // A reused port id must keep resolving to the same MIDIPort across
-        // connect/disconnect (WebAudio/web-midi-api#79), so Chromium never
-        // erases a disconnected input from `acc.inputs` — it only sets
-        // `port.state`. That leaves the map diff in setupInputs() unable to
-        // ever see this case; the event's own port is the only place a
-        // disconnect is observable there.
-        const port = event.port;
-        if (port && port.type === 'input' && port.state === 'disconnected') {
-          flushInputNotes(port.id);
-        }
-        setupInputs(access);
-      };
-    })
-    .catch((err) => {
-      console.warn('[MIDI] access not available:', err);
+  const flushInputNotes = (inputId: string): void => {
+    heldNotes.release(inputId).forEach(({ note, voiceId }) => {
+      synthPlaybackNoteOff(voiceId, note, MIDI_RELEASE_SEC);
     });
+  };
+
+  const setupInputs = (acc: MIDIAccess) => {
+    const currentIds: string[] = [];
+    for (const input of acc.inputs.values()) {
+      input.onmidimessage = handleMessage;
+      currentIds.push(input.id);
+    }
+    // Defense in depth only: an id missing from the fresh enumeration
+    // means an implementation that drops disconnected ports from the map
+    // (the spec's "should not appear" text is non-normative, so this is
+    // permitted but not guaranteed). Chromium does not do this — it
+    // keeps the port and only flips its `state` — so the statechange
+    // handler below is the detection path that actually fires there.
+    // `heldNotes.release` empties an input's set on first call, so a
+    // device caught by both paths is flushed once, not twice.
+    for (const goneId of computeDisconnectedInputIds(knownInputIds, currentIds)) {
+      flushInputNotes(goneId);
+    }
+    knownInputIds = currentIds;
+  };
+
+  setupInputs(access);
+
+  // A held physical MIDI key is released only by a real 0x80 message or
+  // the disconnect flush above — neither fires on a tab freeze, aggressive
+  // background-tab throttling, or OS sleep, so a note can drone until the
+  // same note or a project reload clears it. useInputDeck's
+  // useHeldNoteRelease backstops the computer-keyboard/on-screen-keyboard
+  // input the same way for the same reason; this mirrors it for the
+  // separate `heldNotes` tracker MIDI uses. `window`/`document` are
+  // guarded because this module runs under Bun's test runtime, which has
+  // neither.
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    const releaseAllHeldMidiNotes = () => {
+      heldNotes.releaseAll().forEach(({ note, voiceId }) => {
+        synthPlaybackNoteOff(voiceId, note, MIDI_RELEASE_SEC);
+      });
+    };
+    window.addEventListener('blur', releaseAllHeldMidiNotes);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) releaseAllHeldMidiNotes();
+    });
+  }
+
+  access.onstatechange = (event) => {
+    // A reused port id must keep resolving to the same MIDIPort across
+    // connect/disconnect (WebAudio/web-midi-api#79), so Chromium never
+    // erases a disconnected input from `acc.inputs` — it only sets
+    // `port.state`. That leaves the map diff in setupInputs() unable to
+    // ever see this case; the event's own port is the only place a
+    // disconnect is observable there.
+    const port = event.port;
+    if (port && port.type === 'input' && port.state === 'disconnected') {
+      flushInputNotes(port.id);
+    }
+    setupInputs(access);
+  };
 }

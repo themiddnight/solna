@@ -65,7 +65,8 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0048](0048-input-target-link.md) | Input target link | The keys play an input target that follows the selection unless the dock's link toggle pins it (`inputTargetPin`, `null` = linked); record arm overrides the pin; the dock panel is derived from the target, so the Keyboard / Drums tabs are gone; `kbd` keycaps show only on a desktop screen. |
 | [0049](0049-per-view-scroll-memory.md) | Per-view scroll memory | The frame's one scroll container remembers its position per visible view (tab, plus Pattern segment) and restores it before paint on a switch; first visit starts at the top; positions stay in the hook, never a slice. |
 | [0050](0050-melody-grid-touch-gestures.md) | Pattern-grid touch gestures | One shared classifier and session rule touch on the Lead/FX matrix and the custom Chord/Bass lane: a tap edits on pointerup, a swipe scrolls and writes nothing, a long-press paints (Lead) or resizes a note or event; mouse and pen are unchanged. |
-| [0051](0051-theme-picker.md) | Theme picker | The wordmark opens Settings / About; any Solna or daisyUI theme, System by default, previewed then applied; palettes follow the scheme through CSS selectors bound to a registry by test. |
+| [0051](0051-theme-picker.md) | Theme picker | The wordmark opens a modal with the theme picker and About lines; any Solna or daisyUI theme, System by default, previewed then applied; palettes follow the scheme through CSS selectors bound to a registry by test. |
+| [0052](0052-midi-permission-on-settings-open.md) | MIDI permission on settings open | One shared MIDIAccess request; the bridge connects at load only on an already-granted permission, and only opening MIDI settings raises the prompt. |
 
 ## Adding or changing a decision
 

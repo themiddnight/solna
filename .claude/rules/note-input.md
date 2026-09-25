@@ -111,6 +111,13 @@ that needs store state — the melody recorder, for one — subscribes from
 
 ([ADR-0019](../../docs/decisions/0019-polyphony-gain-and-voice-lifetime.md))
 
+- MIDI access is one shared request, `requestMidiAccess()` (`store/midiInput.ts`), and only two
+  things call it: opening MIDI settings (`useMidiInputs`, the only place the permission prompt can
+  appear) and `connectWhenMidiGranted`, which the bridge runs at startup and which calls it only
+  once the `midi` permission is already `granted`. Nothing else calls `requestMIDIAccess`, and a
+  second listener on the shared access uses `addEventListener`, never `onstatechange`. <!-- R350 -->
+  ([ADR-0052](../../docs/decisions/0052-midi-permission-on-settings-open.md))
+
 - `midiActivityTimestamp` is an accepted exception to "high-frequency state stays out of slices":
   a ui-slice key written per MIDI message; it must stay unpersisted. <!-- R018 -->
 
@@ -140,4 +147,5 @@ recorder reads `ctx.currentTime` itself, through
 - Routing external MIDI by focus <!-- R168 -->
 - Dropping the blur/`visibilitychange` release in `useInputDeck.ts` <!-- R202 -->
 - A note or drum-pad keydown, MIDI note-on or CC that ignores noteInputSuspended <!-- R336 -->
+- A MIDI access request at load without a granted permission, a second `requestMIDIAccess` call site, or `onstatechange` set on the shared access outside the bridge <!-- R350 -->
 - Persisting `midiActivityTimestamp` <!-- R018 -->
