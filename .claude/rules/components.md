@@ -123,8 +123,13 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   gets a drawer, even where a quick pick also exists. <!-- R327 -->
 - A popup is a daisyUI `dropdown` anchored to its trigger (`dropdown-open` when controlled), kept
   inside the viewport horizontally by a pure helper; no popover API or CSS anchor positioning
-  while the browser floor lacks them; a popup never renders inside a bottom sheet — a tool that
-  reaches the sheet renders inline controls for its `row` variant instead. <!-- R328 -->
+  while the browser floor lacks them. The one exception is a popup that must sit above an open
+  `Modal`: a React portal still renders under the dialog's native top layer, so it is a
+  `popover="auto"` element instead, positioned by a pure geometry helper the colocated hook wires
+  up on the popover's `toggle` event and on `resize`/`scroll` while open — never CSS anchor
+  positioning, for the same Firefox-support reason (the theme picker panel,
+  `settings/ThemePicker.tsx` + `settings/placePopover.ts`). A popup never renders inside a bottom
+  sheet — a tool that reaches the sheet renders inline controls for its `row` variant instead. <!-- R328 -->
 - Feedback is a toast, a snackbar (at most one action) or a banner (in flow, persistent until
   handled); an alert rendered inside a modal, drawer or card body is content, not feedback. While
   any `Modal` or modal `BottomSheet` is open, entries queue in the host with their timers held, so a
@@ -144,7 +149,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   though the popup's own step nominally outranks it — an accepted trade-off, not a bug to chase
   with a one-off z-index. <!-- R331 -->
 
-([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md))
+([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md); R328's top-layer-escape
+case: [ADR-0051](../../docs/decisions/0051-theme-picker.md))
 
 ## Prohibited
 
@@ -188,7 +194,9 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   scroll region inside `Modal`/`BottomSheet`, a `modal-action` row inside a `Modal`'s scrolling body,
   or a bare `flex` on a non-modal sheet's `<dialog>` <!-- R339 -->
 - A preset library rendered as a sheet, or a deletable user library left as a quick pick with no drawer <!-- R327 -->
-- A popup rendered inside a bottom sheet, or positioned via the popover API or CSS anchor positioning <!-- R328 -->
+- A popup rendered inside a bottom sheet; a popup positioned via the popover API or CSS anchor
+  positioning anywhere but the top-layer-escape case above; that case positioned via CSS anchor
+  positioning <!-- R328 -->
 - A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an
   inline alert there instead of going through `showFeedback` <!-- R329 -->
 - A daisyUI `toast` class, a fixed alert outside `FeedbackHost`, or a toast/snackbar bypassing `showFeedback` <!-- R330 -->

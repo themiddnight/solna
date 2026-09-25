@@ -24,6 +24,20 @@ palettes exist only for the two Solna themes, and `<meta name="theme-color">` wa
   always-mounted `AppModal`; never a zustand slice.
 - The palettes follow the scheme through CSS: the light blocks' selectors list every light theme.
 - `theme-color` is rewritten from the live `base-200`, as `rgb()`, on every repaint.
+- **The theme panel is a `popover="auto"` element** (R328), not a daisyUI `dropdown`: `AppModal`'s
+  `Modal` is a native `<dialog>` opened with `showModal()`, so it lives in the browser top layer,
+  and only another top-layer element can stack above it. The trigger is a real
+  `<button popoverTarget="...">`, keeping the same id and visible content (dots, label,
+  "Previewing" tag, chevron). Positioning is `position: fixed`, computed by the pure
+  `placePopover` (`settings/placePopover.ts`) from the trigger's `getBoundingClientRect()` on the
+  popover's `toggle` event and on `resize`/`scroll` while open — the DOM wiring lives in
+  `useThemePicker`, per R265/R266. No CSS anchor positioning: Firefox support is incomplete.
+- **Both `AppModal` tab panels render stacked in one grid cell** (`grid`; each panel
+  `col-start-1 row-start-1`), so the dialog's height is always the tallest panel's and never
+  changes on a tab switch. The inactive panel is `invisible` + `inert` instead of `hidden`;
+  `inert` alone hides it from the accessibility tree (the HTML spec, not a React quirk), so no
+  extra `aria-hidden` is needed. This also drops the Settings panel's `min-h-120`, which existed
+  only to keep the modal's scrolling body from clipping the old dropdown.
 
 Rejected:
 
@@ -33,11 +47,14 @@ Rejected:
 - **Keeping the header toggle** beside Settings: two controls for one choice, and a two-state
   toggle cannot express 37 themes plus System.
 - **`themes: all`** in the daisyUI plugin: the roster would not be a list a test can compare.
+- **A React portal of the theme panel to `document.body`**: a portal still renders in the normal
+  DOM tree, under `AppModal`'s native top layer, so it would still be clipped by the dialog.
+- **CSS anchor positioning** for the panel: Firefox support is incomplete.
 
 ## Consequences
 
-- The stylesheet grows by every built-in theme's variables: 216.19 kB → 257.75 kB raw (+41.56 kB),
-  32.88 kB → 39.89 kB gzip (+7.01 kB), for 34 additional daisyUI built-in themes.
+- The stylesheet grows by every built-in theme's CSS variables; the build measures the exact
+  size.
 - A daisyUI upgrade that changes the built-in roster fails `themes.test.ts` until the registry,
   `index.css` and the light selectors are updated together.
 - `check-contrast` measures only the two Solna palettes; a light daisyUI theme shows the light
