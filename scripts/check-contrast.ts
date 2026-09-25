@@ -69,8 +69,17 @@ function enclosingBlock(idx: number): Block {
   throw new Error(`no enclosing block found for offset ${idx}`);
 }
 
+/**
+ * The selector list a block opens with: everything since the previous block
+ * closed. Not a fixed look-back window — the light palette's selector lists
+ * the whole light theme roster (R344) and outgrows any fixed window.
+ */
+function selectorOf(blockStart: number): string {
+  return stripped.slice(stripped.lastIndexOf('}', blockStart - 1) + 1, blockStart);
+}
+
 function themeOfBlock(blockStart: number): Theme {
-  const selector = stripped.slice(Math.max(0, blockStart - 300), blockStart);
+  const selector = selectorOf(blockStart);
   const dark = selector.includes('[data-theme="solna-dark"]');
   const light = selector.includes('[data-theme="solna-light"]');
   if (dark === light) {
