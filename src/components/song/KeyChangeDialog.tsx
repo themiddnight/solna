@@ -1,5 +1,5 @@
 import { Modal } from '@/components/ui/Modal';
-import { ScaleTypeOptions } from '@/components/ui/ScaleTypeOptions';
+import { ScaleTypeOptions } from './ScaleTypeOptions';
 import { KEY_OPTIONS } from '@/utils/noteSpelling';
 import {
   TRANSPOSE_STEPS,
