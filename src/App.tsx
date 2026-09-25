@@ -5,6 +5,7 @@ import { PlaybackHost } from './components/playback/PlaybackHost';
 import { DesktopShell } from './components/shell/DesktopShell';
 import { MobileShell } from './components/shell/MobileShell';
 import { useLayoutMode } from './components/shell/useLayoutMode';
+import { AppModal } from './components/settings/AppModal';
 import { IncidentDialog } from './components/ui/IncidentDialog';
 import { MidiSettingsModal } from './components/ui/MidiSettingsModal';
 import { installGlobalIncidentCapture } from './incidents/globalCapture';
@@ -180,6 +181,9 @@ function Workspace() {
 
       {/* MIDI Settings Modal */}
       <MidiSettingsModal />
+
+      {/* The wordmark's Settings | About modal; owns the live theme (R346). */}
+      <AppModal />
     </div>
   );
 }
