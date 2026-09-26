@@ -1,8 +1,9 @@
 /**
  * The scale library: each scale's display name, one-line description,
  * category, the tonal scale name its intervals and spelling come from, its
- * spelling tonality, and — for scales with fewer than seven degrees — the
- * 7-note parent whose harmony it borrows.
+ * spelling tonality, and either the 7-note parent a shorter scale borrows its
+ * chord qualities from, or the 7-note harmony scale whose chords a scale uses
+ * wholesale.
  *
  * Authored content, not a system registry: adding a scale is an edit to this
  * table and nothing else, which is the test that decides what belongs in
@@ -38,8 +39,20 @@ export interface ScaleDefinition {
   tonal: string;
   /** Which tonic-spelling convention this scale writes its key with. */
   tonality: 'major' | 'minor';
-  /** SCALES key of the 7-note scale whose harmony this scale borrows. 7-note scales omit it. */
+  /**
+   * SCALES key of the 7-note scale whose chord qualities this scale's own
+   * degrees borrow, degree by degree (the pentatonics, the blues). 7-note
+   * scales omit it. Exclusive with `harmony`.
+   */
   parent?: string;
+  /**
+   * SCALES key of a 7-note scale whose chords this scale uses wholesale,
+   * because its own degrees host none (a bebop's passing tone, whole tone's
+   * missing thirds). That scale sets neither `parent` nor `harmony`. Exclusive
+   * with `parent`. Chord-side code reads it through musicCore's `harmonyKey`
+   * (R358); note-side code never does.
+   */
+  harmony?: string;
 }
 
 export const SCALES: Record<string, ScaleDefinition> = {

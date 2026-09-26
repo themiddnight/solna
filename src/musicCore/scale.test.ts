@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { SCALES } from '@/data/scales';
-import { SCALE_LIBRARY, resolveScaleKey, scaleEntry } from './scale';
+import { SCALE_LIBRARY, harmonyKey, resolveScaleKey, scaleEntry } from './scale';
 import { scaleSemitonesForTonal } from './tonalAdapter';
 
 describe('resolveScaleKey', () => {
@@ -65,5 +65,26 @@ describe('scaleEntry', () => {
     expect(scaleEntry('constructor')).toBe(SCALE_LIBRARY['Major']);
     expect(scaleEntry('constructor').intervals).toEqual([0, 2, 4, 5, 7, 9, 11]);
     expect(scaleEntry('toString').intervals).toEqual([0, 2, 4, 5, 7, 9, 11]);
+  });
+});
+
+describe('harmonyKey', () => {
+  test('a scale that names no harmony hosts its own chords', () => {
+    expect(harmonyKey('Major')).toBe('Major');
+    expect(harmonyKey('Dorian')).toBe('Dorian');
+    expect(harmonyKey('Locrian #2')).toBe('Locrian #2');
+  });
+
+  // `parent` and `harmony` are different mechanisms: a pentatonic's own
+  // degrees host chords, so its harmony key is itself, never its parent.
+  test('a parent is not a harmony: a pentatonic keeps its own key', () => {
+    expect(harmonyKey('Minor Pentatonic')).toBe('Minor Pentatonic');
+    expect(harmonyKey('Hirajoshi')).toBe('Hirajoshi');
+  });
+
+  test('falls back to Major exactly like resolveScaleKey', () => {
+    for (const notAKey of ['not-a-scale', '', 'constructor', '__proto__', 'Minor Blues']) {
+      expect(harmonyKey(notAKey), notAKey).toBe('Major');
+    }
   });
 });

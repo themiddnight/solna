@@ -27,11 +27,11 @@ import {
   stopChordPreviewSource,
 } from '@/audio/playback/chordPlayback';
 import { getMeter } from '@/utils/timeSignature';
-import { scaleEntry } from '@/musicCore';
 import type { ChordQuality } from '@/musicCore';
 import {
   snapProgressionToScale,
   getDiatonicChordForDegree,
+  getDiatonicChords,
   getBorrowedChords,
   formatChordLabel,
   generateBlockChordNotes,
@@ -510,10 +510,7 @@ export function useChordPalette(
   );
 
   const diatonicChords = useMemo(
-    () =>
-      Array.from({ length: scaleEntry(scaleType).intervals.length }).map((_, i) =>
-        getDiatonicChordForDegree(i, scaleRoot, scaleType, use7thsInQuickAdd),
-      ),
+    () => getDiatonicChords(scaleRoot, scaleType, use7thsInQuickAdd),
     [scaleRoot, scaleType, use7thsInQuickAdd],
   );
 
