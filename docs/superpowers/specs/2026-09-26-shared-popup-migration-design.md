@@ -155,7 +155,7 @@ The user chose to drop it on 2026-09-26.
   - ProjectMenu: a row that opens a modal hands focus into it, and closing the modal returns
     focus to the trigger;
   - QuickSave: the input is focused with its text selected, and Tab-away closes it;
-  - a popup stays open when a pointerdown handler calls `stopPropagation` (capture);
+  - an outside pointerdown whose handler calls `stopPropagation` (e.g. a span-resize drag) still closes the popup (capture);
   - the console shows no warnings.
 - **Not checkable here:** Firefox and Safari, including the Space-keyup-after-commit check left
   from sub-project 2. The user checks these by hand.
