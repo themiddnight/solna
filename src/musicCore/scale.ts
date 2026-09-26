@@ -44,3 +44,18 @@ export function resolveScaleKey(scaleType: string): string {
 export function scaleEntry(scaleType: string): ResolvedScale {
   return SCALE_LIBRARY[resolveScaleKey(scaleType)];
 }
+
+/**
+ * The SCALES key whose degrees host this scale's chords: its `harmony` when it
+ * names one, else the resolved key itself. An unknown type falls back to Major
+ * first, through resolveScaleKey.
+ *
+ * Chord-side code (qualities, Roman numerals, diatonic and borrowed chords,
+ * progressions, Chord mode, pad drone, bass steps) reads
+ * `scaleEntry(harmonyKey(scaleType))`. Note-side code (scale notes, scale
+ * lock, melody rows, arp, remap, spelling) reads `scaleEntry(scaleType)` (R358).
+ */
+export function harmonyKey(scaleType: string): string {
+  const key = resolveScaleKey(scaleType);
+  return SCALES[key].harmony ?? key;
+}

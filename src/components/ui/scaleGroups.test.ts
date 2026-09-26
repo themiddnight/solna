@@ -18,4 +18,11 @@ describe('SCALE_GROUPS', () => {
       for (const key of keys) expect(SCALES[key].category, key).toBe(category);
     }
   });
+
+  test('Jazz & Other is the last group, with the five jazz scales in murva\'s order', () => {
+    expect(SCALE_GROUPS.at(-1)).toEqual({
+      category: 'Jazz & Other',
+      keys: ['Bebop', 'Bebop Major', 'Bebop Minor', 'Whole Tone', 'Diminished'],
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { SCALES, SCALE_CATEGORIES } from './scales';
-import { scaleEntry } from '@/musicCore';
+import { harmonyKey, scaleEntry } from '@/musicCore';
 import { parentDegreesFor, resolveDegreeQuality, resolveParentDegreeQuality } from '@/utils/musicTheory';
 
 // The golden pin. These are the interval arrays the eleven legacy scales were
@@ -37,17 +37,19 @@ describe('SCALES', () => {
     }
   });
 
-  test('every parent names a 7-note SCALES entry, and no 7-note scale declares one', () => {
-    for (const key of Object.keys(SCALES)) {
-      const scale = scaleEntry(key);
-      if (scale.intervals.length === 7) {
-        expect(scale.parent, key).toBeUndefined();
-        continue;
-      }
-      expect(scale.parent, key).toBeDefined();
-      const parentKey = scale.parent as string;
-      expect(Object.hasOwn(SCALES, parentKey), key).toBe(true);
-      expect(scaleEntry(parentKey).intervals.length, key).toBe(7);
+  test('every parent names a 7-note SCALES entry, and only a scale under seven degrees declares one', () => {
+    for (const [key, scale] of Object.entries(SCALES)) {
+      if (scale.parent === undefined) continue;
+      expect(scaleEntry(key).intervals.length, key).toBeLessThan(7);
+      expect(Object.hasOwn(SCALES, scale.parent), key).toBe(true);
+      expect(scaleEntry(scale.parent).intervals.length, key).toBe(7);
+    }
+  });
+
+  test('a scale that is not seven degrees names a parent or a harmony', () => {
+    for (const [key, scale] of Object.entries(SCALES)) {
+      if (scaleEntry(key).intervals.length === 7) continue;
+      expect(scale.parent !== undefined || scale.harmony !== undefined, key).toBe(true);
     }
   });
 
@@ -84,14 +86,16 @@ describe('SCALES', () => {
       'Major Pentatonic', 'Minor Pentatonic', 'Egyptian',
       'Major Blues', 'Blues',
       'Hirajoshi', 'Pelog', 'Vietnamese',
+      'Double Harmonic Major', 'Hungarian Minor', 'Flamenco',
+      'Bebop', 'Bebop Major', 'Bebop Minor', 'Whole Tone', 'Diminished',
     ]);
   });
 
-  test('every scale has 5 to 7 intervals, from 0, strictly increasing, below 12', () => {
+  test('every scale has 5 to 8 intervals, from 0, strictly increasing, below 12', () => {
     for (const key of Object.keys(SCALES)) {
       const { intervals } = scaleEntry(key);
       expect(intervals.length, key).toBeGreaterThanOrEqual(5);
-      expect(intervals.length, key).toBeLessThanOrEqual(7);
+      expect(intervals.length, key).toBeLessThanOrEqual(8);
       expect(intervals[0], key).toBe(0);
       intervals.forEach((interval, i) => {
         expect(interval, key).toBeLessThan(12);
@@ -107,12 +111,15 @@ describe('SCALES', () => {
     }
   });
 
-  // The major third decides, when the scale has one: Major Blues holds the b3
-  // as a blue note beside its major third and is still a major-key scale. A
-  // scale with no third at all (Egyptian) spells as minor.
-  test('tonality agrees with the derived third', () => {
+  // The HARMONY scale's major third decides, when it has one (R358). For a
+  // scale with no harmony that is the scale itself: Major Blues holds the b3
+  // as a blue note beside its major third and is still a major-key scale, and
+  // a scale with no third at all (Egyptian) spells as minor. Bebop Minor holds
+  // both thirds and reads minor, from Dorian; Flamenco reads major, from
+  // Phrygian Dominant's major I.
+  test('tonality agrees with the harmony scale\'s third', () => {
     for (const [key, scale] of Object.entries(SCALES)) {
-      const expected = scaleEntry(key).intervals.includes(4) ? 'major' : 'minor';
+      const expected = scaleEntry(harmonyKey(key)).intervals.includes(4) ? 'major' : 'minor';
       expect(scale.tonality, key).toBe(expected);
     }
   });
@@ -159,13 +166,58 @@ describe('harmony', () => {
   // Every scale must harmonize at every degree: a scale whose derived
   // interval tuple is missing from the quality tables throws in
   // resolveDegreeQuality, and that must fail here, not in the chord pads.
-  test('every degree of every scale resolves a triad and a seventh', () => {
+  test('every chord degree of every scale resolves a triad and a seventh', () => {
     for (const key of Object.keys(SCALES)) {
-      scaleEntry(key).intervals.forEach((_, degree) => {
+      scaleEntry(harmonyKey(key)).intervals.forEach((_, degree) => {
         for (const use7ths of [false, true]) {
           expect(() => resolveDegreeQuality(key, degree, use7ths), `${key} degree ${degree} 7ths=${use7ths}`).not.toThrow();
         }
       });
     }
+  });
+});
+
+// The eight scales whose own degrees host no chords: murva's names,
+// descriptions and categories, verbatim, and the harmony the user chose on
+// 2026-09-26 (ADR-0057).
+const HARMONY_SCALES: Record<string, { name: string; description: string; category: string; harmony: string }> = {
+  'Double Harmonic Major': { name: 'Double Harmonic Major', description: 'Bold and Middle Eastern · Arabic, cinematic', category: 'World', harmony: 'Phrygian Dominant' },
+  'Hungarian Minor': { name: 'Hungarian Minor', description: 'Exotic and passionate · gypsy, folk, metal', category: 'World', harmony: 'Harmonic Minor' },
+  'Flamenco': { name: 'Flamenco', description: 'Spanish and fiery · flamenco, world', category: 'World', harmony: 'Phrygian Dominant' },
+  'Bebop': { name: 'Bebop (Dominant)', description: 'Swinging with chromatic passing tones · jazz', category: 'Jazz & Other', harmony: 'Mixolydian' },
+  'Bebop Major': { name: 'Bebop Major', description: 'Bright and swinging · jazz', category: 'Jazz & Other', harmony: 'Major' },
+  'Bebop Minor': { name: 'Bebop Minor', description: 'Dark and swinging · jazz', category: 'Jazz & Other', harmony: 'Dorian' },
+  'Whole Tone': { name: 'Whole Tone', description: 'Floating with no resolution · impressionist, dreamy', category: 'Jazz & Other', harmony: 'Lydian Augmented' },
+  'Diminished': { name: 'Diminished', description: 'Tense and symmetric · jazz, horror, film', category: 'Jazz & Other', harmony: 'Locrian #2' },
+};
+
+describe('harmony scales', () => {
+  test('the eight carry murva\'s names, descriptions and categories, and their harmony', () => {
+    for (const [key, expected] of Object.entries(HARMONY_SCALES)) {
+      expect(Object.hasOwn(SCALES, key), key).toBe(true);
+      const scale = SCALES[key];
+      expect({ name: scale.name, description: scale.description, category: scale.category, harmony: scale.harmony }, key).toEqual(expected);
+    }
+  });
+
+  test('exactly these eight set a harmony', () => {
+    expect(Object.keys(SCALES).filter((key) => SCALES[key].harmony !== undefined)).toEqual(Object.keys(HARMONY_SCALES));
+  });
+
+  test('a harmony names a 7-note entry that sets neither field, and never sits beside a parent', () => {
+    for (const [key, scale] of Object.entries(SCALES)) {
+      if (scale.harmony === undefined) continue;
+      expect(scale.parent, key).toBeUndefined();
+      expect(Object.hasOwn(SCALES, scale.harmony), key).toBe(true);
+      const host = scaleEntry(scale.harmony);
+      expect(host.intervals.length, key).toBe(7);
+      expect(host.parent, key).toBeUndefined();
+      expect(host.harmony, key).toBeUndefined();
+    }
+  });
+
+  test('the new scales derive tonal\'s intervals', () => {
+    expect(scaleEntry('Bebop Major').intervals).toEqual([0, 2, 4, 5, 7, 8, 9, 11]);
+    expect(scaleEntry('Whole Tone').intervals).toEqual([0, 2, 4, 6, 8, 10]);
   });
 });

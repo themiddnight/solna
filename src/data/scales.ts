@@ -1,8 +1,9 @@
 /**
  * The scale library: each scale's display name, one-line description,
  * category, the tonal scale name its intervals and spelling come from, its
- * spelling tonality, and — for scales with fewer than seven degrees — the
- * 7-note parent whose harmony it borrows.
+ * spelling tonality, and either the 7-note parent a shorter scale borrows its
+ * chord qualities from, or the 7-note harmony scale whose chords a scale uses
+ * wholesale.
  *
  * Authored content, not a system registry: adding a scale is an edit to this
  * table and nothing else, which is the test that decides what belongs in
@@ -21,10 +22,10 @@
  * short label renders the key itself, so a key is readable ASCII. Key order is
  * display order, grouped contiguously by category in SCALE_CATEGORIES order.
  */
-export type ScaleCategory = 'Diatonic' | 'Modes' | 'Pentatonic' | 'Blues' | 'World';
+export type ScaleCategory = 'Diatonic' | 'Modes' | 'Pentatonic' | 'Blues' | 'World' | 'Jazz & Other';
 
 /** Display order of the categories; every category holds at least one scale. */
-export const SCALE_CATEGORIES: readonly ScaleCategory[] = ['Diatonic', 'Modes', 'Pentatonic', 'Blues', 'World'];
+export const SCALE_CATEGORIES: readonly ScaleCategory[] = ['Diatonic', 'Modes', 'Pentatonic', 'Blues', 'World', 'Jazz & Other'];
 
 export interface ScaleDefinition {
   /** Display name, e.g. 'Minor (Natural)'. */
@@ -38,8 +39,20 @@ export interface ScaleDefinition {
   tonal: string;
   /** Which tonic-spelling convention this scale writes its key with. */
   tonality: 'major' | 'minor';
-  /** SCALES key of the 7-note scale whose harmony this scale borrows. 7-note scales omit it. */
+  /**
+   * SCALES key of the 7-note scale whose chord qualities this scale's own
+   * degrees borrow, degree by degree (the pentatonics, the blues). 7-note
+   * scales omit it. Exclusive with `harmony`.
+   */
   parent?: string;
+  /**
+   * SCALES key of a 7-note scale whose chords this scale uses wholesale,
+   * because its own degrees host none (a bebop's passing tone, whole tone's
+   * missing thirds). That scale sets neither `parent` nor `harmony`. Exclusive
+   * with `parent`. Chord-side code reads it through musicCore's `harmonyKey`
+   * (R358); note-side code never does.
+   */
+  harmony?: string;
 }
 
 export const SCALES: Record<string, ScaleDefinition> = {
@@ -255,5 +268,88 @@ export const SCALES: Record<string, ScaleDefinition> = {
     tonal: 'vietnamese 1',
     tonality: 'minor',
     parent: 'Natural Minor',
+  },
+  // The scales below name a `harmony`: their own degrees host no chords, so
+  // every chord-side read uses a 7-note scale already in this table (R358).
+  // Why each one: docs/decisions/0057-harmony-scales.md.
+  'Double Harmonic Major': {
+    name: 'Double Harmonic Major',
+    abbr: 'DblHarm',
+    description: 'Bold and Middle Eastern · Arabic, cinematic',
+    category: 'World',
+    tonal: 'double harmonic major',
+    tonality: 'major',
+    // Shares 6 of its 7 notes, and keeps the bII–I cadence.
+    harmony: 'Phrygian Dominant',
+  },
+  'Hungarian Minor': {
+    name: 'Hungarian Minor',
+    abbr: 'HungMin',
+    description: 'Exotic and passionate · gypsy, folk, metal',
+    category: 'World',
+    tonal: 'hungarian minor',
+    tonality: 'minor',
+    // Shares 6 of its 7 notes.
+    harmony: 'Harmonic Minor',
+  },
+  'Flamenco': {
+    name: 'Flamenco',
+    abbr: 'Flamnco',
+    description: 'Spanish and fiery · flamenco, world',
+    category: 'World',
+    tonal: 'flamenco',
+    tonality: 'major',
+    // murva's own mapping: the Andalusian major I.
+    harmony: 'Phrygian Dominant',
+  },
+  'Bebop': {
+    name: 'Bebop (Dominant)',
+    abbr: 'Bebop',
+    description: 'Swinging with chromatic passing tones · jazz',
+    category: 'Jazz & Other',
+    tonal: 'bebop',
+    tonality: 'major',
+    // The scale minus its passing tone.
+    harmony: 'Mixolydian',
+  },
+  'Bebop Major': {
+    name: 'Bebop Major',
+    abbr: 'BebMaj',
+    description: 'Bright and swinging · jazz',
+    category: 'Jazz & Other',
+    tonal: 'bebop major',
+    tonality: 'major',
+    // The scale minus its passing tone: vi stays A minor, never G#.
+    harmony: 'Major',
+  },
+  'Bebop Minor': {
+    name: 'Bebop Minor',
+    abbr: 'BebMin',
+    description: 'Dark and swinging · jazz',
+    category: 'Jazz & Other',
+    tonal: 'bebop minor',
+    tonality: 'minor',
+    // The scale minus its passing tone (the major third).
+    harmony: 'Dorian',
+  },
+  'Whole Tone': {
+    name: 'Whole Tone',
+    abbr: 'WholeT',
+    description: 'Floating with no resolution · impressionist, dreamy',
+    category: 'Jazz & Other',
+    tonal: 'whole tone',
+    tonality: 'major',
+    // Shares 5 of its 6 notes, with an augmented I.
+    harmony: 'Lydian Augmented',
+  },
+  'Diminished': {
+    name: 'Diminished',
+    abbr: 'Dim',
+    description: 'Tense and symmetric · jazz, horror, film',
+    category: 'Jazz & Other',
+    tonal: 'diminished',
+    tonality: 'minor',
+    // Shares 6 of its 8 notes, and its diminished i stays inside the scale.
+    harmony: 'Locrian #2',
   },
 };

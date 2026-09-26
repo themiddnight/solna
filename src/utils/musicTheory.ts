@@ -3,6 +3,7 @@ import {
   ROOTS,
   chromaOfNote,
   formatChordQuality,
+  harmonyKey,
   intervalDistance,
   midiToSharpName,
   noteMidi,
@@ -78,6 +79,10 @@ export function transposeNoteBySemitones(note: string, semitones: number): strin
  * it is out of the source scale or its degree has no target (a 7-note scale's
  * 6th degree has no home in a 5-note pentatonic). Sharp-spelled, like the rest
  * of the ROOTS convention.
+ *
+ * On the same root, between two scales with the same harmony (R358), the
+ * chords do not move, so a note the target scale holds stays put: Major ->
+ * Bebop Major only adds the passing tone and moves nothing.
  */
 export function remapNoteByScaleDegree(
   note: string,
@@ -95,8 +100,25 @@ export function remapNoteByScaleDegree(
   const degree = fromIntervals.indexOf(offset);
   if (degree === -1) return note;
   const toIntervals = scaleEntry(toScaleType).intervals;
+  const sameHarmony = rootRef === rootSemitone(toRoot) && harmonyKey(fromScaleType) === harmonyKey(toScaleType);
+  if (sameHarmony && toIntervals.includes(offset)) return note;
   if (degree >= toIntervals.length) return note;
   return midiToSharpName(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
+}
+
+/**
+ * The in-scale palette: one diatonic chord per degree of the scale that hosts
+ * the chords (R358). Seven for Bebop Major, whose passing tone hosts none;
+ * five for Hirajoshi, whose own degrees do.
+ */
+export function getDiatonicChords(
+  root: string,
+  scaleType: string,
+  use7ths: boolean,
+): { root: string; quality: ChordQuality; degreeName: string }[] {
+  return scaleEntry(harmonyKey(scaleType)).intervals.map((_, degree) =>
+    getDiatonicChordForDegree(degree, root, scaleType, use7ths),
+  );
 }
 
 // True when the in-scale palette (triads or 7ths) renders the same root+quality.
@@ -106,14 +128,11 @@ function isInScalePaletteChord(
   root: string,
   scaleType: string,
 ): boolean {
-  const scale = scaleEntry(scaleType);
-  for (let degree = 0; degree < scale.intervals.length; degree++) {
-    for (const use7ths of [false, true]) {
-      const chord = getDiatonicChordForDegree(degree, root, scaleType, use7ths);
-      if (chord.root === chordRoot && chord.quality === quality) return true;
-    }
-  }
-  return false;
+  return [false, true].some((use7ths) =>
+    getDiatonicChords(root, scaleType, use7ths).some(
+      (chord) => chord.root === chordRoot && chord.quality === quality,
+    ),
+  );
 }
 
 // The interval tuples a stacked triad can measure to, and the app quality token
@@ -287,7 +306,9 @@ export function resolveDegreeQuality(scaleType: string, degree: number, use7ths:
   const cached = degreeQualityCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
-  const { parentKey, degrees } = parentDegreesFor(scaleType, degree);
+  // Chord side (R358): a harmony scale's own degrees host no chords, so the
+  // parent/tertian logic runs on the scale that does.
+  const { parentKey, degrees } = parentDegreesFor(harmonyKey(scaleType), degree);
   // Equidistant neighbours must AGREE. Taking degrees[0] made array order the
   // tiebreak — the one rule scales.test.ts says must never decide it — and a
   // twelfth scale whose tie disagreed would have resolved to whichever parent
@@ -335,8 +356,9 @@ const MAJOR_REFERENCE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
  * comparison against a 7-note Major scale, so it never gets an accidental.
  */
 export function degreeToRoman(scaleType: string, normDegree: number, quality: ChordQuality): string {
-  const resolvedType = resolveScaleKey(scaleType);
-  const scale = scaleEntry(resolvedType);
+  // Chord side (R358): the numeral and its accidental measure the scale that
+  // hosts the chords, so R078–R080 read the harmony scale.
+  const scale = scaleEntry(harmonyKey(scaleType));
   const numDegrees = scale.intervals.length;
 
   const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
@@ -369,12 +391,12 @@ export function getDiatonicChordForDegree(
   use7ths = false
 ): { root: string; quality: ChordQuality; degreeName: string } {
   const rootIndex = rootSemitone(root);
-  // Resolved ONCE and handed down. Normalising the degree against the fallback
-  // entry and then passing the original `scaleType` on left the resolver to
-  // redo the same fallback for itself — two copies of one rule, and only one
-  // of them would move if the rule ever changed.
-  const resolvedType = resolveScaleKey(scaleType);
-  const scale = scaleEntry(resolvedType);
+  // Resolved ONCE and handed down. harmonyKey applies the unknown-type
+  // fallback and then picks the scale that hosts the chords (R358); the
+  // quality and the numeral read that same key, so no second copy of either
+  // rule runs inside them.
+  const chordKey = harmonyKey(scaleType);
+  const scale = scaleEntry(chordKey);
   const numDegrees = scale.intervals.length;
 
   const normDegree = ((degreeIndex % numDegrees) + numDegrees) % numDegrees;
@@ -384,8 +406,8 @@ export function getDiatonicChordForDegree(
   // The `|| 'maj'` / `|| '7'` fallbacks went away with the arrays they guarded:
   // an unresolvable degree now throws inside the resolver rather than sounding
   // a wrong chord.
-  const quality = resolveDegreeQuality(resolvedType, normDegree, use7ths);
-  const degreeName = degreeToRoman(scaleType, normDegree, quality);
+  const quality = resolveDegreeQuality(chordKey, normDegree, use7ths);
+  const degreeName = degreeToRoman(chordKey, normDegree, quality);
 
   return {
     root: chordRoot,
@@ -406,8 +428,13 @@ export interface BorrowedChord {
  */
 export function getBorrowedChords(root: string, scaleType: string): BorrowedChord[] {
   const rootIndex = rootSemitone(root);
+  // Chord side (R358), all the way through: the list is picked, and both
+  // filters run, on the scale that hosts the chords. On Bebop Major's own
+  // notes the iv (F, G#, C) would read as diatonic and vanish, although the
+  // Major palette it borrows from has no F minor.
+  const chordKey = harmonyKey(scaleType);
   const candidates: BorrowedChord[] =
-    scaleType === 'Major' || scaleType === 'Lydian' || scaleType === 'Mixolydian'
+    chordKey === 'Major' || chordKey === 'Lydian' || chordKey === 'Mixolydian'
       ? [
           { root: ROOTS[(rootIndex + 5) % 12], quality: 'min', label: 'iv' },
           { root: ROOTS[(rootIndex + 8) % 12], quality: 'maj', label: '♭VI' },
@@ -416,7 +443,7 @@ export function getBorrowedChords(root: string, scaleType: string): BorrowedChor
           { root: ROOTS[(rootIndex + 1) % 12], quality: 'maj', label: '♭II' },
           { root: ROOTS[(rootIndex + 2) % 12], quality: 'm7b5', label: 'iiø7' },
         ]
-      : scaleType === 'Natural Minor' || scaleType === 'Harmonic Minor' || scaleType === 'Dorian' || scaleType === 'Phrygian'
+      : chordKey === 'Natural Minor' || chordKey === 'Harmonic Minor' || chordKey === 'Dorian' || chordKey === 'Phrygian'
         ? [
             { root: ROOTS[(rootIndex + 5) % 12], quality: 'maj', label: 'IV' },
             { root: ROOTS[(rootIndex + 7) % 12], quality: 'maj', label: 'V' },
@@ -436,10 +463,10 @@ export function getBorrowedChords(root: string, scaleType: string): BorrowedChor
   // renders with the same root and quality.
   const isDiatonic = (chordRoot: string, quality: string): boolean => {
     const notes = generateBlockChordNotes(quality, chordRoot);
-    return notes.length > 0 && notes.every((n) => isNoteInScale(n, root, scaleType));
+    return notes.length > 0 && notes.every((n) => isNoteInScale(n, root, chordKey));
   };
   return candidates.filter(
-    (c) => !isDiatonic(c.root, c.quality) && !isInScalePaletteChord(c.root, c.quality, root, scaleType),
+    (c) => !isDiatonic(c.root, c.quality) && !isInScalePaletteChord(c.root, c.quality, root, chordKey),
   );
 }
 
@@ -506,7 +533,8 @@ export function snapProgressionToScale(
   scaleType: string,
 ): ChordItem[] {
   const newRootIndex = rootSemitone(root);
-  const scale = scaleEntry(scaleType);
+  // Chord side (R358): chords land on the degrees of the scale that hosts them.
+  const scale = scaleEntry(harmonyKey(scaleType));
 
   return currentChords.map((chord, idx) => {
     // Find semitone distance of chord from previous context, or snap to nearest scale degree

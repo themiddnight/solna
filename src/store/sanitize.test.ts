@@ -146,6 +146,17 @@ describe('sanitizeLoops and the scale library', () => {
       expect(out.scaleType).toBe(createDefaultLoop().scaleType);
     }
   });
+
+  test('keeps each harmony scale key, and a lead note on a bebop passing tone', () => {
+    for (const scaleType of ['Double Harmonic Major', 'Hungarian Minor', 'Flamenco', 'Bebop', 'Bebop Major', 'Bebop Minor', 'Whole Tone', 'Diminished']) {
+      const [out] = sanitizeLoops([{ ...createDefaultLoop(), scaleType }]) ?? [];
+      expect(out.scaleType, scaleType).toBe(scaleType);
+    }
+    const [bebop] = sanitizeLoops([
+      { ...createDefaultLoop(), scaleType: 'Bebop Major', leadMelodySteps: [[{ note: 'G#4', len: 1 }]] },
+    ]) ?? [];
+    expect(bebop.leadMelodySteps[0]).toEqual([{ note: 'G#4', len: 1 }]);
+  });
 });
 
 describe('sanitizeLoops fills the label fields instead of inventing a name', () => {

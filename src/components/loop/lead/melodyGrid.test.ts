@@ -673,3 +673,15 @@ describe('leadPreviewHoldSec', () => {
     expect(leadPreviewHoldSec(Number.POSITIVE_INFINITY, 2)).toBe(0);
   });
 });
+
+describe('harmony scales keep their own melody rows (R358)', () => {
+  test('Bebop Major draws 8 rows per octave, G# included, none marked out of scale', () => {
+    const rows = leadPitchRows('scale-locked', 'C', 'Bebop Major', 4, 1);
+    expect(rows).toEqual(['B4', 'A4', 'G#4', 'G4', 'F4', 'E4', 'D4', 'C4']);
+    expect(leadOutOfScaleRows(rows, 'C', 'Bebop Major')).toEqual([false, false, false, false, false, false, false, false]);
+  });
+
+  test('Whole Tone draws 6 rows per octave', () => {
+    expect(leadPitchRows('scale-locked', 'C', 'Whole Tone', 4, 1)).toEqual(['A#4', 'G#4', 'F#4', 'E4', 'D4', 'C4']);
+  });
+});

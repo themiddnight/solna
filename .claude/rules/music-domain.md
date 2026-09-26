@@ -41,7 +41,7 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 
 ## Degree qualities and spelling
 
-- `SCALES` states `name`, `abbr` (the compact trigger's label: unique, at most seven characters, never a cut of `name`), `description`, `category`, `tonal`, `tonality` and, for scales under seven degrees, a 7-note `parent`; it states neither intervals — `src/musicCore/scale.ts` derives them from `tonal` once at load, and `src/data/scales.test.ts` pins the legacy scales' intervals — nor chord qualities. <!-- R061 -->
+- `SCALES` states `name`, `abbr` (the compact trigger's label: unique, at most seven characters, never a cut of `name`), `description`, `category`, `tonal`, `tonality` and at most one of two chord sources: a 7-note `parent` (a scale under seven degrees whose own degrees host chords), or a `harmony` (a scale whose own degrees host none: a 7-note SCALES key that sets neither field). It states neither intervals — `src/musicCore/scale.ts` derives them from `tonal` once at load, and `src/data/scales.test.ts` pins the legacy scales' intervals — nor chord qualities. <!-- R061 -->
 - `resolveDegreeQuality` maps a degree onto the parent by semitone offset, stacks thirds over spelled names and measures with `Interval.distance`; never index `degree % 7` (wrong quality, right shape). <!-- R062 -->
 - An unmapped interval tuple throws (no `maj` fallback); `SCALES` gets no override fields. <!-- R063 -->
 - A sharp name is an identity: everything generated, computed or persisted is `ROOTS`-spelled. <!-- R064 -->
@@ -50,7 +50,13 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - The progression quick-save name is built from the raw root and is not spelled (it is persisted). <!-- R067 -->
 - Nothing spelled is persisted, so spelling never moves the persist `version` or `.solna` `formatVersion`. <!-- R068 -->
 
-([ADR-0006](../../docs/decisions/0006-derived-degree-qualities-and-display-spelling.md), [ADR-0054](../../docs/decisions/0054-derived-scale-intervals.md))
+([ADR-0006](../../docs/decisions/0006-derived-degree-qualities-and-display-spelling.md), [ADR-0054](../../docs/decisions/0054-derived-scale-intervals.md), [ADR-0057](../../docs/decisions/0057-harmony-scales.md))
+
+## Chord side and note side
+
+- Chord-side code (qualities, Roman numerals, diatonic and borrowed chords, progressions, Chord mode, pad drone, bass steps) reads `scaleEntry(harmonyKey(scaleType))`. Note-side code (scale notes, scale lock, melody rows, arp, remap, spelling) reads `scaleEntry(scaleType)`; remap keeps a note the target scale holds when the root and the harmony are unchanged. R078–R080 measure the harmony scale. <!-- R358 -->
+
+([ADR-0057](../../docs/decisions/0057-harmony-scales.md))
 
 ## Chord notes are derived
 
@@ -94,6 +100,8 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - A core function substituting a default instead of returning `null`/`NaN` <!-- R084 -->
 - Intervals, chord qualities or override fields in `SCALES`, or reading `SCALES[key].intervals` instead of `scaleEntry(key).intervals` <!-- R061 --> <!-- R063 -->
 - Cutting a scale's display name for a label instead of reading its `abbr` <!-- R061 -->
+- `parent` and `harmony` on one scale, or a `harmony` that is not a 7-note scale setting neither <!-- R061 -->
+- A chord-side read of `scaleEntry(scaleType)` that skips `harmonyKey` <!-- R358 -->
 - Indexing `degree % 7` into a parent scale <!-- R062 -->
 - Persisting, comparing or keying on a spelled note name <!-- R064 --> <!-- R066 -->
 - Spelling the progression quick-save name <!-- R067 -->

@@ -39,6 +39,10 @@ measures with `Interval.distance`. An unmapped interval tuple **throws**. There 
 overrides**: if the derivation is wrong for a scale the fix is the derivation or the `parent`, and
 a specific chord at a specific degree belongs in a `CHORD_PROGRESSIONS` step's explicit `quality`.
 
+A scale whose own degrees host no chords (the bebops, whole tone, diminished, double harmonic major,
+Hungarian minor, flamenco) names a 7-note `harmony` instead of a `parent`: chord-side code reads
+`scaleEntry(harmonyKey(scaleType))`, note-side code reads `scaleEntry(scaleType)` (R358, ADR-0057).
+
 ## Scales and roots
 
 `ROOTS` is 12 sharp-spelled pitch classes (`C … B`); every generated note name is sharp-spelled.
@@ -60,8 +64,9 @@ the whole spelling change needed no persist-version and no `.solna` format bump.
 to correct one bad value (`'Pentatonic Major'` → `'Major Pentatonic'`) in place because this app has
 no users yet — don't take that as license to rename a key casually once it does.
 The keys are `Object.keys(SCALES)` in `src/data/scales.ts`, grouped by `SCALE_CATEGORIES`. The
-pentatonic, blues and world scales have 5–6 degrees, so never assume 7 — loop
-`scaleEntry(scaleType).intervals.length` (unknown key falls back to `Major`, which is how
+scales have 5 to 8 degrees, so never assume 7 — loop `scaleEntry(scaleType).intervals.length` on
+the note side and `scaleEntry(harmonyKey(scaleType)).intervals.length` on the chord side (unknown
+key falls back to `Major`, which is how
 `'Pentatonic Major'` ran as Major for months without anyone hearing it).
 `Hirajoshi` is `[0, 2, 3, 7, 8]` with `parent: 'Natural Minor'` — a strict subset of it at degrees
 1, 2, 3, 5, 6. Degree 3 was once a hand-written `sus4` / `7sus4` deviation and is now `min` /

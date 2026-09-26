@@ -62,6 +62,17 @@ describe('droneDegreeButtons', () => {
     const buttons = droneDegreeButtons('C', 'Major', 0);
     expect(buttons[1].label).toBe(buttons[1].label.toLowerCase());
   });
+
+  // R358: the drone stands on the scale that hosts the chords.
+  test('Whole Tone renders its harmony\'s seven degrees', () => {
+    expect(droneDegreeButtons('C', 'Whole Tone', 0).map((b) => b.label)).toEqual(['I', 'II', 'III', '#iv', '#v', 'vi', 'vii']);
+  });
+
+  test('Bebop Major renders seven buttons, not eight, and a stored 7 wraps to I', () => {
+    const buttons = droneDegreeButtons('C', 'Bebop Major', 7);
+    expect(buttons.map((b) => b.label)).toEqual(['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii']);
+    expect(buttons.findIndex((b) => b.active)).toBe(0);
+  });
 });
 
 // The preset <select> is a controlled input showing padSynthParams.preset.

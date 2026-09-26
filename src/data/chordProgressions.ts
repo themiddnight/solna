@@ -61,9 +61,10 @@ export interface ChordProgression {
    * one requires no edit anywhere else.
    */
   genres: string[];
-  /** Shortest scale this is valid in: the degree count of referenceScale
-   *  (`scaleEntry(referenceScale).intervals.length`). 5 works in every
-   *  5-note scale; 7 needs a full 7-note scale. */
+  /** Shortest scale this is valid in: the chord-degree count of
+   *  referenceScale (`scaleEntry(harmonyKey(referenceScale)).intervals.length`,
+   *  R358). 5 works in every 5-note scale; 7 needs a scale whose chords sit
+   *  on seven degrees. */
   minScaleLength: number;
   steps: ProgressionStep[];
 }

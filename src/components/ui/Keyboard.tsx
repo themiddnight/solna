@@ -8,7 +8,7 @@ import {
   formatChordLabel,
   generateBlockChordNotes,
 } from '@/utils/musicTheory';
-import { midiToSharpName, noteMidi, octaveOfNote, pitchClassOfNote, scaleEntry } from '@/musicCore';
+import { harmonyKey, midiToSharpName, noteMidi, octaveOfNote, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import { shortcutLabel } from '@/utils/keyboard';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import { GROUP_LABEL } from './fieldClasses';
@@ -92,7 +92,8 @@ function scaleSemitonesFor(root: string, scaleNotes: string[]): number[] {
 // the top row plays the tonic and the scale notes above it, the home row plays
 // the 4th scale note two octaves below the tonic and up
 // (C major: q = C4 … ] = G5, a = F2 … ' = B3). For scales with fewer than
-// 7 notes the rows overlap.
+// 7 notes the rows overlap. For an 8-note scale (a bebop) the home row
+// instead starts 11 steps down, so it still ends just below the tonic.
 export function getScaleLockedKeyboardNotes(
   root: string,
   scaleType: string,
@@ -106,7 +107,10 @@ export function getScaleLockedKeyboardNotes(
   const rootChroma = rootSemitone(root);
   const tonicPitch = rootChroma + 12 * (tonicOctave + 1);
   const scaleSemitones = scaleSemitonesFor(root, scaleNotes);
-  const homeRowStart = -(2 * scaleLength - 3);
+  // 2n-3 steps below the tonic, capped at the row's own length: for n <= 7
+  // that is the old start, and for n = 8 the row still ends on the step just
+  // below the tonic, so the phone's lower row keeps all eight degrees (R340).
+  const homeRowStart = -Math.min(2 * scaleLength - 3, HOME_ROW_KEYS.length);
 
   const noteAt = (step: number): ScaleKeyboardNote => {
     const note = scaleStepNote(tonicPitch, scaleSemitones, scaleLength, step);
@@ -139,8 +143,8 @@ export function getScaleLockedKeyboardNotesFlat(
 // tonic's octave above the octave under it, so both rows start on the tonic
 // and line up degree over degree. Picked out of the QWERTY rows rather than
 // recomputed, so every key keeps the shortcut it has on the desktop — the home
-// row always holds the octave under the tonic (it starts 2n-3 steps below it
-// and runs 11 keys, which covers -n..-1 for every n <= 7).
+// row always holds the octave under the tonic (it starts min(2n-3, 11) steps
+// below it and runs 11 keys, which covers -n..-1 for every n from 3 to 11).
 export function getScaleLockedTouchRows(rows: {
   homeRow: ScaleKeyboardNote[];
   topRow: ScaleKeyboardNote[];
@@ -378,8 +382,9 @@ export function getChordKeyboardRows(
   triadRow: ChordKeyboardButton[];
   melodyRow: ChordKeyboardButton[];
 } {
-  const scale = scaleEntry(scaleType);
-  const degreeCount = scale.intervals.length;
+  // Chord side (R358): one triad per degree of the scale that hosts the
+  // chords, never more than seven, so the triad keys never reach MELODY_KEYS.
+  const degreeCount = scaleEntry(harmonyKey(scaleType)).intervals.length;
   const triadOctave = 3 + octaveOffset;
 
   const triadRow: ChordKeyboardButton[] = [];
