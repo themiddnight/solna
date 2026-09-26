@@ -1,6 +1,6 @@
 # ADR-0054: Scale intervals are derived from tonal
 
-**Status:** Accepted — 2026-09-26. Amends [ADR-0006](0006-derived-degree-qualities-and-display-spelling.md) (R061). No issue.
+**Status:** Accepted — 2026-09-26. Amends [ADR-0006](0006-derived-degree-qualities-and-display-spelling.md) (R061). No issue. R061 amended again by [ADR-0057](0057-harmony-scales.md).
 
 ## Context
 

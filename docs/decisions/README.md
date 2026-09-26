@@ -71,6 +71,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0054](0054-derived-scale-intervals.md) | Scale intervals are derived from tonal | `SCALES` states name, abbreviation, description, category, `tonal`, tonality and parent; Music Core derives intervals once at load; a golden pin keeps the legacy scales' intervals; amends ADR-0006's R061. |
 | [0055](0055-shared-popup-and-listbox.md) | Shared Popup and Listbox primitives | Popups build on `ui/Popup` (a controlled daisyUI dropdown with one dismissal, focus and placement hook); a custom listbox is `ui/Listbox` (active descendant, explicit commit); the header Scale Type is the first consumer; amends ADR-0044's R327 and R328. |
 | [0056](0056-popup-migration-complete.md) | Every popup on ui/Popup | The dock menus, the project menu and quick-save move onto `ui/Popup`; `usePopup` reads `onClose` through a latest-ref and hears an outside pointerdown in capture; `Popup` gains `side` and a `tabIndex={-1}` panel; no `role="menu"`; ThemePicker's move dropped; amends R328. |
+| [0057](0057-harmony-scales.md) | Harmony scales | The bebops, whole tone, diminished, double harmonic major, Hungarian minor and flamenco name a 7-note `harmony` whose chords they use wholesale; chord-side code reads `scaleEntry(harmonyKey(scaleType))`, note-side code the scale itself; amends ADR-0054's R061, adds R358. |
 
 ## Adding or changing a decision
 
