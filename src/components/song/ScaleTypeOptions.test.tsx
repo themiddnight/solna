@@ -13,8 +13,9 @@ const html = renderToString(
 
 /** `[label, optionValues[]]` for each optgroup, in document order. */
 function groups(markup: string): [string, string[]][] {
+  // renderToString escapes `&` in the label (Jazz & Other).
   return [...markup.matchAll(/<optgroup label="([^"]*)">(.*?)<\/optgroup>/g)].map(([, label, body]) => [
-    label,
+    label.replaceAll('&amp;', '&'),
     [...body.matchAll(/<option value="([^"]*)"/g)].map(([, value]) => value),
   ]);
 }

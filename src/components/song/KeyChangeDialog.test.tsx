@@ -36,7 +36,8 @@ describe('KeyChangeDialog', () => {
   test('the scale select groups its options, one optgroup per category', () => {
     const select = html.slice(html.indexOf('id="select-key-change-scale"'));
     const labels = [...select.slice(0, select.indexOf('</select>')).matchAll(/<optgroup label="([^"]*)"/g)]
-      .map(([, label]) => label);
+      // renderToString escapes `&` in the label (Jazz & Other).
+      .map(([, label]) => label.replaceAll('&amp;', '&'));
     expect(labels).toEqual([...SCALE_CATEGORIES]);
   });
 

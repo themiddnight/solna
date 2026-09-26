@@ -171,8 +171,8 @@ describe('spelling never changes which pitches a scale contains', () => {
 });
 
 describe('spelling characterization', () => {
-  test('pins all 288 (root x scale) pairs', () => {
-    expect(Object.keys(SPELLING_CHARACTERIZATION).length).toBe(288);
+  test('pins all 384 (root x scale) pairs', () => {
+    expect(Object.keys(SPELLING_CHARACTERIZATION).length).toBe(384);
     const actual: Record<string, string> = {};
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
@@ -182,7 +182,7 @@ describe('spelling characterization', () => {
     expect(actual).toEqual(SPELLING_CHARACTERIZATION);
   });
 
-  test('changes at least one note name in 166 of the 288 pairs', () => {
+  test('changes at least one note name in 239 of the 384 pairs', () => {
     let changed = 0;
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
@@ -190,10 +190,10 @@ describe('spelling characterization', () => {
         if (spellScaleNotes(root, scaleType).join(' ') !== sharp) changed++;
       }
     }
-    expect(changed).toBe(166);
+    expect(changed).toBe(239);
   });
 
-  test('exactly eleven pairs reach a double accidental and take the fallback', () => {
+  test('exactly twenty-five pairs reach a double accidental and take the fallback', () => {
     const fallbacks: string[] = [];
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
@@ -203,15 +203,29 @@ describe('spelling characterization', () => {
       }
     }
     expect(fallbacks.sort()).toEqual([
+      'A|Whole Tone',
+      'B|Bebop Major',
       'B|Lydian Augmented',
+      'B|Whole Tone',
+      'C#|Double Harmonic Major',
+      'C#|Flamenco',
       'C#|Harmonic Major',
+      'C#|Hungarian Minor',
       'C#|Mixolydian b6',
       'C#|Phrygian Dominant',
       'D#|Blues',
+      'D#|Diminished',
       'D#|Locrian',
       'D#|Locrian #2',
+      'E|Whole Tone',
+      'F#|Bebop Major',
       'F#|Lydian Augmented',
+      'F#|Whole Tone',
+      'G#|Diminished',
+      'G#|Double Harmonic Major',
+      'G#|Flamenco',
       'G#|Harmonic Minor',
+      'G#|Hungarian Minor',
       'G#|Melodic Minor',
       'G#|Phrygian Dominant',
     ]);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CHORD_QUALITY_GROUPS, isChordQuality, scaleEntry, type ChordQuality } from '@/musicCore';
+import { CHORD_QUALITY_GROUPS, harmonyKey, isChordQuality, scaleEntry, type ChordQuality } from '@/musicCore';
 import { ROOTS, TONAL_CHORD_ALIASES, degreeToRoman, formatChordLabel, formatChordQuality, generateBlockChordNotes, getBorrowedChords, getDiatonicChordForDegree, getScaleNotes, isNoteInScale, parentDegreesFor, remapNoteByScaleDegree, resolveDegreeQuality, resolveParentDegreeQuality, rootSemitone, snapProgressionToScale, transposeNoteBySemitones, transposeProgression } from './musicTheory';
 import { MAX_BPM, MIN_BPM, STEPS_PER_BAR, barDurationSec, clampBpm, sixteenthNoteMs, stepDurationSec } from './tempo';
 import { SCALES } from '@/data/scales';
@@ -11,7 +11,7 @@ import type { ChordItem } from '../types';
 const SCALE_KEYS = Object.keys(SCALES);
 
 function inScalePaletteEntries(root: string, scaleType: string): Set<string> {
-  const numDegrees = scaleEntry(scaleType).intervals.length;
+  const numDegrees = scaleEntry(harmonyKey(scaleType)).intervals.length;
   const entries = new Set<string>();
   for (let degree = 0; degree < numDegrees; degree++) {
     for (const use7ths of [false, true]) {
@@ -65,7 +65,7 @@ describe('getBorrowedChords catalog', () => {
         .filter(
           (c) =>
             palette.has(`${c.root}:${c.quality}`) ||
-            strictlyDiatonic(c.root, c.quality, 'C', scaleType),
+            strictlyDiatonic(c.root, c.quality, 'C', harmonyKey(scaleType)),
         )
         .map((d) => `${scaleType}: ${d.root}${d.quality}`);
       expect(duplicates).toEqual([]);
@@ -366,12 +366,12 @@ describe('snapProgressionToScale', () => {
     ]);
   });
 
-  test('every output root is a degree of the target scale', () => {
+  test('every output root is a degree of the target scale\'s harmony scale (R358)', () => {
     for (const root of ROOTS) {
       for (const scaleType of Object.keys(SCALES)) {
         const snapped = snapProgressionToScale(A_MINOR_PROGRESSION, root, scaleType);
         for (const c of snapped) {
-          expect(getScaleNotes(root, scaleType)).toContain(c.root);
+          expect(getScaleNotes(root, harmonyKey(scaleType))).toContain(c.root);
         }
       }
     }
@@ -706,7 +706,7 @@ describe('resolveDegreeQuality', () => {
 describe('resolveDegreeQuality output vs. the chord-quality registry', () => {
   test('every triad and seventh quality every scale can emit is a registered, picker-representable token', () => {
     for (const scaleType of SCALE_KEYS) {
-      const numDegrees = scaleEntry(scaleType).intervals.length;
+      const numDegrees = scaleEntry(harmonyKey(scaleType)).intervals.length;
       for (let degree = 0; degree < numDegrees; degree++) {
         for (const use7ths of [false, true]) {
           const quality = resolveDegreeQuality(scaleType, degree, use7ths);

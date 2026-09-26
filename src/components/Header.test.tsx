@@ -393,6 +393,21 @@ describe('scale type listbox', () => {
     }
   });
 
+  test('the listbox shows the Jazz & Other group with its five scales', () => {
+    const html = renderToString(
+      <ScaleMenuPanel scaleType="Dorian" listboxRef={{ current: null }} onCommit={() => {}} />,
+    );
+    // renderToString escapes `&`. Jazz & Other is the last group, so the
+    // markup after its heading holds its options and nothing else.
+    const start = html.indexOf('>Jazz &amp; Other</div>');
+    expect(start).toBeGreaterThan(-1);
+    const group = html.slice(start);
+    expect(group.match(/role="option"/g) ?? []).toHaveLength(5);
+    for (const name of ['Bebop (Dominant)', 'Bebop Major', 'Bebop Minor', 'Whole Tone', 'Diminished']) {
+      expect(group).toContain(`>${name}</div>`);
+    }
+  });
+
   test('the compact panel holds the heading, the root select and the scale listbox', () => {
     const html = renderToString(
       <ScaleMenuPanel scaleType="Dorian" listboxRef={{ current: null }} onCommit={() => {}} />,

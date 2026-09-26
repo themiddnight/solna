@@ -69,6 +69,17 @@ describe('scaleEntry', () => {
 });
 
 describe('harmonyKey', () => {
+  test('names the harmony of each of the eight harmony scales', () => {
+    expect(harmonyKey('Bebop')).toBe('Mixolydian');
+    expect(harmonyKey('Bebop Major')).toBe('Major');
+    expect(harmonyKey('Bebop Minor')).toBe('Dorian');
+    expect(harmonyKey('Whole Tone')).toBe('Lydian Augmented');
+    expect(harmonyKey('Diminished')).toBe('Locrian #2');
+    expect(harmonyKey('Double Harmonic Major')).toBe('Phrygian Dominant');
+    expect(harmonyKey('Hungarian Minor')).toBe('Harmonic Minor');
+    expect(harmonyKey('Flamenco')).toBe('Phrygian Dominant');
+  });
+
   test('a scale that names no harmony hosts its own chords', () => {
     expect(harmonyKey('Major')).toBe('Major');
     expect(harmonyKey('Dorian')).toBe('Dorian');
