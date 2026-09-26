@@ -72,8 +72,11 @@ Rejected:
 - A harmony scale inherits its harmony's borrowed list and Roman-numeral accidentals: Whole Tone
   reads `#iv` and `#v`, although it has six notes.
 - A seven-degree progression is offered in Whole Tone.
-- A lead melody still remaps by the scale's own degree on a scale change, so Major → Bebop Major
-  moves A to G#. A harmony-aware remap would be a separate decision.
+- A lead melody remaps by the scale's own degree on a scale change, with one exception: on the
+  same root, between two scales with the same harmony, a note the target scale holds stays put.
+  Major → Bebop Major therefore moves nothing (it only adds the passing tone), and Bebop Major →
+  Major moves only G#, to A. The plan first pinned a pure degree remap (A → G#); the final review
+  showed it rewrote a melody the new scale already contained, over chords that had not moved.
 - Adding a scale whose degrees host no chords is one SCALES entry naming its `tonal` scale and a
   7-note `harmony`. The characterization fixtures gain lines, and none of the existing ones move.
 

@@ -110,14 +110,28 @@ describe('harmony scales: the note side reads the scale itself (R358)', () => {
   });
 });
 
-describe('lead remap stays on the note side (R358)', () => {
-  // Review Focus 3: remap maps by the scale's own degree index. Major →
-  // Bebop Major moves A (degree 5) to G#; the way back moves G# to A, and B
-  // (Bebop Major's degree 7) has no Major home, so it stays put.
-  test('Major and Bebop Major remap by degree, both ways', () => {
-    expect(remapNoteByScaleDegree('A4', 'C', 'Major', 'C', 'Bebop Major')).toBe('G#4');
+describe('lead remap on a scale change (R358)', () => {
+  // Same root, same harmony: the chords do not move, so a note the target
+  // scale holds stays put. Major -> Bebop Major only ADDS the G# passing tone;
+  // the way back maps G# (Bebop Major's degree 5) to A, and nothing collapses.
+  test('Major and Bebop Major keep every shared note, both ways', () => {
+    expect(remapNoteByScaleDegree('A4', 'C', 'Major', 'C', 'Bebop Major')).toBe('A4');
+    expect(remapNoteByScaleDegree('B4', 'C', 'Major', 'C', 'Bebop Major')).toBe('B4');
     expect(remapNoteByScaleDegree('G#4', 'C', 'Bebop Major', 'C', 'Major')).toBe('A4');
+    expect(remapNoteByScaleDegree('A4', 'C', 'Bebop Major', 'C', 'Major')).toBe('A4');
     expect(remapNoteByScaleDegree('B4', 'C', 'Bebop Major', 'C', 'Major')).toBe('B4');
+  });
+
+  test('Dorian to Bebop Minor keeps F, G, A and Bb', () => {
+    for (const note of ['F4', 'G4', 'A4', 'A#4']) {
+      expect(remapNoteByScaleDegree(note, 'C', 'Dorian', 'C', 'Bebop Minor'), note).toBe(note);
+    }
+  });
+
+  // A different harmony, or a different root, still maps by degree.
+  test('any other change still remaps by the scale\'s own degree', () => {
+    expect(remapNoteByScaleDegree('F4', 'C', 'Major', 'C', 'Lydian')).toBe('F#4');
+    expect(remapNoteByScaleDegree('A4', 'C', 'Major', 'D', 'Major')).toBe('B4');
   });
 });
 

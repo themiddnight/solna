@@ -54,7 +54,7 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 
 ## Chord side and note side
 
-- Chord-side code (qualities, Roman numerals, diatonic and borrowed chords, progressions, Chord mode, pad drone, bass steps) reads `scaleEntry(harmonyKey(scaleType))`. Note-side code (scale notes, scale lock, melody rows, arp, remap, spelling) reads `scaleEntry(scaleType)`. R078–R080 measure the harmony scale. <!-- R358 -->
+- Chord-side code (qualities, Roman numerals, diatonic and borrowed chords, progressions, Chord mode, pad drone, bass steps) reads `scaleEntry(harmonyKey(scaleType))`. Note-side code (scale notes, scale lock, melody rows, arp, remap, spelling) reads `scaleEntry(scaleType)`; remap keeps a note the target scale holds when the root and the harmony are unchanged. R078–R080 measure the harmony scale. <!-- R358 -->
 
 ([ADR-0057](../../docs/decisions/0057-harmony-scales.md))
 

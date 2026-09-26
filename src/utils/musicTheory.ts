@@ -79,6 +79,10 @@ export function transposeNoteBySemitones(note: string, semitones: number): strin
  * it is out of the source scale or its degree has no target (a 7-note scale's
  * 6th degree has no home in a 5-note pentatonic). Sharp-spelled, like the rest
  * of the ROOTS convention.
+ *
+ * On the same root, between two scales with the same harmony (R358), the
+ * chords do not move, so a note the target scale holds stays put: Major ->
+ * Bebop Major only adds the passing tone and moves nothing.
  */
 export function remapNoteByScaleDegree(
   note: string,
@@ -96,6 +100,8 @@ export function remapNoteByScaleDegree(
   const degree = fromIntervals.indexOf(offset);
   if (degree === -1) return note;
   const toIntervals = scaleEntry(toScaleType).intervals;
+  const sameHarmony = rootRef === rootSemitone(toRoot) && harmonyKey(fromScaleType) === harmonyKey(toScaleType);
+  if (sameHarmony && toIntervals.includes(offset)) return note;
   if (degree >= toIntervals.length) return note;
   return midiToSharpName(rootSemitone(toRoot) + block * 12 + toIntervals[degree]);
 }
