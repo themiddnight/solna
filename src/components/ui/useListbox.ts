@@ -51,17 +51,6 @@ export function activeForValue(values: readonly string[], value: string): number
   return Math.max(0, values.indexOf(value));
 }
 
-/**
- * The highlight after `value` may have changed. While `value` stands, the
- * highlight is the user's (arrows, Home/End, type-ahead, hover) and is kept.
- * When `value` changed from outside, it re-seeds onto the new value's option.
- * A commit also changes `value`, onto the option already highlighted, so the
- * re-seed lands where the highlight already is.
- */
-export function nextActive(prevValue: string, value: string, active: number, values: readonly string[]): number {
-  return prevValue === value ? active : activeForValue(values, value);
-}
-
 /** A `data-option-index` attribute as an option index, or `null` when it names no option. */
 export function parseOptionIndex(raw: string | null | undefined, count: number): number | null {
   if (raw === null || raw === undefined || raw === '') return null;
@@ -125,7 +114,10 @@ export function useListbox({ id, groups, value, onCommit }: ListboxOptions): Use
   const [seededValue, setSeededValue] = useState(value);
   if (seededValue !== value) {
     setSeededValue(value);
-    setActive(nextActive(seededValue, value, active, model.values));
+    // An outside change moves the highlight to the new value; a commit lands
+    // here too, onto the option it just committed and already highlights.
+    // While `value` stands, the highlight stays the user's.
+    setActive(activeForValue(model.values, value));
   }
 
   // Hover already points at a visible row; scrolling under the pointer would
