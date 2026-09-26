@@ -18,12 +18,17 @@ export interface UseScaleTypeListbox {
   close: () => void;
   onTriggerKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
   listboxRef: RefObject<HTMLDivElement | null>;
-  /** Writes the scale (unless unchanged) and closes the popup. */
+  /** Writes the scale (unless unchanged), then closes the popup if `closeOnCommit`. */
   onCommit: (value: string) => void;
 }
 
-/** The xl scale-type trigger's state: open/close, open keys and commit. */
-export function useScaleTypeListbox(): UseScaleTypeListbox {
+/**
+ * A scale-type popup's state: open/close, open keys and commit. The xl
+ * trigger closes on a commit; the compact key/scale panel (`closeOnCommit`
+ * false) stays open, as the <details> it replaced did: the root select sits
+ * beside the list, and a key is often set in two picks.
+ */
+export function useScaleTypeListbox(closeOnCommit = true): UseScaleTypeListbox {
   const scaleType = useAppStore((s) => s.scaleType);
   const setScaleType = useAppStore((s) => s.setScaleType);
   const [open, setOpen] = useState(false);
@@ -47,9 +52,9 @@ export function useScaleTypeListbox(): UseScaleTypeListbox {
   const onCommit = useCallback(
     (value: string) => {
       commitScaleType(scaleType, value, setScaleType);
-      setOpen(false);
+      if (closeOnCommit) setOpen(false);
     },
-    [scaleType, setScaleType],
+    [scaleType, setScaleType, closeOnCommit],
   );
 
   return { scaleType, open, toggle, close, onTriggerKeyDown, listboxRef, onCommit };

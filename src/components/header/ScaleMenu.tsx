@@ -8,7 +8,7 @@ import { Listbox } from '@/components/ui/Listbox';
 import { Popup } from '@/components/ui/Popup';
 import { SCALE_LISTBOX_GROUPS } from './scaleListboxGroups';
 import { ScaleTypeListbox } from './ScaleTypeListbox';
-import { useScaleMenu } from './useScaleMenu';
+import { useScaleTypeListbox } from './useScaleTypeListbox';
 
 /**
  * The compact trigger inside its field box: a content-box `h-8`, the
@@ -120,7 +120,8 @@ export function ScaleMenuPanel({ scaleType, listboxRef, onCommit }: ScaleMenuPan
  * right end of the mobile top bar, and `popupShift` pulls any overflow back.
  */
 export function ScaleMenu() {
-  const { scaleRoot, scaleType, open, toggle, close, listboxRef, onCommit } = useScaleMenu();
+  const scaleRoot = useAppStore((s) => s.scaleRoot);
+  const { scaleType, open, toggle, close, listboxRef, onCommit } = useScaleTypeListbox(false);
   return (
     <>
       <div className={`hidden xl:flex ${HEADER_FIELD_SHELL}`}>
