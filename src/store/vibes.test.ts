@@ -311,7 +311,7 @@ describe('vibe preset id resolution', () => {
     useAppStore.getState().hardStopAll();
   });
 
-  test('exactly one vibe arms an arpeggiator, and it is Cyber EDM’s lead', () => {
+  test('no vibe arms an arpeggiator', () => {
     // Pinned so that arming one is always a decision somebody made, never a
     // default that spread. A vibe that switches the arpeggiator on behind the
     // user's back is the failure the previous "always off" rule guarded
@@ -321,7 +321,7 @@ describe('vibe preset id resolution', () => {
         .filter(([, arp]) => arp.active)
         .map(([target]) => `${vibe.id}.${target}`),
     );
-    expect(armed).toEqual(['cyber-edm.synth']);
+    expect(armed).toEqual([]);
   });
 
   test('applying a vibe installs each named preset’s own patch on its own bus', () => {
