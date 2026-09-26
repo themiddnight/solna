@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SCALES } from '@/data/scales';
 import { harmonyKey } from '@/musicCore';
 import type { ChordItem } from '../types';
@@ -10,6 +12,7 @@ import {
   getDiatonicChords,
   getScaleNotes,
   isNoteInScale,
+  remapNoteByScaleDegree,
   snapProgressionToScale,
 } from './musicTheory';
 
@@ -104,5 +107,44 @@ describe('harmony scales: the note side reads the scale itself (R358)', () => {
   test('A is outside C Whole Tone although its vi chord stands on it', () => {
     expect(isNoteInScale('A', 'C', 'Whole Tone')).toBe(false);
     expect(getDiatonicChordForDegree(5, 'C', 'Whole Tone').root).toBe('A');
+  });
+});
+
+describe('lead remap stays on the note side (R358)', () => {
+  // Review Focus 3: remap maps by the scale's own degree index. Major →
+  // Bebop Major moves A (degree 5) to G#; the way back moves G# to A, and B
+  // (Bebop Major's degree 7) has no Major home, so it stays put.
+  test('Major and Bebop Major remap by degree, both ways', () => {
+    expect(remapNoteByScaleDegree('A4', 'C', 'Major', 'C', 'Bebop Major')).toBe('G#4');
+    expect(remapNoteByScaleDegree('G#4', 'C', 'Bebop Major', 'C', 'Major')).toBe('A4');
+    expect(remapNoteByScaleDegree('B4', 'C', 'Bebop Major', 'C', 'Major')).toBe('B4');
+  });
+});
+
+// R358's Prohibited line, made mechanical for the files that are chord side
+// through and through: each scale-entry read goes through harmonyKey.
+// (musicTheory.ts mixes both sides and is covered by its own tests.)
+describe('chord-side files read the harmony scale (R358)', () => {
+  const read = (file: string) => readFileSync(join(process.cwd(), file), 'utf8');
+
+  test('every scaleEntry( call in a chord-side file is scaleEntry(harmonyKey(', () => {
+    for (const file of [
+      'src/components/ui/Keyboard.tsx',
+      'src/components/loop/chord/padPanel.ts',
+      'src/components/loop/chord/progressionAvailability.ts',
+      'src/audio/bassPatterns.ts',
+    ]) {
+      const source = read(file);
+      const all = source.split('scaleEntry(').length - 1;
+      const viaHarmony = source.split('scaleEntry(harmonyKey(').length - 1;
+      expect(all, file).toBeGreaterThan(0);
+      expect(viaHarmony, file).toBe(all);
+    }
+  });
+
+  test('the chord palette reads getDiatonicChords, not a scale entry', () => {
+    const source = read('src/components/loop/chord/useChordView.ts');
+    expect(source).toContain('getDiatonicChords(');
+    expect(source).not.toContain('scaleEntry(');
   });
 });

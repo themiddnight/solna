@@ -1,4 +1,4 @@
-import { midiToSharpName, noteMidi, pitchClassOfNote, scaleEntry } from '@/musicCore';
+import { harmonyKey, midiToSharpName, noteMidi, pitchClassOfNote, scaleEntry } from '@/musicCore';
 import type { ChordItem } from '../types';
 import { generateBlockChordNotes, rootSemitone } from '../utils/musicTheory';
 import { stepDurationSec } from '../utils/tempo';
@@ -97,7 +97,9 @@ export function resolveBassSteps(
   // First scale degree (rootSemitone + intervals) above the target pitch class; wraps to next octave
   const diatonicStepAbove = (targetPc: number): number => {
     const rootPc = rootSemitone(scaleRoot);
-    const intervals = scaleEntry(scaleType).intervals;
+    // Chord side (R358): the bass follows the chords, so it steps on the
+    // harmony scale's degrees and never lands on a bebop passing tone.
+    const intervals = scaleEntry(harmonyKey(scaleType)).intervals;
     let above: number | null = null;
     let lowest = 12;
     for (const ivl of intervals) {

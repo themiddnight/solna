@@ -324,3 +324,13 @@ describe('customBassPatternFromSpans — a stored row at the active meter', () =
     ]);
   });
 });
+
+describe('harmony scales (R358)', () => {
+  const Gmaj: ChordItem = { id: 'g', root: 'G', quality: 'maj', bars: 1 };
+  const approachUp: BassPattern = { id: 'au', name: 'au', style: 'Walking', steps: [{ step: 0, note: 'approachDiatonicUp' }] };
+
+  test('a diatonic step over Bebop Major lands on A, never the G# passing tone', () => {
+    expect(names(resolveBassSteps(approachUp, [Cmaj, Gmaj], 0, 2, 'C', 'Bebop Major', 120))).toEqual(['A2']);
+    expect(names(resolveBassSteps(approachUp, [Cmaj, Gmaj], 0, 2, 'C', 'Major', 120))).toEqual(['A2']);
+  });
+});
