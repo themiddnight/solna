@@ -1,6 +1,11 @@
 import React from "react";
 import { Bookmark } from "lucide-react";
 import { useQuickSavePopover } from "./useQuickSavePopover";
+import { Popup } from "./Popup";
+
+/** The panel's box, the look the hand-rolled dropdown's panel wore. */
+const QUICK_SAVE_PANEL =
+  "mt-2 w-80 max-w-[calc(100vw-1rem)] card bg-base-100 border border-primary/40 p-3.5 shadow-xl animate-fade-in";
 
 /** The trigger button a call site hands the popover; it renders it, so the
  * `dropdown` wrapper and the panel share one anchor point (R328). */
@@ -56,9 +61,7 @@ function QuickSaveTriggerButton({
 }
 
 function QuickSavePanel({
-  panelRef,
   inputRef,
-  shift,
   heading,
   placeholder,
   saveLabel,
@@ -82,18 +85,10 @@ function QuickSavePanel({
   | 'onCategoryChange'
   | 'onClose'
 > & {
-  panelRef: React.RefObject<HTMLDivElement | null>;
   inputRef: React.RefObject<HTMLInputElement | null>;
-  shift: number;
 }) {
   return (
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-label={heading}
-      style={shift ? { transform: `translateX(${shift}px)` } : undefined}
-      className="dropdown-content z-50 mt-2 w-80 max-w-[calc(100vw-1rem)] card bg-base-100 border border-primary/40 p-3.5 shadow-xl animate-fade-in"
-    >
+    <div role="dialog" aria-label={heading}>
       <div className="flex items-center gap-2 text-xs font-semibold text-base-content mb-2">
         <Bookmark className="w-4 h-4 text-primary" />
         <span>{heading}</span>
@@ -149,28 +144,30 @@ export function QuickSavePopover({
   category,
   onCategoryChange,
 }: QuickSavePopoverProps) {
-  const { wrapperRef, panelRef, inputRef, shift } = useQuickSavePopover(open, onClose);
+  const { inputRef } = useQuickSavePopover(open);
 
   return (
-    <div ref={wrapperRef} className={`dropdown dropdown-end${open ? ' dropdown-open' : ''}`}>
-      <QuickSaveTriggerButton trigger={trigger} open={open} onOpen={onOpen} onClose={onClose} />
-      {open && (
-        <QuickSavePanel
-          panelRef={panelRef}
-          inputRef={inputRef}
-          shift={shift}
-          heading={heading}
-          placeholder={placeholder}
-          saveLabel={saveLabel}
-          name={name}
-          onNameChange={onNameChange}
-          onSubmit={onSubmit}
-          categories={categories}
-          category={category}
-          onCategoryChange={onCategoryChange}
-          onClose={onClose}
-        />
-      )}
-    </div>
+    <Popup
+      open={open}
+      onClose={onClose}
+      align="end"
+      panelClassName={QUICK_SAVE_PANEL}
+      initialFocusRef={inputRef}
+      trigger={<QuickSaveTriggerButton trigger={trigger} open={open} onOpen={onOpen} onClose={onClose} />}
+    >
+      <QuickSavePanel
+        inputRef={inputRef}
+        heading={heading}
+        placeholder={placeholder}
+        saveLabel={saveLabel}
+        name={name}
+        onNameChange={onNameChange}
+        onSubmit={onSubmit}
+        categories={categories}
+        category={category}
+        onCategoryChange={onCategoryChange}
+        onClose={onClose}
+      />
+    </Popup>
   );
 }

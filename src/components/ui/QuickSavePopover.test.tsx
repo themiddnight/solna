@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import { QuickSavePopover } from './QuickSavePopover';
 
@@ -87,5 +88,25 @@ describe('QuickSavePopover', () => {
   test('the name input no longer carries autoFocus', () => {
     const html = renderToString(<QuickSavePopover {...base} open={true} />);
     expect(html).not.toContain('autofocus');
+  });
+
+  test('the panel is Popup’s: pointer-focusable only, hanging from the trigger’s end edge', () => {
+    const html = renderToString(<QuickSavePopover {...base} open={true} />);
+    expect(html).toContain('<div class="dropdown dropdown-end dropdown-open">');
+    expect(html).toContain('<div tabindex="-1" class="dropdown-content z-50 outline-none mt-2 w-80');
+    expect(html).toContain('<div role="dialog" aria-label="Save Custom Preset:">');
+  });
+
+  /**
+   * Popup's focus effect (a child's, so it runs first) records the trigger,
+   * then focuses the name input; the hook's effect only selects the text. A
+   * hook that focused the input itself would make Popup record the input,
+   * and closing would leave focus there instead of on the trigger.
+   */
+  test('useQuickSavePopover selects the text but never moves focus itself', () => {
+    const source = readFileSync(new URL('./useQuickSavePopover.ts', import.meta.url), 'utf8');
+    expect(source).toContain('.select()');
+    expect(source).not.toContain('.focus(');
+    expect(source).not.toContain('addEventListener');
   });
 });
