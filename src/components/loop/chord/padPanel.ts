@@ -1,11 +1,12 @@
-import { scaleEntry } from '@/musicCore';
+import { harmonyKey, scaleEntry } from '@/musicCore';
 import { getDiatonicChordForDegree } from '@/utils/musicTheory';
 import type { CategoryPresetGroup } from '@/utils/synthPresets';
 
 /**
- * One button per degree of the ACTIVE scale — five for Hirajoshi, seven for
- * Major. Labels come from getDiatonicChordForDegree, which already lower-cases
- * minor and diminished numerals.
+ * One button per degree of the scale that hosts the chords (R358): five for
+ * Hirajoshi, seven for Major, and seven for Bebop Major and Whole Tone, whose
+ * harmony scales have seven. Labels come from getDiatonicChordForDegree, which
+ * already lower-cases minor and diminished numerals.
  *
  * The active button is `selected % length`, matching the wrap the resolver
  * performs, so the highlight always shows the degree that is actually heard.
@@ -16,8 +17,7 @@ export function droneDegreeButtons(
   scaleType: string,
   selected: number,
 ): { index: number; label: string; active: boolean }[] {
-  const scale = scaleEntry(scaleType);
-  const length = scale.intervals.length;
+  const length = scaleEntry(harmonyKey(scaleType)).intervals.length;
   const activeIndex = ((selected % length) + length) % length;
   return Array.from({ length }, (_, index) => ({
     index,

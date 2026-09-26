@@ -19,6 +19,7 @@ import {
   TOP_ROW_KEYS,
 } from './Keyboard';
 import { ROOTS } from '@/utils/musicTheory';
+import { SCALES } from '@/data/scales';
 
 const pitchOf = (note: string): number => {
   const match = note.match(/^([A-G][#b]?)(-?\d+)$/);
@@ -457,5 +458,55 @@ describe('the mobile keyboard variant fits the width (R340)', () => {
     );
     const { upper, lower } = getScaleLockedTouchRows(rows);
     expect(html.match(/<button/g)).toHaveLength(upper.length + lower.length);
+  });
+});
+
+describe('harmony scales on the keyboard (R358)', () => {
+  test('scale lock plays all 8 Bebop Major degrees, G# included, and the home row ends below the tonic', () => {
+    const rows = getScaleLockedKeyboardNotes('C', 'Bebop Major', 0);
+    expect(rows.topRow.slice(0, 9).map((k) => k.note)).toEqual(['C4', 'D4', 'E4', 'F4', 'G4', 'G#4', 'A4', 'B4', 'C5']);
+    expect(rows.homeRow.map((k) => k.note)).toEqual(['G#2', 'A2', 'B2', 'C3', 'D3', 'E3', 'F3', 'G3', 'G#3', 'A3', 'B3']);
+  });
+
+  // Review Focus 1: with the old 2n-3 start the lower row lost A3 and B3.
+  test('the phone rows hold all 8 Bebop Major degrees, an octave apart', () => {
+    const { upper, lower } = getScaleLockedTouchRows(getScaleLockedKeyboardNotes('C', 'Bebop Major', 0));
+    expect(upper.map((k) => k.note)).toEqual(['C4', 'D4', 'E4', 'F4', 'G4', 'G#4', 'A4', 'B4']);
+    expect(lower.map((k) => k.note)).toEqual(['C3', 'D3', 'E3', 'F3', 'G3', 'G#3', 'A3', 'B3']);
+  });
+
+  test('the phone rows hold the 6 Whole Tone degrees', () => {
+    const { upper, lower } = getScaleLockedTouchRows(getScaleLockedKeyboardNotes('C', 'Whole Tone', 0));
+    expect(upper.map((k) => k.note)).toEqual(['C4', 'D4', 'E4', 'F#4', 'G#4', 'A#4']);
+    expect(lower.map((k) => k.note)).toEqual(['C3', 'D3', 'E3', 'F#3', 'G#3', 'A#3']);
+  });
+
+  test('Chord mode on Bebop Major is the 7 Major triads', () => {
+    expect(getChordKeyboardRows('C', 'Bebop Major', 0).triadRow.map((b) => b.label)).toEqual([
+      'C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim',
+    ]);
+  });
+
+  test('Chord mode on Whole Tone is Lydian Augmented\'s 7 triads', () => {
+    expect(getChordKeyboardRows('C', 'Whole Tone', 0).triadRow.map((b) => b.label)).toEqual([
+      'Caug', 'D', 'E', 'F#dim', 'G#dim', 'Am', 'Bm',
+    ]);
+  });
+
+  test('the Chord-mode melody row plays the scale\'s own notes', () => {
+    expect(getChordKeyboardRows('C', 'Bebop Major', 0).melodyRow.map((b) => b.notes[0])).toEqual([
+      'C4', 'D4', 'E4', 'F4', 'G4', 'G#4', 'A4', 'B4', 'C5',
+    ]);
+  });
+
+  // Review Focus 2: an 8th triad would take KeyK, the melody row's first key.
+  test('for every scale the chord zone stays clear of the melody keys', () => {
+    for (const scaleType of Object.keys(SCALES)) {
+      const { triadRow } = getChordKeyboardRows('C', scaleType, 0);
+      expect(triadRow.length, scaleType).toBeLessThanOrEqual(7);
+      for (const button of triadRow) {
+        expect(MELODY_KEYS.includes(button.key), `${scaleType} ${button.key}`).toBe(false);
+      }
+    }
   });
 });

@@ -12,7 +12,7 @@ import {
 import { CHORD_PROGRESSIONS } from '@/data/chordProgressions';
 import { progressionById } from '@/audio/chordProgressions';
 import { SCALES } from '@/data/scales';
-import { scaleEntry } from '@/musicCore';
+import { harmonyKey, scaleEntry } from '@/musicCore';
 
 const source = readFileSync(
   join(process.cwd(), 'src/components/loop/ChordPresetLibrary.tsx'),
@@ -110,10 +110,17 @@ describe('isProgressionAvailable', () => {
     }
   });
 
-  test('a seven-degree progression is available in every seven-degree scale', () => {
+  test('a seven-degree progression is available in every scale whose chords sit on seven degrees', () => {
     for (const scaleType of Object.keys(SCALES)) {
-      if (scaleEntry(scaleType).intervals.length !== 7) continue;
-      expect(isProgressionAvailable(sevenNote, scaleType)).toBe(true);
+      if (scaleEntry(harmonyKey(scaleType)).intervals.length !== 7) continue;
+      expect(isProgressionAvailable(sevenNote, scaleType), scaleType).toBe(true);
+    }
+  });
+
+  // R358: Whole Tone has six notes, but its chords sit on Lydian Augmented's seven.
+  test('a seven-degree progression is available in Whole Tone, Diminished and the bebops', () => {
+    for (const scaleType of ['Whole Tone', 'Diminished', 'Bebop', 'Bebop Major', 'Bebop Minor']) {
+      expect(isProgressionAvailable(sevenNote, scaleType), scaleType).toBe(true);
     }
   });
 
