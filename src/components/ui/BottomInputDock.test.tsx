@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { BottomInputDock } from './BottomInputDock';
+import { DockMenuList } from './DockMenu';
+import { MIX_LAYER_LABELS } from '../mixLayers';
 import { MIX_LAYER_IDS, type MixLayerId } from '@/store/focusTrack';
 import { nextInputTargetPin, panelForTarget, pickInputTarget } from './useBottomInputDock';
 import { useAppStore } from '@/store/store';
@@ -99,22 +101,28 @@ describe('BottomInputDock', () => {
 });
 
 describe('the keyboard mode picker', () => {
-  test('is in the header both collapsed and open', () => {
+  test('is in the header both collapsed and open, a closed <button> menu', () => {
     for (const isInputPanelOpen of [false, true]) {
       useAppStore.setState({ isInputPanelOpen });
       const html = render();
       const tag = openTagContaining(html, 'id="btn-keyboard-mode-chip"');
+      expect(tag.startsWith('<button')).toBe(true);
       expect(tag).toContain('aria-label="Keyboard mode: Scale"');
-      for (const m of ['chromatic', 'scale-locked', 'chord']) {
-        expect(html).toContain(`id="btn-keyboard-mode-${m}"`);
-      }
+      expect(tag).toContain('aria-expanded="false"');
+      expect(tag).toContain('aria-controls="btn-keyboard-mode-list"');
+      // Closed, Popup mounts no panel: the items exist only while open
+      // (their markup is pinned on DockMenuList in DockMenu.test.tsx).
+      expect(html).not.toContain('id="btn-keyboard-mode-chromatic"');
     }
   });
 
-  test('marks exactly the current mode', () => {
-    const html = render();
-    expect(openTagContaining(html, 'id="btn-keyboard-mode-scale-locked"')).toContain('aria-current="true"');
-    expect(openTagContaining(html, 'id="btn-keyboard-mode-chord"')).not.toContain('aria-current');
+  test('the chip names the current mode and carries its title', () => {
+    const html = renderToString(
+      <BottomInputDock keyboardProps={{ ...keyboardProps, keyboardMode: 'chord' }} drumProps={drumProps} />,
+    );
+    const tag = openTagContaining(html, 'id="btn-keyboard-mode-chip"');
+    expect(tag).toContain('aria-label="Keyboard mode: Chord"');
+    expect(tag).toContain('title="Chord Mode: diatonic triads per scale degree, plus a melody zone"');
   });
 
   test('is absent when the input target is drum', () => {
@@ -149,13 +157,18 @@ describe('the dock target chip', () => {
   });
 
   test('the menu offers every track', () => {
-    const html = render();
+    const html = renderToString(
+      <DockMenuList options={MIX_LAYER_IDS} current="synth" idPrefix="btn-focus-chip" labels={MIX_LAYER_LABELS} onPick={() => {}} />,
+    );
     for (const id of MIX_LAYER_IDS) expect(html).toContain(`id="btn-focus-chip-${id}"`);
   });
 
-  test('exactly one item carries aria-current, matching the target', () => {
+  test('a pinned target names the chip, and the menu marks exactly that track', () => {
     useAppStore.setState({ focusTrack: 'synth', inputTargetPin: 'drum' });
-    const html = render();
+    expect(openTagContaining(render(), 'id="btn-focus-chip"')).toContain('aria-label="Keys play Beat"');
+    const html = renderToString(
+      <DockMenuList options={MIX_LAYER_IDS} current="drum" idPrefix="btn-focus-chip" labels={MIX_LAYER_LABELS} onPick={() => {}} />,
+    );
     const current = MIX_LAYER_IDS.filter((id) =>
       openTagContaining(html, `id="btn-focus-chip-${id}"`).includes('aria-current="true"'),
     );
@@ -209,6 +222,25 @@ describe('the dock target chip', () => {
     } finally {
       useAppStore.setState({ recordingTrack: null });
     }
+  });
+});
+
+describe('the dock menus on ui/Popup', () => {
+  test('both triggers are real buttons, and nothing is focusable by hack', () => {
+    const html = render();
+    for (const id of ['btn-focus-chip', 'btn-keyboard-mode-chip']) {
+      const tag = openTagContaining(html, `id="${id}"`);
+      expect(tag.startsWith('<button')).toBe(true);
+      expect(tag).toContain('aria-expanded="false"');
+    }
+    expect(html).not.toContain('role="button"');
+    expect(html).not.toMatch(/<ul[^>]*tabindex/);
+  });
+
+  test('the target menu opens upward from a flex wrapper inside the joined group', () => {
+    expect(render()).toContain(
+      '<div id="input-target-group" class="join"><div class="dropdown dropdown-start dropdown-top flex"><button',
+    );
   });
 });
 
