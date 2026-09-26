@@ -207,7 +207,7 @@ const SEVENTH_SHAPED_QUALITIES: ReadonlySet<ChordQuality> = new Set(
   Object.values(SEVENTH_QUALITY_BY_INTERVALS),
 );
 
-// Keyed `${scaleType}|${degree}|${use7ths}`. Correct forever because SCALES is
+// Keyed `${harmonyKey(scaleType)}|${degree}|${use7ths}`. Correct forever because SCALES is
 // frozen content. The cache lives in utils/, not data/ — a src/data/ file holds
 // no mutable module-scope binding.
 const degreeQualityCache = new Map<string, ChordQuality>();
@@ -302,13 +302,14 @@ export function resolveParentDegreeQuality(
  * which is authored content and cannot leak into every other song in the scale.
  */
 export function resolveDegreeQuality(scaleType: string, degree: number, use7ths: boolean): ChordQuality {
-  const cacheKey = `${scaleType}|${degree}|${use7ths}`;
+  // Chord side (R358): a harmony scale's own degrees host no chords, so the
+  // parent/tertian logic runs on the scale that does — and shares its cache.
+  const chordKey = harmonyKey(scaleType);
+  const cacheKey = `${chordKey}|${degree}|${use7ths}`;
   const cached = degreeQualityCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
-  // Chord side (R358): a harmony scale's own degrees host no chords, so the
-  // parent/tertian logic runs on the scale that does.
-  const { parentKey, degrees } = parentDegreesFor(harmonyKey(scaleType), degree);
+  const { parentKey, degrees } = parentDegreesFor(chordKey, degree);
   // Equidistant neighbours must AGREE. Taking degrees[0] made array order the
   // tiebreak — the one rule scales.test.ts says must never decide it — and a
   // twelfth scale whose tie disagreed would have resolved to whichever parent
