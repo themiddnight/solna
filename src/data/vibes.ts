@@ -190,10 +190,11 @@ export interface VibeSpec {
    * The design doc makes Arp one of the three axes a vibe sets independently
    * (alongside synth presets and the effect chain), so the ban is gone — but
    * the concern behind it is not, and it is now answered by a COUNT instead of
-   * by an absence. `active: false` is the default for a row, exactly one row
-   * in the whole table is `true` (Cyber EDM's lead), and `vibes.test.ts`
-   * asserts that list verbatim. Arming a second one is therefore an edit to a
-   * pinned test that a reviewer reads, not something a stray default can do.
+   * by an absence. `active: false` is the default for a row, no row in the
+   * whole table is `true` today (Cyber EDM's lead was, until it was switched
+   * off), and `vibes.test.ts` asserts that list verbatim. Arming one is
+   * therefore an edit to a pinned test that a reviewer reads, not something a
+   * stray default can do.
    *
    * Two things the relaxation does NOT reach. A synth PRESET still carries no
    * Arp — that stays banned outright, because a preset is reused in roles its
@@ -388,13 +389,13 @@ export const VIBES: VibeSpec[] = [
     // Pad: supersaw holding under the trance-pluck stabs.
     pad: { volume: 0.50, presetId: 'factory-neon-poly-saw', mode: 'pad', octave: 3, voicing: 'triad', droneDegree: 0, droneIntervals: [1, 5, 8] },
 
-    // Arp, per track. The ONE armed arpeggiator in the table, and the
-    // reason the axis exists: a hard 16th pluck lead at this tempo IS an
-    // arpeggio in this genre, so the vibe states it instead of asking the
-    // user to find the Arp panel. Two octaves, up — the shape the style
-    // is built on. Every other track stays off.
+    // Arp, per track. Every track is off — no vibe arms an arpeggiator. The
+    // lead keeps the shape the style is built on (16ths, up, two octaves), so
+    // switching the Arp on here gives the genre's arpeggio, but the vibe
+    // never switches it on behind the user: a lead that answers a key with
+    // silence until the next clock step reads as broken.
     arp: {
-      synth: { active: true, mode: 'up', rate: '16n', octaves: 2 },
+      synth: { active: false, mode: 'up', rate: '16n', octaves: 2 },
       fx: { active: false, mode: 'up', rate: '16n', octaves: 1 },
       chord: { active: false, mode: 'up', rate: '16n', octaves: 1 },
       bass: { active: false, mode: 'up', rate: '16n', octaves: 1 },

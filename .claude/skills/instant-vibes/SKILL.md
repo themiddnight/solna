@@ -109,10 +109,10 @@ the user. Half of that still holds; the omission does not.
 - **Write `{ active: false, mode: 'up', rate: '16n', octaves: 1 }` explicitly**
   for a track the vibe does not arpeggiate. That is the shape to copy; there is
   no "omit it and inherit a default" any more.
-- **Arming one is a decision, and the table records how many exist.** Exactly
-  one row in `VIBES` is `active: true` today — Cyber EDM's lead, where a 16th
-  up-arpeggio over two octaves IS the genre — and a test pins that it is the
-  only one. The old concern is answered by that test rather than by a blanket
+- **Arming one is a decision, and the table records how many exist.** No row
+  in `VIBES` is `active: true` today — Cyber EDM's lead keeps its 16th
+  up-arpeggio shape over two octaves but ships switched off — and a test pins
+  that the armed list is empty. The old concern is answered by that test rather than by a blanket
   ban: arming an arpeggiator now requires editing a pinned count, which a
   reviewer sees, instead of being reachable by a stray default.
 - **The flat fields are still forbidden.** `arpActive`/`arpMode`/`arpRate`/

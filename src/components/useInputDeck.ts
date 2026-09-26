@@ -374,6 +374,7 @@ type NoteHandler = (note: string) => void;
 function useNoteHandlers(
   arpStateRef: ArpStateRef,
   setActiveNotes: Dispatch<SetStateAction<Set<string>>>,
+  ensureArpClock: () => void,
 ): { handleNoteOn: NoteHandler; handleNoteOff: NoteHandler } {
   const handleNoteOn = useCallback(
     (note: string) => {
@@ -398,7 +399,12 @@ function useNoteHandlers(
       }
       const held = arpStateRef.current.heldTargets;
       performNoteOn(note, target, held, synthReleaseSeconds(liveSynth), liveArp.active, {
-        initEngine: initSynthPlayback,
+        // The arp clock is attached to the session the engine has NOW — see
+        // useArpPlayback. A no-op while the arp is off.
+        initEngine: () => {
+          initSynthPlayback();
+          ensureArpClock();
+        },
         playNote: (n, t) => synthPlaybackNoteOn(n, liveSynth, 1.0, undefined, t),
         releaseVoice: (voiceId, n, releaseSeconds) =>
           synthPlaybackNoteOff(voiceId, n, releaseSeconds),
@@ -407,7 +413,7 @@ function useNoteHandlers(
       });
       setActiveNotes((prev) => new Set(prev).add(note));
     },
-    [arpStateRef, setActiveNotes],
+    [arpStateRef, setActiveNotes, ensureArpClock],
   );
 
   const handleNoteOff = useCallback(
@@ -729,12 +735,12 @@ export function useInputDeck(layoutMode: LayoutMode): {
   // synth/arp/bpm/target come straight off the store — no render subscription needed.
   useEffect(() => subscribeArpState(arpStateRef), []);
 
-  const { handleNoteOn, handleNoteOff } = useNoteHandlers(arpStateRef, setActiveNotes);
-
   // Arpeggiator playback: parameterized clock subscriber (the 4 rate branches
   // collapsed into computeArpTriggers, proven equivalent by the exhaustive
   // sweep in src/audio/playback/arpPlayback.test.ts)
-  useArpPlayback(arpStateRef, arpActive);
+  const ensureArpClock = useArpPlayback(arpStateRef, arpActive);
+
+  const { handleNoteOn, handleNoteOff } = useNoteHandlers(arpStateRef, setActiveNotes, ensureArpClock);
 
   // Both backstops for a release gesture that never arrives: release every note
   // still sounding when the keyboard or layout mode changes or this hook's

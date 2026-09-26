@@ -136,11 +136,30 @@ export function computeArpTick(
 }
 
 /**
- * Arpeggiator clock subscriber: subscribes the shared clock and returns the
- * cleanup; the React wrapper is `components/playback/useArpPlayback.ts` (R314).
+ * The arp's hold on the shared clock. `ensureRunning` is what a note-on calls
+ * once the engine exists; `stop` is the hook's cleanup.
+ */
+export interface ArpClock {
+  ensureRunning(): void;
+  stop(): void;
+}
+
+/**
+ * Arpeggiator clock subscriber: holds the shared-clock subscription and
+ * returns its handle; the React wrapper is `components/playback/useArpPlayback.ts` (R314).
  * `stateRef` mirrors the deck's live arp state: which notes are held and on
  * which bus, the patch and the Arp settings, the bus the next tick plays on,
  * the buses already triggered on, and the bpm.
+ *
+ * THE SUBSCRIPTION BELONGS TO ONE AUDIO SESSION. The engine answers
+ * `subscribeClock` with a no-op before its first gesture creates a session,
+ * and a recreated session starts a fresh clock. The arp is armed by a store
+ * flag, not by a gesture — a vibe or a reloaded project can arm it before any
+ * session exists — so subscribing once at arm time left it deaf until it was
+ * toggled off and on again, while every other target played. It therefore
+ * subscribes against the CURRENT context and re-subscribes whenever
+ * `ensureRunning` finds a different one; the note path calls that right after
+ * it inits the engine, which is the moment a held key needs the clock.
  *
  * `release` and the targets are read from `stateRef.current`, NOT taken as
  * parameters: having them in the wrapper's dependency array made every
@@ -157,8 +176,8 @@ export function computeArpTick(
  * tick after the last trigger, must not be released, and a bus that was
  * triggered on must be released even if focus left it a tick later.
  */
-export function startArpClock(stateRef: ArpStateRef): () => void {
-  const unsubscribe = audioEngine.subscribeClock((step, _beat, time) => {
+export function startArpClock(stateRef: ArpStateRef): ArpClock {
+  const tick = (step: number, _beat: number, time: number): void => {
     const { heldTargets, synth, arp, target, bpm } = stateRef.current;
 
     if (!arp.active) return;
@@ -187,10 +206,25 @@ export function startArpClock(stateRef: ArpStateRef): () => void {
       const voiceId = audioEngine.triggerSynthNoteOn(noteFrequency(note), synth, 0.9, at, target, 1, 'arp');
       if (voiceId) audioEngine.triggerSynthNoteOff(voiceId, releaseSeconds, at + t.holdSec);
     }
-  });
+  };
 
-  return () => {
-    unsubscribe();
+  let subscribedTo: BaseAudioContext | null = null;
+  let unsubscribe: (() => void) | null = null;
+
+  const ensureRunning = (): void => {
+    const ctx = audioEngine.getAudioContext();
+    if (ctx === null || ctx === subscribedTo) return;
+    // A previous session's subscription: its clock is disposed, but the
+    // engine's per-session bookkeeping still expects the unsubscribe.
+    unsubscribe?.();
+    unsubscribe = audioEngine.subscribeClock(tick);
+    subscribedTo = ctx;
+  };
+
+  const stop = (): void => {
+    unsubscribe?.();
+    unsubscribe = null;
+    subscribedTo = null;
     // Read release/targets off the ref, NOT from arguments: having them in the
     // wrapper's dependency array made every Release-knob pointer move tear the
     // subscription down and run this cleanup, cutting every held arp note
@@ -211,4 +245,7 @@ export function startArpClock(stateRef: ArpStateRef): () => void {
       });
     }
   };
+
+  ensureRunning();
+  return { ensureRunning, stop };
 }
