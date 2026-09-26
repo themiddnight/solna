@@ -1,6 +1,6 @@
 # ADR-0055: Shared Popup and Listbox primitives
 
-**Status:** Accepted — 2026-09-26. Amends [ADR-0044](0044-secondary-canvas-taxonomy.md) (R327, R328). No issue.
+**Status:** Accepted — 2026-09-26. Amends [ADR-0044](0044-secondary-canvas-taxonomy.md) (R327, R328). No issue. Sub-project 3 completed, sub-project 4 dropped: [ADR-0056](0056-popup-migration-complete.md).
 
 ## Context
 

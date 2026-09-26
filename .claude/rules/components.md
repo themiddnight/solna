@@ -124,12 +124,11 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
   a surface with a user library that can be deleted from gets a drawer, even where a quick pick
   also exists. <!-- R327 -->
 - A popup is built on `ui/Popup` (its hook `ui/usePopup.ts`): a daisyUI `dropdown` anchored to
-  its trigger (`dropdown-open` while open), kept inside the viewport horizontally by `popupShift`
+  its trigger (`dropdown-open` while open), opening below it or, with `side="top"`, above it,
+  kept inside the viewport horizontally by `popupShift`
   (`ui/popupGeometry.ts`), closed by Escape, a pointerdown outside it or focus leaving it, and
   handing focus back on close. No hand-rolled dismissal or placement, no `<details>` as a popup,
-  and no popover API or CSS anchor positioning while the browser floor lacks them. Not yet on
-  `ui/Popup` (sub-project 3 of ADR-0055): the two `DockMenu`s in `ui/BottomInputDock.tsx`,
-  `project/ProjectMenu.tsx` and `ui/QuickSavePopover.tsx`. The one exception is a popup that must sit above an open
+  and no popover API or CSS anchor positioning while the browser floor lacks them. The one exception is a popup that must sit above an open
   `Modal`: a React portal still renders under the dialog's native top layer, so it is a
   `popover="auto"` element instead, positioned by a pure geometry helper the colocated hook wires
   up on the popover's `toggle` event and on `resize`/`scroll` while open — never CSS anchor
@@ -164,7 +163,8 @@ Neither form changes the `renderToString` trap (R257): the server snapshot is st
 
 ([ADR-0044](../../docs/decisions/0044-secondary-canvas-taxonomy.md); R328's top-layer-escape
 case: [ADR-0051](../../docs/decisions/0051-theme-picker.md); `ui/Popup`, `ui/Listbox` and R357:
-[ADR-0055](../../docs/decisions/0055-shared-popup-and-listbox.md))
+[ADR-0055](../../docs/decisions/0055-shared-popup-and-listbox.md); every popup on it:
+[ADR-0056](../../docs/decisions/0056-popup-migration-complete.md))
 
 ## Prohibited
 
@@ -214,6 +214,7 @@ case: [ADR-0051](../../docs/decisions/0051-theme-picker.md); `ui/Popup`, `ui/Lis
   positioning <!-- R328 -->
 - A new popup not built on `ui/Popup` — its own dismissal listeners or placement math — or a
   `<details>` used as a popup <!-- R328 -->
+- A `:focus-within` dropdown (daisyUI's CSS-only open state) as a popup <!-- R328 -->
 - A custom listbox other than `ui/Listbox`, DOM focus moved onto its options, an option id built
   from its value, or a value committed by an arrow key, Home/End, type-ahead or hover <!-- R357 -->
 - A toast or snackbar about anything other than a modal/drawer/card body's own form, rendered as an
