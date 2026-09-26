@@ -1,7 +1,7 @@
 /**
  * The pure half of a popup: which key dismisses it and where its panel sits.
  * Kept free of React and the DOM so this runner, which has no DOM, can test
- * it; `usePopup.ts` and `useQuickSavePopover.ts` wire it to real events.
+ * it; `usePopup.ts`, behind every popup, wires it to real events.
  */
 
 /**

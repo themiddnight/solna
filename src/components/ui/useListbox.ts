@@ -51,6 +51,17 @@ export function activeForValue(values: readonly string[], value: string): number
   return Math.max(0, values.indexOf(value));
 }
 
+/**
+ * The highlight after `value` may have changed. While `value` stands, the
+ * highlight is the user's (arrows, Home/End, type-ahead, hover) and is kept.
+ * When `value` changed from outside, it re-seeds onto the new value's option.
+ * A commit also changes `value`, onto the option already highlighted, so the
+ * re-seed lands where the highlight already is.
+ */
+export function nextActive(prevValue: string, value: string, active: number, values: readonly string[]): number {
+  return prevValue === value ? active : activeForValue(values, value);
+}
+
 /** A `data-option-index` attribute as an option index, or `null` when it names no option. */
 export function parseOptionIndex(raw: string | null | undefined, count: number): number | null {
   if (raw === null || raw === undefined || raw === '') return null;
@@ -108,6 +119,14 @@ interface ListboxOptions {
 export function useListbox({ id, groups, value, onCommit }: ListboxOptions): UseListbox {
   const model = useMemo(() => indexGroups(groups), [groups]);
   const [active, setActive] = useState(() => activeForValue(model.values, value));
+  // "Adjusting state during render", not an effect: the re-seeded highlight
+  // paints in the same frame as the new value. Guarded by the comparison, so
+  // it runs once per value change and never loops.
+  const [seededValue, setSeededValue] = useState(value);
+  if (seededValue !== value) {
+    setSeededValue(value);
+    setActive(nextActive(seededValue, value, active, model.values));
+  }
 
   // Hover already points at a visible row; scrolling under the pointer would
   // make the list jump, so only keyboard and initial moves reveal.

@@ -70,6 +70,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0053](0053-contributor-readiness.md) | Contributor readiness | CI runs `verify` on every PR; per-platform WAV golden; code under Apache-2.0 with the Solna and murva brand reserved; content invariants are tests, `check:content` is a fast subset; a listening review for taste. |
 | [0054](0054-derived-scale-intervals.md) | Scale intervals are derived from tonal | `SCALES` states name, abbreviation, description, category, `tonal`, tonality and parent; Music Core derives intervals once at load; a golden pin keeps the legacy scales' intervals; amends ADR-0006's R061. |
 | [0055](0055-shared-popup-and-listbox.md) | Shared Popup and Listbox primitives | Popups build on `ui/Popup` (a controlled daisyUI dropdown with one dismissal, focus and placement hook); a custom listbox is `ui/Listbox` (active descendant, explicit commit); the header Scale Type is the first consumer; amends ADR-0044's R327 and R328. |
+| [0056](0056-popup-migration-complete.md) | Every popup on ui/Popup | The dock menus, the project menu and quick-save move onto `ui/Popup`; `usePopup` reads `onClose` through a latest-ref and hears an outside pointerdown in capture; `Popup` gains `side` and a `tabIndex={-1}` panel; no `role="menu"`; ThemePicker's move dropped; amends R328. |
 
 ## Adding or changing a decision
 
