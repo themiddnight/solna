@@ -14,6 +14,8 @@ import { DOWNLOAD_FAILED_MESSAGE, UNREADABLE_FILE_MESSAGE, downloadTextFile, pro
 import { ProjectLoading } from '../ProjectLoading';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useLiveStore } from '../ui/useLiveStore';
+import { Popup } from '../ui/Popup';
+import { usePopupMenu } from '../ui/usePopupMenu';
 import { DriveFileBrowserModal, type DriveFileBrowserModalProps } from './DriveFileBrowserModal';
 
 // Compile-time guard: production builds fold `import.meta.env.DEV` to false, so the
@@ -663,32 +665,51 @@ export function ProjectMenuEffects({ menu }: { menu: UseProjectMenu }) {
   );
 }
 
+/** The panel's box: the look the CSS-only dropdown's list wore. */
+const PROJECT_MENU_PANEL =
+  'mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg';
+
+/** The chevron that opens the menu: a real <button>, so a click toggles it in every browser. */
+function ProjectMenuTrigger({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      id="btn-project-menu"
+      aria-label="Project menu"
+      aria-expanded={open}
+      aria-controls="project-menu-list"
+      onClick={onToggle}
+      className="inline-flex min-h-11 min-w-8 items-center justify-center rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+    >
+      <ChevronDown className="w-4 h-4 text-base-content/60" aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
+ * The desktop project menu on `ui/Popup` (R328). Choosing a row closes the
+ * menu, then runs the action: `Popup` hands focus back to the trigger as it
+ * closes, and a dialog the action opens then takes it (`showModal`), handing
+ * it back to the trigger when it closes. `ProjectMenuEffects` renders beside
+ * the popup, never inside its panel, so the dialog outlives the menu.
+ */
 export function ProjectMenu() {
   const menu = useProjectMenu();
+  const popup = usePopupMenu(menu.choose);
   return (
-    <div className="dropdown">
-      {/* A focusable <span>, not a <button>: see DROPDOWN_TRIGGER_NOTE in ui/BottomInputDock.tsx. */}
-      <span
-        id="btn-project-menu"
-        role="button"
-        tabIndex={0}
-        aria-label="Project menu"
-        className="inline-flex min-h-11 min-w-8 items-center justify-center rounded-box cursor-pointer transition-colors hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+    <>
+      <Popup
+        open={popup.open}
+        onClose={popup.close}
+        align="start"
+        panelClassName={PROJECT_MENU_PANEL}
+        trigger={<ProjectMenuTrigger open={popup.open} onToggle={popup.toggle} />}
       >
-        <ChevronDown className="w-4 h-4 text-base-content/60" aria-hidden="true" />
-      </span>
-      <ul
-        // daisyUI's dropdown holds itself open on :focus-within, so the panel
-        // must be focusable or the menu closes the moment a pointer-down lands
-        // inside it. It is a plain container, not a control; the <li><button>
-        // rows inside are what the keyboard actually reaches.
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-        tabIndex={0}
-        className="dropdown-content menu menu-sm z-50 mt-2 min-w-44 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 border border-base-300 p-1 shadow-lg"
-      >
-        <ProjectMenuSections sections={menu.sections} onChoose={menu.choose} />
-      </ul>
+        <ul id="project-menu-list" className="menu menu-sm w-full p-0">
+          <ProjectMenuSections sections={menu.sections} onChoose={popup.pick} />
+        </ul>
+      </Popup>
       <ProjectMenuEffects menu={menu} />
-    </div>
+    </>
   );
 }

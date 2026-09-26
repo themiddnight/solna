@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import { useAppStore } from '@/store/store';
 import { MALFORMED_MESSAGE, type ProjectParseResult } from '@/store/projectFile';
 import type { ProjectBody } from '@/store/projectFormat';
 import type { ProjectStoreResult } from '@/store/projectStore';
@@ -12,6 +11,7 @@ import {
   PROJECT_MENU_SECTIONS,
   toolsRows,
   ProjectMenu,
+  ProjectMenuSections,
   REPLACE_CONFIRM_MESSAGE,
   REPLACING_ACTIONS,
   driveAccountLabel,
@@ -29,6 +29,15 @@ function openTag(html: string, needle: string): string {
   const idx = html.indexOf(needle);
   if (idx === -1) throw new Error(`not found in markup: ${needle}`);
   return html.slice(html.lastIndexOf('<', idx), html.indexOf('>', idx) + 1);
+}
+
+/** The menu's rows as the popup panel renders them (a closed Popup renders none). */
+function renderRows(...args: Parameters<typeof visibleMenuSections>): string {
+  return renderToString(
+    <ul>
+      <ProjectMenuSections sections={visibleMenuSections(...args)} onChoose={() => {}} />
+    </ul>,
+  );
 }
 
 const FAKE_BODY = { id: 'p1', name: 'x', createdAt: 0, updatedAt: 0 } as unknown as ProjectBody;
@@ -150,33 +159,24 @@ describe('ProjectMenu menu composition', () => {
   });
 
   test('renders Save actions without the removed Export action', () => {
-    // The test deployment has no client id, so `driveAvailable` is false at
-    // store creation and the Drive rows would be absent. useLiveStore serves
-    // getState() for both snapshots, so setting it here does reach the render.
-    useAppStore.setState({ driveAvailable: true });
-    const html = renderToString(<ProjectMenu />);
+    const html = renderRows(true, false, 'untitled', null);
     expect(html).toContain('id="project-menu-save"');
     expect(html).toContain('id="project-menu-save-as"');
     expect(html).not.toContain('id="project-menu-export"');
     expect(html).not.toContain('Export .solna');
     expect(html).toContain('Open from Drive');
-    useAppStore.setState({ driveAvailable: false });
   });
 
   test('renders "Save to Drive" when the project came from Drive', () => {
-    useAppStore.setState({ driveAvailable: true, projectSource: { kind: 'drive', fileId: 'f1' } });
-    const html = renderToString(<ProjectMenu />);
+    const html = renderRows(true, false, 'drive', null);
     expect(html).toContain('Save to Drive');
     expect(html).toContain('id="project-menu-save-as-drive"');
-    useAppStore.setState({ driveAvailable: false, projectSource: { kind: 'untitled' } });
   });
 
   test('renders the account under the Drive heading on its own line', () => {
-    useAppStore.setState({ driveAvailable: true, driveUser: { email: 'ann@example.com', name: 'Ann' } });
-    const html = renderToString(<ProjectMenu />);
+    const html = renderRows(true, false, 'untitled', { email: 'ann@example.com', name: 'Ann' });
     expect(html).toContain('ann@example.com');
     expect(html).toContain('block truncate');
-    useAppStore.setState({ driveAvailable: false, driveUser: null });
   });
 
   test('the confirm copy says plainly that the project is replaced', () => {
@@ -339,18 +339,33 @@ describe('openParsedProjectFile', () => {
 });
 
 describe('ProjectMenu rendering', () => {
-  // The menu is behind a dropdown that opens on focus, which renderToString
-  // never triggers — so the closed state is what is pinned here: the trigger is
-  // a labelled button and the file input is present but hidden.
-  test('renders a chevron dropdown trigger, a focusable span, and a hidden file picker', () => {
+  // renderToString renders the popup closed, so the closed state is what is
+  // pinned here: the trigger, no panel, and the effects outside the popup.
+  test('renders a chevron <button> trigger that reports the menu closed', () => {
     const html = renderToString(<ProjectMenu />);
-    expect(html).toContain('dropdown');
     const trigger = openTag(html, 'aria-label="Project menu"');
-    expect(trigger.startsWith('<span')).toBe(true);
+    expect(trigger.startsWith('<button')).toBe(true);
+    expect(trigger).toContain('type="button"');
     expect(trigger).toContain('id="btn-project-menu"');
-    expect(trigger).toContain('role="button"');
-    expect(trigger).toContain('tabindex="0"');
+    expect(trigger).toContain('aria-expanded="false"');
+    expect(trigger).toContain('aria-controls="project-menu-list"');
+    expect(html).not.toContain('role="button"');
+    expect(html).not.toContain('tabindex');
     expect(html).not.toContain('solna</span>'); // the wordmark is no longer inside the menu
+  });
+
+  test('closed, the Popup renders no panel and no rows', () => {
+    const html = renderToString(<ProjectMenu />);
+    expect(html.startsWith('<div class="dropdown dropdown-start"><button')).toBe(true);
+    expect(html).not.toContain('dropdown-content');
+    expect(html).not.toContain('id="project-menu-');
+  });
+
+  // A row that opens a dialog closes the menu in the same render. Inside the
+  // panel, the dialog would unmount with it.
+  test('the file input and the dialogs render beside the popup, not inside it', () => {
+    const html = renderToString(<ProjectMenu />);
+    expect(html).toContain('</button></div><input');
     expect(html).toContain('type="file"');
     expect(html).toContain('accept=".solna,.json"');
   });
