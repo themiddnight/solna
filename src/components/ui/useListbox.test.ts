@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ListboxGroup } from './Listbox';
-import { activeForValue, groupHeadingId, indexGroups, nextActive, optionId, parseOptionIndex, revealScrollTop } from './useListbox';
+import { activeForValue, groupHeadingId, indexGroups, optionId, parseOptionIndex, revealScrollTop } from './useListbox';
 
 const GROUPS: readonly ListboxGroup[] = [
   {
@@ -49,30 +49,6 @@ describe('activeForValue', () => {
 
   test('an empty list has no highlight', () => {
     expect(activeForValue([], 'a')).toBe(-1);
-  });
-});
-
-describe('nextActive', () => {
-  const VALUES = ['a', 'b', 'c'];
-
-  // Arrows and hover own the highlight while the value stands: an unrelated
-  // re-render must never snap it back to the selected option.
-  test('an unchanged value keeps the highlight where the user moved it', () => {
-    expect(nextActive('b', 'b', 2, VALUES)).toBe(2);
-    expect(nextActive('b', 'b', 0, VALUES)).toBe(0);
-  });
-
-  test('a value changed from outside moves the highlight to its option', () => {
-    expect(nextActive('a', 'c', 0, VALUES)).toBe(2);
-  });
-
-  test('a commit re-seeds onto the option it just committed, a no-op', () => {
-    expect(nextActive('a', 'b', 1, VALUES)).toBe(1);
-  });
-
-  test('a new value that is not an option starts on the first; an empty list has none', () => {
-    expect(nextActive('a', 'stale key', 2, VALUES)).toBe(0);
-    expect(nextActive('a', 'b', 0, [])).toBe(-1);
   });
 });
 

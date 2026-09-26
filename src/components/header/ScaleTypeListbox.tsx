@@ -1,20 +1,10 @@
 import type { KeyboardEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { SCALES } from '@/data/scales';
-import { Listbox, type ListboxGroup } from '@/components/ui/Listbox';
+import { Listbox } from '@/components/ui/Listbox';
 import { Popup } from '@/components/ui/Popup';
-import { SCALE_GROUPS } from '@/components/ui/scaleGroups';
+import { SCALE_LISTBOX_GROUPS } from './scaleListboxGroups';
 import { useScaleTypeListbox } from './useScaleTypeListbox';
-
-/**
- * The scale library as listbox groups: the SCALES key is the value (the
- * persisted identity), the display name the label, the one-line mood/genre
- * line the description. Static content, built once.
- */
-export const SCALE_LISTBOX_GROUPS: readonly ListboxGroup[] = SCALE_GROUPS.map(({ category, keys }) => ({
-  label: category,
-  options: keys.map((key) => ({ value: key, label: SCALES[key].name, description: SCALES[key].description })),
-}));
 
 /**
  * Matches the ghost `select-sm` it replaced (`HEADER_SELECT`): 32px tall,

@@ -6,7 +6,8 @@ import { KEY_OPTIONS, formatKeyLabel, getTonicSpelling } from '@/utils/noteSpell
 import { HEADER_FIELD_SHELL, HEADER_SELECT } from '@/components/ui/fieldClasses';
 import { Listbox } from '@/components/ui/Listbox';
 import { Popup } from '@/components/ui/Popup';
-import { SCALE_LISTBOX_GROUPS, ScaleTypeListbox } from './ScaleTypeListbox';
+import { SCALE_LISTBOX_GROUPS } from './scaleListboxGroups';
+import { ScaleTypeListbox } from './ScaleTypeListbox';
 import { useScaleMenu } from './useScaleMenu';
 
 /**
