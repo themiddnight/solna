@@ -1,10 +1,25 @@
 # Solna
 
-**A solo loop studio for musical ideas.** Solna runs in the browser: a step sequencer, a chord
-builder, a two-oscillator synth, a drum machine and a set of genre "Instant Vibes" that turn a
-spark into a loop you can arrange into a song and export.
+**A solo loop studio for musical ideas.** Solna is an installable Progressive Web App (PWA) that
+runs in your browser on desktop and mobile. Install it from a supported browser for an app-like
+standalone window. Build patterns with a step sequencer, chord builder, synth and drum machine; use
+genre-inspired Instant Vibes to get started, arrange your loops, then export your work.
 
 Live app: <https://app.solna.themiddnight.dev/>
+
+## See Solna in action
+
+Build chord progressions and shape each part of a loop in Pattern, then arrange those loops into a
+song. The responsive workspace also brings the core tools to mobile.
+
+<p align="center">
+  <img src="public/assets/showcase/device-mockup.png" alt="Solna running in a MacBook and iPhone mockup" width="100%">
+</p>
+
+## Sample project
+
+[Open the sample project on Google Drive](https://drive.google.com/file/d/1PNTOTtGGVDBgJwJGpxSofyCXPYydJM_i/view?usp=drive_link)
+(`somthing-trance-in-d-hirajoshi-new.solna`) to try a Solna project.
 
 ## Run it
 
