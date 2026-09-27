@@ -10,3 +10,4 @@ dist
 
 # Local agent working notes (checkpoints, logs)
 work/
+.ux-assessment/
