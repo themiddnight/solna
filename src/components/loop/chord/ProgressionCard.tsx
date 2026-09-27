@@ -10,6 +10,7 @@ import { formatKeyLabel } from '@/utils/noteSpelling';
 import type { ChordQuality } from '@/musicCore';
 import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 import { usePlayingChord } from '@/components/playingChord';
+import { chordStartBars } from './chordStartBars';
 import type {
   ChordPalette,
   ChordViewState,
@@ -283,6 +284,8 @@ function SortableProgression({ state, editor, previews }: SortableProgressionPro
     playheadChordIndex, playheadChordStartBeat, chordOctave,
   } = state;
   const { activeChordId } = state;
+  const startBars = chordStartBars(chords);
+  const beatsPerBar = beatsPerBarFor(meterId);
   const playing = usePlayingChord();
   const { sensors, handleDragEnd } = editor;
 
@@ -291,13 +294,10 @@ function SortableProgression({ state, editor, previews }: SortableProgressionPro
       <SortableContext items={chordIds} strategy={rectSortingStrategy}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 pt-2">
           {chords.map((chord, idx) => {
-            const startBar = chords
-              .slice(0, idx)
-              .reduce((sum, c) => sum + (c.bars || 1), 1);
+            const startBar = startBars[idx] ?? 1;
             const isActive =
               (playing !== null && (playing.index === idx || playing.chordId === chord.id))
               || activeChordId === chord.id;
-            const beatsPerBar = beatsPerBarFor(meterId);
             const activeBeat =
               playheadChordIndex === idx
                 ? resolveBeatCounter({

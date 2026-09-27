@@ -4,6 +4,7 @@ import type { AppStore, UiSlice } from './types';
 import { DEFAULT_MIDI_MAPPINGS } from './types';
 import { readValidatedStorageValue, persistGuardedStorageValue } from '../utils/storage';
 import { toggleSolo } from './trackAudibility';
+import { midiActivityStore } from './midiActivity';
 
 type Set = StoreApi<AppStore>['setState'];
 
@@ -83,7 +84,6 @@ export function createUiSlice(set: Set): UiSlice {
     loopClipboard: null,
     keyboardMode: readStoredKeyboardMode() ?? 'scale-locked',
     followPlayhead: readStoredFollowPlayhead() ?? true,
-    midiActivityTimestamp: null,
     midiMappings: DEFAULT_MIDI_MAPPINGS,
     isMidiSettingsOpen: false,
     isAppModalOpen: false,
@@ -134,7 +134,7 @@ export function createUiSlice(set: Set): UiSlice {
       persistKeyboardMode(keyboardMode);
       set({ keyboardMode });
     },
-    triggerMidiActivity: () => set({ midiActivityTimestamp: Date.now() }),
+    triggerMidiActivity: () => midiActivityStore.trigger(),
     setMidiMappings: (midiMappings) => set({ midiMappings }),
     updateMidiMapping: (id, updates) =>
       set((state) => ({

@@ -90,6 +90,19 @@ describe('createUiSlice defaults', () => {
   });
 });
 
+describe('MIDI activity', () => {
+  test('does not notify Zustand subscribers', () => {
+    let notifications = 0;
+    const unsubscribe = useAppStore.subscribe(() => notifications++);
+    try {
+      useAppStore.getState().triggerMidiActivity();
+      expect(notifications).toBe(0);
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
 describe('follow-playhead preference', () => {
   test('adopts a valid stored value in both directions', () => {
     expect(readStoredFollowPlayhead({ getItem: () => 'on' })).toBe(true);
