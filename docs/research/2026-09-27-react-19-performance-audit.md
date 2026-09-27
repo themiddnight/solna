@@ -22,11 +22,9 @@ Earlier performance work should not be re-reported as open defects. Playback con
 
 ## Findings, ordered by likely value
 
-### P1 — MIDI activity makes a global store write for every message
+### Resolved P1 — MIDI activity made a global store write for every message
 
-`src/store/midiInput.ts:319-331` calls `triggerMidiActivity()` before dispatching every accepted MIDI message. `src/store/uiSlice.ts:137` implements it as `set({ midiActivityTimestamp: Date.now() })`. The only visible reader is `MidiIndicator` (`src/components/ui/MidiIndicator.tsx:9-22`), which displays an active light for 250 ms. Every note, note-off, and CC message therefore notifies every Zustand selector and store subscription, even though the UI answer is only “activity recently occurred.” Two messages in the same millisecond can even write the same timestamp while still producing a new store object. This also adds work to the already coalesced CC path.
-
-**Recommendation:** keep the activity pulse in a small external publisher or local indicator subscription, with a single trailing timeout; at minimum suppress redundant notifications while the 250 ms light is already active. Preserve the light's extension on later messages and its behavior when MIDI settings are closed. **Measure:** send a representative MIDI CC sweep and note run, compare store writes/sec, React commits, and audible scheduling before/after. This is a source-confirmed fan-out, not a measured latency claim.
+Before the local follow-up below, `src/store/midiInput.ts` called `triggerMidiActivity()` for each accepted message and the UI slice wrote a timestamp, notifying the whole Zustand store. This was resolved by moving the transient pulse to `src/store/midiActivity.ts`; see the benchmark and implementation notes below. Hardware MIDI was unavailable, so this finding was verified with the isolated dispatch benchmark rather than an end-to-end device stream.
 
 ### P1 — Pattern step subscriptions remain active on non-Pattern tabs
 

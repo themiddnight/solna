@@ -38,9 +38,12 @@ each travel through a module-level pub/sub in `src/components/` (`playbackStep.t
 
 - State that lives in a store slice or high in the tree re-renders *every* mounted view, not just
   the visible one. High-frequency state must therefore stay local to the subtree that shows it.
-- One known, accepted exception: `midiActivityTimestamp` is still a ui-slice key written per MIDI
-  message, kept cheap because it is not persisted (see the persist write path,
-  [ADR-0022](0022-persist-write-path-and-guarded-storage.md)).
+- MIDI activity is transient UI state, but it is not an exception to the high-frequency slice rule:
+  `triggerMidiActivity` publishes a boolean through `src/store/midiActivity.ts`, consumed by
+  `MidiIndicator` with `useSyncExternalStore`. Repeated messages extend a trailing 250 ms active
+  window; listeners are notified only when the boolean transitions false→true or true→false. Do
+  not put per-message activity writes or a `midiActivityTimestamp` key back in Zustand. (This
+  replaces the original slice-based implementation; see R018 in `note-input.md`.)
 - Anything with a per-frame cost on a surface nobody is looking at needs its own visibility gate
   (meters do this through `utils/meterScheduler.ts`, [ADR-0028](0028-sample-based-metering.md)).
 - Unmounting a grid silences its lane, so "hide a view by unmounting it" is not a refactor; it is
@@ -58,8 +61,9 @@ each travel through a module-level pub/sub in `src/components/` (`playbackStep.t
   the subtree that shows it, never in a store slice.
 - **R017** — Step and playhead beat travel through module pub/subs
   `src/components/playbackStep.ts`, `playheadBeat.ts`.
-- **R018** — Accepted exception: `midiActivityTimestamp` is a ui-slice key written per MIDI
-  message; it must stay unpersisted.
+- **R018** — MIDI activity uses the external publisher `src/store/midiActivity.ts`, with a
+  trailing 250 ms active window and notifications only on boolean transitions; it must not be
+  written to a Zustand slice per message.
 - **R040** — Transport controllers are mounted once, in `PlaybackHost`: a lane sounds because the
   host is mounted, never because its grid is. (inverted by ADR-0039)
 
