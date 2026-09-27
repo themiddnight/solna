@@ -1,24 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useSyncExternalStore } from "react";
 import { Radio } from "lucide-react";
 import { useAppStore } from "@/store/store";
+import { midiActivityStore } from "@/store/midiActivity";
 
 /**
  * `showLabel` keeps the "MIDI" word at every width — the mobile transport sheet
  * has the room the desktop bar lacks below `sm`.
  */
 export const MidiIndicator = React.memo(function MidiIndicator({ showLabel = false }: { showLabel?: boolean }) {
-  const midiActivityTimestamp = useAppStore((s) => s.midiActivityTimestamp);
   const setIsMidiSettingsOpen = useAppStore((s) => s.setIsMidiSettingsOpen);
-  const [active, setActive] = useState(false);
-
-  useEffect(() => {
-    if (!midiActivityTimestamp) return;
-    setActive(true);
-    const timer = setTimeout(() => {
-      setActive(false);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [midiActivityTimestamp]);
+  const active = useSyncExternalStore(
+    midiActivityStore.subscribe,
+    midiActivityStore.getSnapshot,
+    midiActivityStore.getSnapshot,
+  );
 
   return (
     <button

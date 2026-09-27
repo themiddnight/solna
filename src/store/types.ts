@@ -553,7 +553,6 @@ export interface UiSlice {
    * survives a reload without travelling with a saved/exported song.
    */
   followPlayhead: boolean;
-  midiActivityTimestamp: number | null;
   midiMappings: MidiMapping[];
   isMidiSettingsOpen: boolean;
   /** The wordmark's settings-and-about modal. Session-only: never persisted (not in partializeAppState). */

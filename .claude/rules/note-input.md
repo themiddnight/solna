@@ -118,8 +118,11 @@ that needs store state — the melody recorder, for one — subscribes from
   second listener on the shared access uses `addEventListener`, never `onstatechange`. <!-- R350 -->
   ([ADR-0052](../../docs/decisions/0052-midi-permission-on-settings-open.md))
 
-- `midiActivityTimestamp` is an accepted exception to "high-frequency state stays out of slices":
-  a ui-slice key written per MIDI message; it must stay unpersisted. <!-- R018 -->
+- MIDI activity is a transient boolean in the external publisher `src/store/midiActivity.ts`,
+  consumed by `MidiIndicator` through `useSyncExternalStore`. Repeated MIDI messages extend its
+  trailing 250 ms active window; notify subscribers only when the boolean transitions false→true
+  or true→false. Keep it out of Zustand slices: never restore a per-message slice write or
+  `midiActivityTimestamp`. <!-- R018 -->
 
 ([ADR-0001](../../docs/decisions/0001-always-mounted-views.md))
 
@@ -148,4 +151,5 @@ recorder reads `ctx.currentTime` itself, through
 - Dropping the blur/`visibilitychange` release in `useInputDeck.ts` <!-- R202 -->
 - A note or drum-pad keydown, MIDI note-on or CC that ignores noteInputSuspended <!-- R336 -->
 - A MIDI access request at load without a granted permission, a second `requestMIDIAccess` call site, or `onstatechange` set on the shared access outside the bridge <!-- R350 -->
-- Persisting `midiActivityTimestamp` <!-- R018 -->
+- Writing MIDI activity to a Zustand slice, including a per-message write or a recreated
+  `midiActivityTimestamp` <!-- R018 -->
