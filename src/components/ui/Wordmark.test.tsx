@@ -33,6 +33,14 @@ describe('Wordmark', () => {
     expect(html).toContain('focus-visible:outline-primary');
   });
 
+  // Review 4123990330: on a phone the bar needs the room for the Loop field,
+  // so the text shows from `sm` up; the logo mark (and the button) stays.
+  test('the word hides below sm, the mark stays', () => {
+    const html = renderToString(<Wordmark onClick={noop} />);
+    expect(html).toContain('<span class="hidden sm:inline ');
+    expect(html).toContain('h-8 w-8');
+  });
+
   test('markOnly drops the text', () => {
     expect(renderToString(<Wordmark onClick={noop} markOnly />)).not.toContain('solna</span>');
   });

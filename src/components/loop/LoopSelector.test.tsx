@@ -63,6 +63,14 @@ describe('LoopSelector', () => {
     expect(caption).not.toContain('hidden');
   });
 
+  // Review 4123990330: the caption made the phone shell wider and it ran over
+  // the wordmark. The wordmark's text now hides below `sm` (Wordmark.tsx), so
+  // the select keeps its width from 360px up and narrows only on a 320px phone.
+  test('the select keeps its width from 360px up, narrowing only below', () => {
+    const select = openTagContaining(renderToString(<LoopSelector />), 'id="select-loop"');
+    expect(select).toContain('w-24 min-[360px]:w-32');
+  });
+
   test('onSelectLoop loads the picked loop into the store', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });

@@ -16,9 +16,10 @@ export const onSelectLoop = (id: string) => loadLoop(id);
  * bare ghost select in the navbar showed a loop NAME with nothing saying it was
  * a loop, which read as a label rather than a control. The caption shows at
  * every width (UX F-10): on the phone it used to drop, and the header then
- * showed a bare name that read as a title. To keep the phone cluster from
- * growing a row, the select narrows there by about the caption's width
- * (`w-20`, `sm:w-32`) rather than the shell getting wider.
+ * showed a bare name that read as a title. The room for it comes from the
+ * wordmark, whose text hides below `sm` (Wordmark.tsx), so the select keeps
+ * `w-32` from 360px up; only a 320px phone narrows it to `w-24`, where the
+ * shell would otherwise run over the wordmark (measured, review 4123990330).
  */
 export function LoopSelector() {
   const loops = useAppStore((s) => s.loops);
@@ -30,7 +31,7 @@ export function LoopSelector() {
         id="select-loop"
         value={activeLoopId}
         onChange={(e) => onSelectLoop(e.target.value)}
-        className={`${HEADER_SELECT} text-primary w-20 sm:w-32`}
+        className={`${HEADER_SELECT} text-primary w-24 min-[360px]:w-32`}
         title="Active Loop"
       >
         {loops.map((loop) => (
