@@ -14,21 +14,23 @@ export const onSelectLoop = (id: string) => loadLoop(id);
  *
  * It carries its own caption, in the same shell the key/scale pair wears: a
  * bare ghost select in the navbar showed a loop NAME with nothing saying it was
- * a loop, which read as a label rather than a control. The caption drops below
- * `sm` — the navbar grows a third row on a phone if the right-hand cluster gets
- * any wider — where the name is still a `title` away.
+ * a loop, which read as a label rather than a control. The caption shows at
+ * every width (UX F-10): on the phone it used to drop, and the header then
+ * showed a bare name that read as a title. To keep the phone cluster from
+ * growing a row, the select narrows there by about the caption's width
+ * (`w-20`, `sm:w-32`) rather than the shell getting wider.
  */
 export function LoopSelector() {
   const loops = useAppStore((s) => s.loops);
   const activeLoopId = useAppStore((s) => s.activeLoopId);
   return (
     <div className={HEADER_FIELD_SHELL}>
-      <span className={`${GROUP_LABEL} hidden sm:inline`}>Loop</span>
+      <span className={GROUP_LABEL}>Loop</span>
       <select
         id="select-loop"
         value={activeLoopId}
         onChange={(e) => onSelectLoop(e.target.value)}
-        className={`${HEADER_SELECT} text-primary w-24 sm:w-32`}
+        className={`${HEADER_SELECT} text-primary w-20 sm:w-32`}
         title="Active Loop"
       >
         {loops.map((loop) => (

@@ -46,6 +46,14 @@ describe('LoopSelector', () => {
     expect(html).not.toContain('max-w-');
   });
 
+  // UX F-10: the caption used to drop below `sm`, leaving the phone header a
+  // bare name that read as a title rather than a loop picker.
+  test('the Loop caption shows at every width, the phone included', () => {
+    const html = renderToString(<LoopSelector />);
+    const caption = html.slice(html.lastIndexOf('<span', html.indexOf('>Loop<')), html.indexOf('>Loop<'));
+    expect(caption).not.toContain('hidden');
+  });
+
   test('onSelectLoop loads the picked loop into the store', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
