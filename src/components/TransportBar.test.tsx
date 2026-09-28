@@ -49,8 +49,10 @@ describe('transport bar aggregate behaviour', () => {
     const aggregate = aggregatePlayerState(seq, chords);
 
     expect(aggregate).toBe('stopping');
-    // The main button is parked, but the cut must stay available.
-    expect(resolveTransportButtons(aggregate).main.disabled).toBe(true);
+    // The cut stays available — on the X and, since UX F-06, on a second
+    // press of the main button, which hard-stops rather than being parked.
+    expect(resolveTransportButtons(aggregate).main.action).toBe('hardStop');
+    expect(resolveTransportButtons(aggregate).main.disabled).toBe(false);
     expect(aggregate !== 'stopped').toBe(true);
   });
 

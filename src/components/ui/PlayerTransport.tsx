@@ -3,12 +3,17 @@ import { Play, Square, X } from 'lucide-react';
 import { IconButton } from './IconButton';
 import type { PlayerState } from '@/store/types';
 
+/** What a press of the main button does. */
+type TransportMainAction = 'play' | 'softStop' | 'hardStop';
+
 export interface TransportButtons {
   main: {
     icon: 'play' | 'stop';
     label: string;
+    title: string;
     className: string;
     disabled: boolean;
+    action: TransportMainAction;
   };
   hard: { disabled: boolean };
 }
@@ -25,20 +30,40 @@ export function resolveTransportButtons(state: PlayerState): TransportButtons {
   switch (state) {
     case 'playing':
       return {
-        main: { icon: 'stop', label: 'Stop', className: 'btn-warning', disabled: false },
+        main: { icon: 'stop', label: 'Stop', title: 'Stop', className: 'btn-warning', disabled: false, action: 'softStop' },
         hard: { disabled: false },
       };
     case 'stopping':
       return {
-        main: { icon: 'stop', label: 'Stopping…', className: 'btn-warning animate-pulse', disabled: true },
+        // Live, not disabled (UX F-06): a second press while the tail rings out
+        // means "stop now", so it hard-stops — the same action as the X beside it.
+        main: {
+          icon: 'stop',
+          label: 'Stopping…',
+          title: 'Stopping… — press again to stop immediately',
+          className: 'btn-warning animate-pulse',
+          disabled: false,
+          action: 'hardStop',
+        },
         hard: { disabled: false },
       };
     default:
       return {
-        main: { icon: 'play', label: 'Play', className: 'btn-success', disabled: false },
+        main: { icon: 'play', label: 'Play', title: 'Play', className: 'btn-success', disabled: false, action: 'play' },
         hard: { disabled: true },
       };
   }
+}
+
+/**
+ * The main button's text-label classes. The label is icon-only below the
+ * breakpoint EXCEPT while stopping (UX F-06): play and stop read from their
+ * icons, but a soft stop's ringing tail showed only a grey pulsing square on
+ * the phone, which read as a stuck button. A class, not a viewport read (R315).
+ */
+export function transportLabelClass(state: PlayerState, compact: boolean): string {
+  if (state === 'stopping') return 'inline';
+  return compact ? 'hidden lg:inline' : 'hidden sm:inline';
 }
 
 export interface PlayerTransportProps {
@@ -91,20 +116,24 @@ export function PlayerTransport({
   const buttons = resolveTransportButtons(state);
   const MainIcon = buttons.main.icon === 'play' ? Play : Square;
   const sizeClass = size === 'xs' ? 'btn-xs' : 'btn-sm';
+  const { action } = buttons.main;
+  const onMain = action === 'play' ? onPlay : action === 'softStop' ? onSoftStop : onHardStop;
+  // A transport with no hard-stop handler keeps the old inert stopping button.
+  const mainDisabled = buttons.main.disabled || onMain === undefined;
   const buttonsMarkup = (
     <>
       <button
         id={id}
         type="button"
-        onClick={state === 'playing' ? onSoftStop : onPlay}
-        disabled={buttons.main.disabled}
-        title={buttons.main.label}
+        onClick={onMain}
+        disabled={mainDisabled}
+        title={buttons.main.title}
         aria-describedby={describedBy}
         className={`btn ${sizeClass} join-item gap-1.5 font-bold text-xs ${buttons.main.className}`}
       >
         <MainIcon className="w-3.5 h-3.5 fill-current shrink-0" />
         {showLabel && (
-          <span className={compact ? 'hidden lg:inline' : 'hidden sm:inline'}>
+          <span className={transportLabelClass(state, compact)}>
             {buttons.main.label}
           </span>
         )}
