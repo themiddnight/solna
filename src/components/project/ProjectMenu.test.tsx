@@ -437,6 +437,20 @@ describe('explicit save feedback (UX F-01)', () => {
     }
   });
 
+  test('only a landed save calls onSaved (the phone closes its menu sheet on it)', () => {
+    const run = (result: Parameters<typeof settleSaveResult>[0]) => {
+      const { handlers } = harness();
+      let saved = 0;
+      settleSaveResult(result, { ...handlers, onSaved: () => (saved += 1) });
+      return saved;
+    };
+    expect(run({ ok: true, destination: 'local', fileName: 'a.solna' })).toBe(1);
+    expect(run({ ok: true, destination: 'drive', fileName: 'a.solna' })).toBe(1);
+    expect(run({ ok: true, destination: 'cancelled' })).toBe(0);
+    expect(run({ ok: true, destination: 'download' })).toBe(0);
+    expect(run({ ok: false, message: 'nope' })).toBe(0);
+  });
+
   test('a cancelled picker says nothing', () => {
     const { calls, handlers } = harness();
     settleSaveResult({ ok: true, destination: 'cancelled' }, handlers);

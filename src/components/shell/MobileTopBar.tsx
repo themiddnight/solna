@@ -15,14 +15,15 @@ interface MobileMenuSheetProps {
 
 /**
  * The menu: the layer's button-shaped tools as rows, then the project actions
- * inline. Always rendered and closed only by dismissal (Escape, backdrop,
- * close button) — a dialog a row opens (export, confirm, Drive) stacks above
+ * inline. Always rendered and closed by dismissal (Escape, backdrop, close
+ * button) or by an explicit save landing — a dialog a row opens (export, confirm, Drive) stacks above
  * it in the top layer and must close first. The project effects sit after the
  * box so the pending overlay covers the sheet instead of being clipped by it.
  * Exported for the test.
  */
 export function MobileMenuSheet({ tools, open, onClose }: MobileMenuSheetProps) {
-  const project = useProjectMenu();
+  // A landed save closes the sheet so its toast is not held behind it.
+  const project = useProjectMenu({ onSaved: onClose });
   return (
     <BottomSheet
       open={open}

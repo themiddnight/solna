@@ -358,6 +358,8 @@ export interface SaveResultHandlers {
   notify: (message: string, tone: FeedbackTone) => void;
   report: (message: string | null) => void;
   downloadCopy: () => void;
+  /** Called once a save has landed; the phone's menu sheet closes on it. */
+  onSaved?: () => void;
 }
 
 /**
@@ -385,6 +387,7 @@ export function settleSaveResult(result: ProjectSaveResult, handlers: SaveResult
   handlers.report(null);
   // The name the write returned, never re-derived from the project name.
   handlers.notify(`Saved ${result.fileName}`, 'success');
+  handlers.onSaved?.();
 }
 
 /**
@@ -396,7 +399,9 @@ function useProjectFileCommands({
   setPending,
   setBrowser,
   fileInputRef,
+  onSaved,
 }: {
+  onSaved?: () => void;
   setPending: (label: string | null) => void;
   setBrowser: (mode: ProjectBrowseMode | null) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -440,6 +445,7 @@ function useProjectFileCommands({
       notify,
       report,
       downloadCopy,
+      onSaved,
     });
   };
 
@@ -544,7 +550,16 @@ export interface UseProjectMenu {
  * desktop dropdown and the mobile menu sheet render the same rows and the
  * same dialogs from it. Which dialog is open is local UI state.
  */
-export function useProjectMenu(): UseProjectMenu {
+export interface UseProjectMenuOptions {
+  /**
+   * Called when an explicit save lands. The phone's menu sheet passes its
+   * close: the sheet is modal and holds every toast while open, so without
+   * this the success toast waited for the user to dismiss the sheet.
+   */
+  onSaved?: () => void;
+}
+
+export function useProjectMenu({ onSaved }: UseProjectMenuOptions = {}): UseProjectMenu {
   const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
   const [browser, setBrowser] = useState<ProjectBrowseMode | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -560,7 +575,7 @@ export function useProjectMenu(): UseProjectMenu {
   const connectDrive = useLiveStore((s) => s.connectDrive);
   const newProject = useLiveStore((s) => s.newProject);
 
-  const commands = useProjectFileCommands({ setPending, setBrowser, fileInputRef });
+  const commands = useProjectFileCommands({ setPending, setBrowser, fileInputRef, onSaved });
 
   const choose = (action: ProjectMenuAction) =>
     runMenuAction(action, {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { layerForTab, type ViewMode } from '@/types';
@@ -115,6 +116,18 @@ describe('the menu sheet', () => {
       expect(html).not.toMatch(/\bdropdown\b/);
       expect(html).not.toContain('<details');
     }
+  });
+
+  /**
+   * The sheet is modal, and an open modal holds every toast (feedbackSlice),
+   * so a Save run from it showed nothing until the sheet was dismissed — the
+   * "click that did nothing" UX F-01 fixed on desktop. A landed save closes
+   * the sheet (settleSaveResult's `onSaved`), which releases the hold.
+   * Pinned on source: renderToString cannot run a save.
+   */
+  test('a landed save closes the sheet, so its toast is not held behind it', () => {
+    const src = readFileSync(new URL('./MobileTopBar.tsx', import.meta.url), 'utf8');
+    expect(src).toContain('useProjectMenu({ onSaved: onClose })');
   });
 });
 
