@@ -658,7 +658,11 @@ export interface FxState {
 
 export interface Loop extends PadState, FxState {
   id: string;
-  /** The USER's name. '' until they set one, '' again if they clear it; nothing but a rename writes it. */
+  /**
+   * The saved name. '' until set, '' again if cleared. A rename writes it; so
+   * does applying a vibe, but only while it is '' or still a vibe's own name
+   * (`isVibeName`) — a name the user typed is never overwritten (UX F-13).
+   */
   name: string;
   /**
    * The APP's label, never empty. Starts at `untitled-{n}` and is overwritten
