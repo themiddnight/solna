@@ -57,6 +57,12 @@ export const VIEW_META: Record<ViewMode, ViewMeta> = {
 export const PATTERN_SEGMENTS: ReadonlyArray<{
   id: PatternSegment;
   label: string;
+  /**
+   * The label below `sm`, where four equal columns leave a 360px phone about
+   * 75px a button (UX F-11). Only a label too long for that has one; `label`
+   * stays the button's accessible name and tooltip.
+   */
+  shortLabel?: string;
   icon: LucideIcon;
 }> = [
   // `Music` is free: it was the departed `chords` view's icon, and the note
@@ -72,6 +78,6 @@ export const PATTERN_SEGMENTS: ReadonlyArray<{
   // Chord + bass + pad, stacked — `Layers` says "several at once" without
   // naming any one of them, the same reasoning that made this group
   // `Accompany` rather than `Chords/Bass` when the pad layer landed.
-  { id: 'accompaniment', label: 'Accompaniment', icon: Layers },
+  { id: 'accompaniment', label: 'Accompaniment', shortLabel: 'Accomp.', icon: Layers },
   { id: 'beat', label: 'Beat', icon: Drum },
 ];
