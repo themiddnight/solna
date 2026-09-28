@@ -4,6 +4,7 @@ import type { AppStore, UiSlice } from './types';
 import { DEFAULT_MIDI_MAPPINGS } from './types';
 import { readValidatedStorageValue, persistGuardedStorageValue } from '../utils/storage';
 import { toggleSolo } from './trackAudibility';
+import { DEFAULT_FOCUS_TRACK } from './focusTrack';
 import { midiActivityStore } from './midiActivity';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -75,7 +76,7 @@ export function persistKeyboardMode(mode: KeyboardMode, storage?: Pick<Storage, 
 export function createUiSlice(set: Set): UiSlice {
   return {
     activeTab: 'sound',
-    focusTrack: 'synth',
+    focusTrack: DEFAULT_FOCUS_TRACK,
     inputTargetPin: null,
     soloTracks: [],
     recordingTrack: null,

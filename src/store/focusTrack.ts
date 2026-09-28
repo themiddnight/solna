@@ -25,6 +25,15 @@ export const MIX_LAYER_IDS = ['synth', 'fx', 'chord', 'bass', 'pad', 'drum'] as 
 export type MixLayerId = (typeof MIX_LAYER_IDS)[number];
 
 /**
+ * The focus a fresh session starts on, and the one a missing or junk persisted
+ * value reads back as. Chord, not Lead (`'synth'`): the default loop ships
+ * `INITIAL_CHORDS` and an empty Lead, so a Lead focus made the first knob a new
+ * user turned inaudible (UX F-04). A persisted valid focus is kept as it is —
+ * this is a default, not a migration (R214).
+ */
+export const DEFAULT_FOCUS_TRACK: MixLayerId = 'chord';
+
+/**
  * The five focuses that have a synth channel. `Exclude`, not a second literal
  * list, so a layer added to the roster is melodic by default and has to be
  * excluded deliberately.

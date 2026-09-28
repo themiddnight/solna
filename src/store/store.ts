@@ -32,7 +32,7 @@ import { createDriveSlice } from './driveSlice';
 import { createProjectAutosave } from './projectAutosave';
 import { createProjectStore } from './projectStore';
 import { openIndexedDbBackend } from './projectStoreIdb';
-import { isMixLayerId } from './focusTrack';
+import { DEFAULT_FOCUS_TRACK, isMixLayerId } from './focusTrack';
 import { createCoalescedStorage } from '../utils/coalescedStorage';
 import { loadGapi, loadGis } from '../utils/googleScriptLoader';
 import type { GapiRoot } from '../utils/googleScriptLoader';
@@ -239,7 +239,9 @@ export function sanitizePersistedState(persisted: unknown): Partial<AppStore> {
   // focusTrack docblock this replaces: a 'drum' value leaking into the synth
   // path is not an error and not a visible mis-render, it silently points
   // every Sound-page knob at the Lead patch.
-  sanitized.focusTrack = isMixLayerId(sanitized.focusTrack) ? sanitized.focusTrack : 'synth';
+  sanitized.focusTrack = isMixLayerId(sanitized.focusTrack)
+    ? sanitized.focusTrack
+    : DEFAULT_FOCUS_TRACK;
   // The input target's pin (R341): a roster member or `null` (linked). Junk
   // reads back as linked, never as a pin to a track nobody chose.
   sanitized.inputTargetPin = isMixLayerId(sanitized.inputTargetPin) ? sanitized.inputTargetPin : null;
