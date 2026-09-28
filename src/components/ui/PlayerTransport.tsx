@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId, useRef } from 'react';
 import { Play, Square, X } from 'lucide-react';
 import { IconButton } from './IconButton';
 import type { PlayerState } from '@/store/types';
@@ -14,6 +14,12 @@ export interface TransportButtons {
     className: string;
     disabled: boolean;
     action: TransportMainAction;
+    /**
+     * What a press does beyond the label, for assistive tech and touch:
+     * joined into the button's `aria-describedby`, since a caller's own
+     * description outranks `title`. null when the label says it all.
+     */
+    hint: string | null;
   };
   hard: { disabled: boolean };
 }
@@ -30,7 +36,15 @@ export function resolveTransportButtons(state: PlayerState): TransportButtons {
   switch (state) {
     case 'playing':
       return {
-        main: { icon: 'stop', label: 'Stop', title: 'Stop', className: 'btn-warning', disabled: false, action: 'softStop' },
+        main: {
+          icon: 'stop',
+          label: 'Stop',
+          title: 'Stop',
+          className: 'btn-warning',
+          disabled: false,
+          action: 'softStop',
+          hint: null,
+        },
         hard: { disabled: false },
       };
     case 'stopping':
@@ -44,15 +58,43 @@ export function resolveTransportButtons(state: PlayerState): TransportButtons {
           className: 'btn-warning animate-pulse',
           disabled: false,
           action: 'hardStop',
+          hint: 'Press again to stop immediately',
         },
         hard: { disabled: false },
       };
     default:
       return {
-        main: { icon: 'play', label: 'Play', title: 'Play', className: 'btn-success', disabled: false, action: 'play' },
+        main: {
+          icon: 'play',
+          label: 'Play',
+          title: 'Play',
+          className: 'btn-success',
+          disabled: false,
+          action: 'play',
+          hint: null,
+        },
         hard: { disabled: true },
       };
   }
+}
+
+/**
+ * How long after this button soft-stopped a press may hard-stop. The stopping
+ * button is live (UX F-06), so without a window the second click of a
+ * double-click — or a double-tap, since the viewport disables double-tap zoom —
+ * hard-stopped at once and the bar-line soft stop was lost.
+ */
+export const HARD_STOP_ARM_MS = 300;
+
+/**
+ * Whether a main-button press at `now` runs `action`. Only a hard stop is ever
+ * held back, and only inside HARD_STOP_ARM_MS of the soft stop this same
+ * button made (`softStopAt`, null when stopping began some other way). Both
+ * times are event timestamps, so they share a clock.
+ */
+export function isPressArmed(action: TransportMainAction, softStopAt: number | null, now: number): boolean {
+  if (action !== 'hardStop' || softStopAt === null) return true;
+  return now - softStopAt >= HARD_STOP_ARM_MS;
 }
 
 /**
@@ -64,6 +106,36 @@ export function resolveTransportButtons(state: PlayerState): TransportButtons {
 export function transportLabelClass(state: PlayerState, compact: boolean): string {
   if (state === 'stopping') return 'inline';
   return compact ? 'hidden lg:inline' : 'hidden sm:inline';
+}
+
+/**
+ * The main button's press and description wiring: which handler a press runs,
+ * the hard-stop arm window (HARD_STOP_ARM_MS), and the hint joined into
+ * `aria-describedby` while stopping.
+ */
+function useMainButton(
+  main: TransportButtons['main'],
+  handlers: Pick<PlayerTransportProps, 'onPlay' | 'onSoftStop' | 'onHardStop' | 'describedBy'>,
+) {
+  const { action, hint } = main;
+  const onMain =
+    action === 'play' ? handlers.onPlay : action === 'softStop' ? handlers.onSoftStop : handlers.onHardStop;
+  // When THIS button last soft-stopped: a hard stop arms HARD_STOP_ARM_MS later.
+  const softStopAt = useRef<number | null>(null);
+  const onMainClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!isPressArmed(action, softStopAt.current, e.timeStamp)) return;
+    softStopAt.current = action === 'softStop' ? e.timeStamp : null;
+    onMain?.();
+  };
+  const hintId = useId();
+  const description = [handlers.describedBy, hint === null ? undefined : hintId].filter(Boolean).join(' ');
+  return {
+    onMainClick,
+    // A transport with no hard-stop handler keeps the old inert stopping button.
+    mainDisabled: main.disabled || onMain === undefined,
+    hintId,
+    description: description === '' ? undefined : description,
+  };
 }
 
 export interface PlayerTransportProps {
@@ -116,25 +188,36 @@ export function PlayerTransport({
   const buttons = resolveTransportButtons(state);
   const MainIcon = buttons.main.icon === 'play' ? Play : Square;
   const sizeClass = size === 'xs' ? 'btn-xs' : 'btn-sm';
-  const { action } = buttons.main;
-  const onMain = action === 'play' ? onPlay : action === 'softStop' ? onSoftStop : onHardStop;
-  // A transport with no hard-stop handler keeps the old inert stopping button.
-  const mainDisabled = buttons.main.disabled || onMain === undefined;
+  const { hint } = buttons.main;
+  const { onMainClick, mainDisabled, hintId, description } = useMainButton(buttons.main, {
+    onPlay,
+    onSoftStop,
+    onHardStop,
+    describedBy,
+  });
   const buttonsMarkup = (
     <>
       <button
         id={id}
         type="button"
-        onClick={onMain}
+        onClick={onMainClick}
         disabled={mainDisabled}
         title={buttons.main.title}
-        aria-describedby={describedBy}
+        aria-describedby={description}
         className={`btn ${sizeClass} join-item gap-1.5 font-bold text-xs ${buttons.main.className}`}
       >
         <MainIcon className="w-3.5 h-3.5 fill-current shrink-0" />
         {showLabel && (
           <span className={transportLabelClass(state, compact)}>
             {buttons.main.label}
+          </span>
+        )}
+        {/* `hidden` keeps it out of the button's name; aria-describedby still
+            reads a hidden element. Inside the button so no extra child lands
+            in the caller's `.join`. */}
+        {hint !== null && (
+          <span id={hintId} hidden>
+            {hint}
           </span>
         )}
       </button>
