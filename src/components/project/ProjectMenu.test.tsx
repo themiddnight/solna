@@ -21,6 +21,7 @@ import {
   replaceConfirmMessage,
   replacesProject,
   saveLabel,
+  settleSaveResult,
   visibleMenuSections,
   type OpenProjectFile,
 } from './ProjectMenu';
@@ -404,5 +405,70 @@ describe('report-bug action', () => {
     expect(JSON.stringify(current)).not.toContain('secret-project-name');
     expect(routeCategory('/somewhere/else')).toBe('unknown');
     await clearIncident();
+  });
+});
+
+describe('explicit save feedback (UX F-01)', () => {
+  function harness() {
+    const calls: { notify: [string, string][]; report: (string | null)[]; downloads: number } = {
+      notify: [],
+      report: [],
+      downloads: 0,
+    };
+    const handlers = {
+      notify: (message: string, tone: string) => calls.notify.push([message, tone]),
+      report: (message: string | null) => calls.report.push(message),
+      downloadCopy: () => {
+        calls.downloads += 1;
+      },
+    };
+    return { calls, handlers };
+  }
+
+  // The toast names the file the save actually wrote, carried on the result:
+  // a Drive update keeps the file's existing name, so the project name (or a
+  // post-await read of the store) can name a file that does not exist.
+  test('a landed save clears the banner AND names the written file', () => {
+    for (const destination of ['local', 'drive'] as const) {
+      const { calls, handlers } = harness();
+      settleSaveResult({ ok: true, destination, fileName: 'night-drive.solna' }, handlers);
+      expect(calls.report).toEqual([null]);
+      expect(calls.notify).toEqual([['Saved night-drive.solna', 'success']]);
+    }
+  });
+
+  test('only a landed save calls onSaved (the phone closes its menu sheet on it)', () => {
+    const run = (result: Parameters<typeof settleSaveResult>[0]) => {
+      const { handlers } = harness();
+      let saved = 0;
+      settleSaveResult(result, { ...handlers, onSaved: () => (saved += 1) });
+      return saved;
+    };
+    expect(run({ ok: true, destination: 'local', fileName: 'a.solna' })).toBe(1);
+    expect(run({ ok: true, destination: 'drive', fileName: 'a.solna' })).toBe(1);
+    expect(run({ ok: true, destination: 'cancelled' })).toBe(0);
+    expect(run({ ok: true, destination: 'download' })).toBe(0);
+    expect(run({ ok: false, message: 'nope' })).toBe(0);
+  });
+
+  test('a cancelled picker says nothing', () => {
+    const { calls, handlers } = harness();
+    settleSaveResult({ ok: true, destination: 'cancelled' }, handlers);
+    expect(calls.report).toEqual([]);
+    expect(calls.notify).toEqual([]);
+  });
+
+  test('the download fallback downloads and does not claim a save', () => {
+    const { calls, handlers } = harness();
+    settleSaveResult({ ok: true, destination: 'download' }, handlers);
+    expect(calls.downloads).toBe(1);
+    expect(calls.notify).toEqual([]);
+  });
+
+  test('a failure is an error toast, never a success', () => {
+    const { calls, handlers } = harness();
+    settleSaveResult({ ok: false, message: 'nope' }, handlers);
+    expect(calls.notify).toEqual([['nope', 'error']]);
+    expect(calls.report).toEqual([]);
   });
 });

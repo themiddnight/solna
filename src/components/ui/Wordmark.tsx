@@ -29,7 +29,7 @@ export function Wordmark({ onClick, markOnly = false }: WordmarkProps) {
     >
       <img src="/assets/favicon.svg" alt="" className="h-8 w-8" draggable={false} />
       {!markOnly && (
-        <span className="text-2xl font-normal text-primary leading-none" style={{ letterSpacing: '0.08em' }}>
+        <span className="hidden sm:inline text-2xl font-normal text-primary leading-none" style={{ letterSpacing: '0.08em' }}>
           solna
         </span>
       )}

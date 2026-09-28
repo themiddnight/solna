@@ -1,9 +1,16 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
+import { useAppStore } from '@/store/store';
 import { SegmentHeader } from './SegmentHeader';
 import { ViewHeader } from './ViewHeader';
 
 describe('SegmentHeader', () => {
+  // The segment row reads `focusTrack` live, and the store default focuses an
+  // accompaniment track, so each test pins the focus it depends on (R356).
+  beforeEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
   test('is named for the TAB, not the segment, and never from a prop', () => {
     const html = renderToString(<SegmentHeader segment="accompaniment" />);
     // The segment row inside it is what says which segment; the title saying
@@ -23,8 +30,8 @@ describe('SegmentHeader', () => {
   /**
    * All three segments stay mounted, so if every one of them drew the row the
    * DOM would carry three `id="segment-lead"` buttons. Only the active
-   * segment's header may draw it — under renderToString the store serves its
-   * creation-time state, so `lead` is the active one here.
+   * segment's header may draw it — the `beforeEach` focuses the Lead synth,
+   * so `lead` is the active one here.
    */
   test('only the active segment draws the segment row', () => {
     const active = renderToString(<SegmentHeader segment="lead" />);

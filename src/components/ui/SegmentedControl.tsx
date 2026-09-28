@@ -38,15 +38,31 @@ function segmentedButtonClass(active: boolean): string {
 
 export interface SegmentedGroupProps {
   children: React.ReactNode;
+  /**
+   * Below `sm`, lay the buttons out as equal columns instead of letting flex
+   * shrink them in proportion to their labels — which truncated the short
+   * labels first (UX F-11). A class, never a viewport read (R315).
+   */
+  equalColumnsOnPhone?: boolean;
 }
+
+/**
+ * Equal columns below `sm`: `auto-cols-fr` is `minmax(0, 1fr)`, so they shrink
+ * evenly. The icons drop there too — measured at 360px, a four-way split
+ * leaves about 75px a button, and the 20px icon-plus-gap is what truncated
+ * even the short label. The labels carry the row; the icons only decorate it.
+ */
+const EQUAL_COLUMNS_ON_PHONE =
+  'max-sm:inline-grid max-sm:grid-flow-col max-sm:auto-cols-fr max-sm:[&_svg]:hidden';
 
 /**
  * The `join` shell the tab bar also wears. `max-w-full` caps HEADER_GROUP's
  * `shrink-0` at its container, so on a 320px phone the buttons (`min-w-0`,
  * labels `truncate`) shrink instead of running off it.
  */
-export function SegmentedGroup({ children }: SegmentedGroupProps) {
-  return <div className={`${HEADER_GROUP} inline-flex items-center max-w-full`}>{children}</div>;
+export function SegmentedGroup({ children, equalColumnsOnPhone = false }: SegmentedGroupProps) {
+  const layout = equalColumnsOnPhone ? ` ${EQUAL_COLUMNS_ON_PHONE}` : '';
+  return <div className={`${HEADER_GROUP} inline-flex items-center max-w-full${layout}`}>{children}</div>;
 }
 
 export interface SegmentedButtonProps {
@@ -57,6 +73,8 @@ export interface SegmentedButtonProps {
   onSelect: () => void;
   /** Defaults to `label`; Simple/Pro says "Simple Mode" instead. */
   title?: string;
+  /** Shown instead of `label` below `sm`; `label` stays the accessible name. */
+  shortLabel?: string;
 }
 
 export function SegmentedButton({
@@ -66,6 +84,7 @@ export function SegmentedButton({
   active,
   onSelect,
   title,
+  shortLabel,
 }: SegmentedButtonProps) {
   return (
     <button
@@ -86,7 +105,14 @@ export function SegmentedButton({
       title={title ?? label}
     >
       <Icon className="w-4 h-4 shrink-0" />
-      <span className="truncate">{label}</span>
+      {shortLabel === undefined ? (
+        <span className="truncate">{label}</span>
+      ) : (
+        <>
+          <span className="truncate sm:hidden">{shortLabel}</span>
+          <span className="truncate hidden sm:inline">{label}</span>
+        </>
+      )}
     </button>
   );
 }
@@ -102,7 +128,9 @@ export function SegmentedButton({
  * Unlike TabButton the labels are never hidden. There are only three of them
  * and they carry the whole of the user's sense of where they are inside the
  * tab; the tab buttons can afford icon-only below `xl` because the view header
- * underneath repeats the name, and here the view header IS per segment.
+ * underneath repeats the name, and here the view header IS per segment. Below
+ * `sm` the four share the row equally and Accompaniment wears its short label
+ * (UX F-11), so Lead, FX and Beat never truncate at 360px.
  */
 export function PatternSegmentRow() {
   const focusTrack = useLiveStore((s) => s.focusTrack);
@@ -110,13 +138,14 @@ export function PatternSegmentRow() {
   const activeSegment = segmentForFocus(focusTrack);
 
   return (
-    <SegmentedGroup>
-      {PATTERN_SEGMENTS.map(({ id, label, icon }) => (
+    <SegmentedGroup equalColumnsOnPhone>
+      {PATTERN_SEGMENTS.map(({ id, label, shortLabel, icon }) => (
         <SegmentedButton
           key={id}
           id={`segment-${id}`}
           icon={icon}
           label={label}
+          shortLabel={shortLabel}
           active={activeSegment === id}
           // `accompaniment` always sends `chord` — see focusForSegment for why
           // there is deliberately no memory of which of the three was last

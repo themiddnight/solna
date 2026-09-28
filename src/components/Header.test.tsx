@@ -15,6 +15,7 @@ import { LOOP_TABS, SONG_TABS } from '../types';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
+import { DEFAULT_FOCUS_TRACK } from '../store/focusTrack';
 import { SCALES } from '@/data/scales';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
@@ -99,12 +100,36 @@ describe('PatternSegmentRow', () => {
       const drumHtml = renderToString(<PatternSegmentRow />);
       expect(openTagContaining(drumHtml, 'id="segment-beat"')).toContain('aria-current="page"');
     } finally {
-      useAppStore.setState({ focusTrack: 'synth' });
+      useAppStore.setState({ focusTrack: DEFAULT_FOCUS_TRACK });
     }
   });
 
   test('marks exactly one button as the current page', () => {
     expect(html.split('aria-current="page"').length - 1).toBe(1);
+  });
+
+  // UX F-11: at 360px the row shrank each button in proportion to its label,
+  // so Lead/FX/Beat truncated beside a long Accompaniment. Below sm the row is
+  // an equal-column grid and Accompaniment shows a short label; its full name
+  // stays its accessible name and tooltip.
+  test('below sm the buttons share the row in equal columns, labels without icons', () => {
+    expect(openTagContaining(html, 'join')).toContain(
+      'max-sm:inline-grid max-sm:grid-flow-col max-sm:auto-cols-fr max-sm:[&amp;_svg]:hidden',
+    );
+  });
+
+  test('Accompaniment is abbreviated below sm, and named in full for AT and the tooltip', () => {
+    const tag = openTagContaining(html, 'id="segment-accompaniment"');
+    expect(tag).toContain('aria-label="Accompaniment"');
+    expect(tag).toContain('title="Accompaniment"');
+    expect(html).toContain('<span class="truncate sm:hidden">Accomp.</span>');
+    expect(html).toContain('<span class="truncate hidden sm:inline">Accompaniment</span>');
+  });
+
+  test('a label short enough for the phone renders once, at every width', () => {
+    for (const label of ['Lead', 'FX', 'Beat']) {
+      expect(html).toContain(`<span class="truncate">${label}</span>`);
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
 import { useAppStore } from '@/store/store';
 import { HEADER_GROUP } from './fieldClasses';
@@ -6,6 +6,12 @@ import { SegmentHeader } from './SegmentHeader';
 import { ViewHeader } from './ViewHeader';
 
 describe('HeaderCard slots', () => {
+  // The segment row renders only for the focused segment, and the store
+  // default focuses an accompaniment track: pin Lead focus here (R356).
+  beforeEach(() => {
+    useAppStore.setState({ focusTrack: 'synth' });
+  });
+
   /**
    * `viewControls` selects WHAT the view shows — Pattern's segment row, the
    * Sound tab's Simple/Pro depth — and `actions` holds what you DO to what is

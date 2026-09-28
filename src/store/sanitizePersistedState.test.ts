@@ -33,11 +33,15 @@ describe('focusTrack persistence', () => {
    * becomes a trap once the roster includes 'drum', so the clause below is
    * written from nothing; there is no old clause to rename.
    */
-  test('sanitize maps a missing, non-string or out-of-roster focusTrack to synth', () => {
-    expect(sanitizePersistedState({}).focusTrack).toBe('synth');
-    expect(sanitizePersistedState({ focusTrack: 7 }).focusTrack).toBe('synth');
-    expect(sanitizePersistedState({ focusTrack: 'lead' }).focusTrack).toBe('synth');
-    expect(sanitizePersistedState({ focusTrack: null }).focusTrack).toBe('synth');
+  test('sanitize maps a missing, non-string or out-of-roster focusTrack to the chord default', () => {
+    expect(sanitizePersistedState({}).focusTrack).toBe('chord');
+    expect(sanitizePersistedState({ focusTrack: 7 }).focusTrack).toBe('chord');
+    expect(sanitizePersistedState({ focusTrack: 'lead' }).focusTrack).toBe('chord');
+    expect(sanitizePersistedState({ focusTrack: null }).focusTrack).toBe('chord');
+  });
+
+  test('a persisted synth focus is kept — existing users are not moved (R214)', () => {
+    expect(sanitizePersistedState({ focusTrack: 'synth' }).focusTrack).toBe('synth');
   });
 
   test('sanitize leaves a valid focusTrack untouched, including drum', () => {
@@ -48,11 +52,11 @@ describe('focusTrack persistence', () => {
   /**
    * The old keys are simply ignored — not read, not translated, not carried
    * forward (ADR-0023: no migration chains). A user who had FX selected on
-   * Sound reopens on Lead; that is one click.
+   * Sound reopens on the default focus (Chord); that is one click.
    */
-  test('an old payload carrying only controlTarget/patternSegment still resolves focusTrack to synth', () => {
+  test('an old payload carrying only controlTarget/patternSegment still resolves focusTrack to the default', () => {
     const out = sanitizePersistedState({ controlTarget: 'bass', patternSegment: 'beat' });
-    expect(out.focusTrack).toBe('synth');
+    expect(out.focusTrack).toBe('chord');
   });
 });
 

@@ -65,17 +65,13 @@ describe('buildProjectContent', () => {
 });
 
 describe('pinned key sets', () => {
-  test('the per-loop content keys are exactly LOOP_FLAT_KEYS + id + name + repeatCount', () => {
+  test('the per-loop content keys are exactly LOOP_FLAT_KEYS + the four slot-identity keys', () => {
     expect([...PROJECT_LOOP_KEYS].sort()).toEqual(
-      [...LOOP_FLAT_KEYS, 'id', 'name', 'repeatCount'].sort(),
+      [...LOOP_FLAT_KEYS, 'id', 'name', 'tempName', 'repeatCount'].sort(),
     );
-    // Every key of a real Loop is listed, and every listed key is on a real Loop.
-    // tempName is loop-slot identity, not .solna project content (same category as
-    // selectedVibeId being excluded from PROJECT_CONTENT_KEYS) — deliberately absent
-    // from PROJECT_LOOP_KEYS.
-    const keysOnLoop = Object.keys(createDefaultLoop())
-      .filter((k) => k !== 'tempName')
-      .sort();
+    // Every key of a real Loop is listed, and every listed key is on a real
+    // Loop. tempName included: the app's label is saved since UX F-13.
+    const keysOnLoop = Object.keys(createDefaultLoop()).sort();
     expect(keysOnLoop).toEqual([...PROJECT_LOOP_KEYS].sort());
   });
 });
@@ -263,12 +259,9 @@ describe('a formatVersion-1 .solna file through the real import path', () => {
     expect(loop.leadMelodySteps).toEqual(createDefaultLoop().leadMelodySteps);
     expect(loop.leadGate).toBe(DEFAULT_LEAD_GATE);
     expect(loop.name).toBe('Loop 1');
-    // sanitizeContent runs sanitizeLoops' full Loop[] (tempName filled in for
-    // a body that predates the field) through pickLoopContent, the same strip
-    // buildProjectContent uses — so the ProjectContent this returns carries no
-    // tempName at all, matching the type. tempName only exists again once
-    // applyProjectContent's withFreshTempNames stamps a fresh one on open.
-    expect((loop as unknown as Record<string, unknown>).tempName).toBeUndefined();
+    // A body that predates the saved tempName gets one filled by
+    // sanitizeLoops — validation, not migration (R214).
+    expect(loop.tempName).toBe('untitled-1');
     expect(result.body.content.bpm).toBe(118);
   });
 });

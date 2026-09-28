@@ -354,6 +354,42 @@ export async function openPickedLocalFile({
   await openReadResult(read, openProjectFile, report, notify, { kind: 'local', handle: picked.handle });
 }
 
+export interface SaveResultHandlers {
+  notify: (message: string, tone: FeedbackTone) => void;
+  report: (message: string | null) => void;
+  downloadCopy: () => void;
+  /** Called once a save has landed; the phone's menu sheet closes on it. */
+  onSaved?: () => void;
+}
+
+/**
+ * The one place a save result becomes UI. `download` is the no-File-System-
+ * Access fallback (Safari, Firefox): Save As degrades to a downloaded copy.
+ * `cancelled` is a dismissed picker: nothing happened, so nothing is said. A
+ * save that landed clears the banner and says so (UX F-01): an explicit Save
+ * with no answer read as a click that did nothing. The autosave never comes
+ * through here, so it stays silent.
+ *
+ * Exported standalone, like `openParsedProjectFile`, so it is tested directly.
+ */
+export function settleSaveResult(result: ProjectSaveResult, handlers: SaveResultHandlers): void {
+  if (result.ok === false) {
+    // An explicit save failure / handle denial (§5.6): the result of THIS
+    // action, so a toast, never the persistent banner.
+    handlers.notify(result.message, 'error');
+    return;
+  }
+  if (result.destination === 'download') {
+    handlers.downloadCopy();
+    return;
+  }
+  if (result.destination === 'cancelled') return;
+  handlers.report(null);
+  // The name the write returned, never re-derived from the project name.
+  handlers.notify(`Saved ${result.fileName}`, 'success');
+  handlers.onSaved?.();
+}
+
 /**
  * Every project-file command the menu can run, with the store actions behind
  * it. The component below owns only which dialog is open; what a row DOES
@@ -363,7 +399,9 @@ function useProjectFileCommands({
   setPending,
   setBrowser,
   fileInputRef,
+  onSaved,
 }: {
+  onSaved?: () => void;
   setPending: (label: string | null) => void;
   setBrowser: (mode: ProjectBrowseMode | null) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -401,23 +439,14 @@ function useProjectFileCommands({
     }
   };
 
-  /**
-   * The one place a save result becomes UI. `download` is the no-File-System-
-   * Access fallback (Safari, Firefox): Save As degrades to a downloaded copy.
-   * `cancelled` is a dismissed picker: nothing happened, so nothing is said.
-   */
+  /** The one place a save result becomes UI — see `settleSaveResult`. */
   const finishSave = (result: ProjectSaveResult) => {
-    if (result.ok === false) {
-      // An explicit save failure / handle denial (§5.6): the result of THIS
-      // action, so a toast, never the persistent banner.
-      notify(result.message, 'error');
-      return;
-    }
-    if (result.destination === 'download') {
-      downloadCopy();
-      return;
-    }
-    if (result.destination !== 'cancelled') report(null);
+    settleSaveResult(result, {
+      notify,
+      report,
+      downloadCopy,
+      onSaved,
+    });
   };
 
   /**
@@ -521,7 +550,16 @@ export interface UseProjectMenu {
  * desktop dropdown and the mobile menu sheet render the same rows and the
  * same dialogs from it. Which dialog is open is local UI state.
  */
-export function useProjectMenu(): UseProjectMenu {
+export interface UseProjectMenuOptions {
+  /**
+   * Called when an explicit save lands. The phone's menu sheet passes its
+   * close: the sheet is modal and holds every toast while open, so without
+   * this the success toast waited for the user to dismiss the sheet.
+   */
+  onSaved?: () => void;
+}
+
+export function useProjectMenu({ onSaved }: UseProjectMenuOptions = {}): UseProjectMenu {
   const [confirming, setConfirming] = useState<ReplacingAction | null>(null);
   const [browser, setBrowser] = useState<ProjectBrowseMode | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -537,7 +575,7 @@ export function useProjectMenu(): UseProjectMenu {
   const connectDrive = useLiveStore((s) => s.connectDrive);
   const newProject = useLiveStore((s) => s.newProject);
 
-  const commands = useProjectFileCommands({ setPending, setBrowser, fileInputRef });
+  const commands = useProjectFileCommands({ setPending, setBrowser, fileInputRef, onSaved });
 
   const choose = (action: ProjectMenuAction) =>
     runMenuAction(action, {

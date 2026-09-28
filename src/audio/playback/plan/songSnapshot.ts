@@ -56,8 +56,8 @@ export interface MixdownBeatVoiceGain {
 
 /**
  * One loop of the arrangement, structurally: the per-loop columns the offline
- * snapshot carries, named exactly as `ProjectLoop` names them
- * (`src/store/projectFormat.ts`). Lives in `plan/`, not `export/`, so neither
+ * snapshot carries, named exactly as a project loop names them
+ * (`PROJECT_LOOP_KEYS`, `src/store/projectFormat.ts`). Lives in `plan/`, not `export/`, so neither
  * the renderer nor the song timeline needs to import the store.
  *
  * Deliberately the flat store names rather than a nested, renderer-shaped

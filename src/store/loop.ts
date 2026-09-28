@@ -495,18 +495,3 @@ export function resolveActiveLoop<T extends { id: string }>(
 ): T {
   return loops.find((l) => l.id === activeId) ?? loops[0];
 }
-
-/**
- * Stamps a fresh, position-ordered `untitled-N` onto every loop that has
- * none — the shape `ProjectContent.loops` is in, since `tempName` is
- * loop-slot identity and is never part of project content (see
- * `ProjectLoop` in projectFormat.ts). Every project load (New, Open, Import)
- * therefore synthesizes fresh slot labels the same way sanitizeLoops does
- * for a raw row with none, and for the same reason applyProjectContent
- * already resets `selectedVibeId` to null: a label that named "the loop a
- * vibe was applied to" or "the Nth loop added this session" describes a
- * session that just ended, not the one being opened.
- */
-export function withFreshTempNames(loops: readonly Omit<Loop, 'tempName'>[]): Loop[] {
-  return loops.map((loop, i) => ({ ...loop, tempName: `untitled-${i + 1}` }) as Loop);
-}

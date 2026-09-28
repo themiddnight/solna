@@ -159,7 +159,8 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       // failure (§5.6) — toasting here too would show the same sentence twice.
       if (updated.ok === false) return { ok: false, message: updated.message };
       set({ projectNotice: null });
-      return { ok: true, destination: 'drive' };
+      // Drive's own name for the file: an update keeps whatever it was called.
+      return { ok: true, destination: 'drive', fileName: updated.value.name };
     },
 
     saveAsToDrive: async (name) => {
@@ -173,7 +174,7 @@ export function createDriveSlice(set: Set, get: Get, deps: DriveSliceDeps): Driv
       if (created.ok === false) return { ok: false, message: created.message };
       await get().adoptSaveAs(identity, name, { kind: 'drive', fileId: created.value.id });
       set({ projectNotice: null });
-      return { ok: true, destination: 'drive' };
+      return { ok: true, destination: 'drive', fileName: created.value.name };
     },
   };
 }

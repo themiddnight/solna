@@ -6,6 +6,13 @@ import { useAppStore } from '@/store/store';
 import { HEADER_FIELD_SHELL } from '../ui/fieldClasses';
 import { LoopSelector, onSelectLoop } from './LoopSelector';
 
+/** The full opening tag of the element whose markup contains `needle`; throws when it is absent. */
+function openTagContaining(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  return html.slice(html.lastIndexOf('<', idx), html.indexOf('>', idx) + 1);
+}
+
 // onSelectLoop -> loadLoop mutates the shared singleton store (the flat
 // per-loop slices, activeLoopId, player states). bun runs every test file in
 // one process without isolation, so restore the default baseline before AND
@@ -44,6 +51,24 @@ describe('LoopSelector', () => {
     expect(html).toContain(HEADER_FIELD_SHELL);
     expect(html).toContain('appearance-none');
     expect(html).not.toContain('max-w-');
+  });
+
+  // UX F-10: the caption used to drop below `sm`, leaving the phone header a
+  // bare name that read as a title rather than a loop picker.
+  test('the Loop caption shows at every width, the phone included', () => {
+    const html = renderToString(<LoopSelector />);
+    // Throws if the caption text changes, rather than slicing '' and passing.
+    const caption = openTagContaining(html, '>Loop<');
+    expect(caption.startsWith('<span')).toBe(true);
+    expect(caption).not.toContain('hidden');
+  });
+
+  // Review 4123990330: the caption made the phone shell wider and it ran over
+  // the wordmark. The wordmark's text now hides below `sm` (Wordmark.tsx), so
+  // the select keeps its width from 360px up and narrows only on a 320px phone.
+  test('the select keeps its width from 360px up, narrowing only below', () => {
+    const select = openTagContaining(renderToString(<LoopSelector />), 'id="select-loop"');
+    expect(select).toContain('w-24 min-[360px]:w-32');
   });
 
   test('onSelectLoop loads the picked loop into the store', () => {

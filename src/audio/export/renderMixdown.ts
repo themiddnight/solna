@@ -17,7 +17,7 @@
  * allowTypeImports exemption. Everything the render reads arrives in the
  * snapshot, which is why `MixdownLoop` (now `plan/songSnapshot.ts`) names the
  * fields the offline snapshot carries rather than importing the store's
- * `ProjectLoop`. The store enriches each project loop with its source-bus
+ * `Loop`. The store enriches each project loop with its source-bus
  * mixer at that boundary; every other field remains the flat project-content
  * shape.
  *

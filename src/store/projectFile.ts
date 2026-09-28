@@ -42,11 +42,10 @@ const malformed = (): ProjectParseResult => ({ ok: false, error: 'malformed', me
  * a wrong-typed field falls back, an empty or invalid loops array becomes one
  * default loop, and unknown library ids are kept verbatim.
  *
- * `sanitizeLoops` returns full `Loop[]` — the same shape persist hydration
- * reads, tempName included — so it is piped through `pickLoopContent` here
- * too, not just at `buildProjectContent`'s write site: this function is the
- * OTHER producer of a `ProjectContent`, and a `ProjectLoop` must never carry
- * `tempName` regardless of which producer built it.
+ * `sanitizeLoops` keeps an explicit `tempName` (the app's label, saved since
+ * UX F-13) and fills `untitled-N` where a body has none or repeats one; the
+ * result is piped through `pickLoopContent`, the same pick
+ * `buildProjectContent` uses, so both producers emit exactly the project keys.
  *
  * `knownBeatPresetIds` is the ONE thing the two readers below disagree about,
  * and the asymmetry is the point. `normalizeStoredBody` reads THIS machine's

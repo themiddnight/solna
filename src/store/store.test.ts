@@ -180,7 +180,7 @@ describe('store defaults', () => {
     expect(s.bassOctave).toBe(2);
     expect(s.bassMuted).toBe(false);
     expect(s.bassVolume).toBe(-6); // DEFAULT_BUS_TRIM_DB (DEV-383 measured headroom)
-    expect(s.focusTrack).toBe('synth');
+    expect(s.focusTrack).toBe('chord');
     expect(s.activeTab).toBe('sound');
     expect(s.keyboardMode).toBe('scale-locked');
     // Every track starts at its OWN factory patch, and at its own Arp
@@ -845,9 +845,11 @@ describe('the custom pattern lanes in a non-4/4 meter', () => {
 });
 
 describe('focusTrack', () => {
-  test('starts on synth — Lead, the track a new loop is most likely opened for', async () => {
+  // UX F-04: the default loop's Lead is empty, so a Lead focus made the first
+  // knob a new user turned inaudible; Chord is the track that already plays.
+  test('starts on chord — the one track the default loop already sounds', async () => {
     const { useAppStore } = await getStore();
-    expect(useAppStore.getState().focusTrack).toBe('synth');
+    expect(useAppStore.getState().focusTrack).toBe('chord');
   });
 
   test('the setter moves it and nothing else', async () => {
