@@ -21,7 +21,6 @@ import {
   replaceConfirmMessage,
   replacesProject,
   saveLabel,
-  savedMessage,
   settleSaveResult,
   visibleMenuSections,
   type OpenProjectFile,
@@ -422,17 +421,19 @@ describe('explicit save feedback (UX F-01)', () => {
       downloadCopy: () => {
         calls.downloads += 1;
       },
-      savedMessage: () => 'Saved song.solna',
     };
     return { calls, handlers };
   }
 
-  test('a landed save clears the banner AND shows a success toast', () => {
+  // The toast names the file the save actually wrote, carried on the result:
+  // a Drive update keeps the file's existing name, so the project name (or a
+  // post-await read of the store) can name a file that does not exist.
+  test('a landed save clears the banner AND names the written file', () => {
     for (const destination of ['local', 'drive'] as const) {
       const { calls, handlers } = harness();
-      settleSaveResult({ ok: true, destination }, handlers);
+      settleSaveResult({ ok: true, destination, fileName: 'night-drive.solna' }, handlers);
       expect(calls.report).toEqual([null]);
-      expect(calls.notify).toEqual([['Saved song.solna', 'success']]);
+      expect(calls.notify).toEqual([['Saved night-drive.solna', 'success']]);
     }
   });
 
@@ -455,12 +456,5 @@ describe('explicit save feedback (UX F-01)', () => {
     settleSaveResult({ ok: false, message: 'nope' }, handlers);
     expect(calls.notify).toEqual([['nope', 'error']]);
     expect(calls.report).toEqual([]);
-  });
-
-  test('the message names the file the save wrote', () => {
-    const handle = { name: 'My Beat.solna' } as FileSystemFileHandle;
-    expect(savedMessage({ kind: 'local', handle }, 'My Beat')).toBe('Saved My Beat.solna');
-    expect(savedMessage({ kind: 'drive', fileId: 'x' }, 'Night Drive')).toBe('Saved night-drive.solna');
-    expect(savedMessage({ kind: 'untitled' }, null)).toBe('Project saved');
   });
 });

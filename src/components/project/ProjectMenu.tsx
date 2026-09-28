@@ -6,7 +6,6 @@ import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProj
 import type { ProjectSaveResult } from '@/store/projectSlice';
 import type { FeedbackTone } from '@/store/feedback';
 import { selectExportBusy } from '@/store/exportSlice';
-import { useAppStore } from '@/store/store';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
 import type { AppStore } from '@/store/types';
@@ -355,23 +354,10 @@ export async function openPickedLocalFile({
   await openReadResult(read, openProjectFile, report, notify, { kind: 'local', handle: picked.handle });
 }
 
-/**
- * The success toast's text: the name of the file the save wrote. A local file
- * is named by its handle (the name the user picked); a Drive file is created
- * as `projectFileName(name)` (driveClient); an untitled body has no name to
- * show, so the message stays generic.
- */
-export function savedMessage(source: ProjectSource, projectName: string | null): string {
-  if (source.kind === 'local') return `Saved ${source.handle.name}`;
-  if (projectName !== null) return `Saved ${projectFileName(projectName)}`;
-  return 'Project saved';
-}
-
 export interface SaveResultHandlers {
   notify: (message: string, tone: FeedbackTone) => void;
   report: (message: string | null) => void;
   downloadCopy: () => void;
-  savedMessage: () => string;
 }
 
 /**
@@ -397,7 +383,8 @@ export function settleSaveResult(result: ProjectSaveResult, handlers: SaveResult
   }
   if (result.destination === 'cancelled') return;
   handlers.report(null);
-  handlers.notify(handlers.savedMessage(), 'success');
+  // The name the write returned, never re-derived from the project name.
+  handlers.notify(`Saved ${result.fileName}`, 'success');
 }
 
 /**
@@ -453,12 +440,6 @@ function useProjectFileCommands({
       notify,
       report,
       downloadCopy,
-      // Read after the await, not from a render-time selector: a Save As has
-      // just re-pointed the source and renamed the project.
-      savedMessage: () => {
-        const { projectSource, projectName } = useAppStore.getState();
-        return savedMessage(projectSource, projectName);
-      },
     });
   };
 

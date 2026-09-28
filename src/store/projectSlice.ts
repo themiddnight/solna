@@ -37,7 +37,6 @@ import {
 type Set = StoreApi<AppStore>['setState'];
 type Get = StoreApi<AppStore>['getState'];
 
-type ProjectSaveDestination = 'local' | 'drive' | 'download' | 'cancelled';
 
 /**
  * `download` is an INSTRUCTION, not a failure: the browser has no
@@ -48,9 +47,15 @@ type ProjectSaveDestination = 'local' | 'drive' | 'download' | 'cancelled';
  *
  * `cancelled` is likewise a success with no effect: the user dismissed the
  * picker, so nothing was written and the source did not move.
+ *
+ * A write that landed (`local`, `drive`) carries the `fileName` it actually
+ * wrote: the handle's name, or the name Drive returned. A Drive update never
+ * renames the file, so the project name is not a safe stand-in for it.
  */
 export type ProjectSaveResult =
-  | { ok: true; destination: ProjectSaveDestination }
+  | { ok: true; destination: 'local' | 'drive'; fileName: string }
+  | { ok: true; destination: 'download' }
+  | { ok: true; destination: 'cancelled' }
   | { ok: false; message: string };
 
 export const SAVE_FAILED_MESSAGE = 'Could not write the project file. Your work is still autosaved on this device.';
@@ -250,7 +255,7 @@ async function writeProjectText(
 ): Promise<ProjectSaveResult> {
   try {
     await writeTextToHandle(handle, text);
-    return { ok: true, destination: 'local' };
+    return { ok: true, destination: 'local', fileName: handle.name };
   } catch {
     return { ok: false, message: SAVE_FAILED_MESSAGE };
   }

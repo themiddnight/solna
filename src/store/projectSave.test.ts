@@ -83,7 +83,7 @@ describe('saveProject dispatch', () => {
     const { useAppStore, slice } = await freshSlice();
     const sink: string[] = [];
     setPicker(async () => fakeHandle('chosen.solna', sink));
-    expect(await slice.saveProject()).toEqual({ ok: true, destination: 'local' });
+    expect(await slice.saveProject()).toEqual({ ok: true, destination: 'local', fileName: 'chosen.solna' });
     expect(useAppStore.getState().projectSource.kind).toBe('local');
     expect(sink).toHaveLength(1);
   });
@@ -95,7 +95,7 @@ describe('saveProject dispatch', () => {
       throw new Error('the picker must not be consulted for a project with a target');
     });
     useAppStore.setState({ projectSource: { kind: 'local', handle: fakeHandle('sketch.solna', sink) } });
-    expect(await slice.saveProject()).toEqual({ ok: true, destination: 'local' });
+    expect(await slice.saveProject()).toEqual({ ok: true, destination: 'local', fileName: 'sketch.solna' });
     expect(sink).toHaveLength(1);
   });
 
@@ -107,10 +107,10 @@ describe('saveProject dispatch', () => {
       // The one seam a test needs: the slice is dispatching, not writing.
       saveToDrive: async () => {
         calls.push('drive');
-        return { ok: true, destination: 'drive' };
+        return { ok: true, destination: 'drive', fileName: 'song.solna' };
       },
     });
-    expect(await slice.saveProject()).toEqual({ ok: true, destination: 'drive' });
+    expect(await slice.saveProject()).toEqual({ ok: true, destination: 'drive', fileName: 'song.solna' });
     expect(calls).toEqual(['drive']);
   });
 
@@ -142,7 +142,7 @@ describe('Save As (local)', () => {
     setPicker(async () => handle);
     useAppStore.setState({ projectName: 'Sketch' });
 
-    expect(await slice.saveProjectAsLocal()).toEqual({ ok: true, destination: 'local' });
+    expect(await slice.saveProjectAsLocal()).toEqual({ ok: true, destination: 'local', fileName: 'mix.solna' });
 
     const after = useAppStore.getState();
     expect(after.projectName).toBe('mix');

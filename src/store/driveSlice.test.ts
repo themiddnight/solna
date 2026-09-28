@@ -296,14 +296,16 @@ describe('saveToDrive', () => {
       client: okClient({
         updateProject: async (fileId, body) => {
           sent.push({ fileId, body });
-          return META;
+          // An update never renames: the file keeps the name it already has
+          // on Drive, whatever the project is called now (review 4123989305).
+          return { ...META, name: 'night-drive.solna' };
         },
       }),
     });
     const before = useAppStore.getState().exportProjectFile();
     useAppStore.setState({ projectSource: { kind: 'drive', fileId: 'drive-9' } });
     clock = 8_000;
-    expect(await drive.saveToDrive()).toEqual({ ok: true, destination: 'drive' });
+    expect(await drive.saveToDrive()).toEqual({ ok: true, destination: 'drive', fileName: 'night-drive.solna' });
     expect(sent[0].fileId).toBe('drive-9');
     // A Save is the SAME document being written again: the id and the creation
     // time are what make that true, and only updatedAt may move.
@@ -355,7 +357,7 @@ describe('saveAsToDrive', () => {
     const before = useAppStore.getState().exportProjectFile();
     useAppStore.setState({ projectName: 'Sketch' });
     clock = 7_000;
-    expect(await drive.saveAsToDrive('Remix')).toEqual({ ok: true, destination: 'drive' });
+    expect(await drive.saveAsToDrive('Remix')).toEqual({ ok: true, destination: 'drive', fileName: 'mix.solna' });
     expect(created[0].name).toBe('Remix');
     // A Save As is a NEW document: its own id, and createdAt = updatedAt = now.
     expect(created[0].body.id).not.toBe(before.id);
