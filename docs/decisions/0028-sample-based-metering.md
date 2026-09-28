@@ -27,7 +27,9 @@ forever on a surface nobody is looking at.
   capped by either regardless of which is engaged. The output ceiling (below) is downstream of the
   tap too.
 - The last master stage is a hard 0 dBFS **output ceiling** (UX F-08): a `WaveShaperNode` with the
-  two-point curve `[-1, 1]` (identity inside full scale, a clamp outside it) and
+  two-point curve `[-1, 1]` (a clamp outside full scale; inside it the identity to within ~6e-8
+  absolute float32 error, from computing `x + 1` — not bit-transparent, so it moves a rendered
+  file's bytes by at most 1 int16 LSB on a few samples) and
   `oversample = 'none'`, wired in every dynamics topology and never toggled. The limiter is not a
   ceiling: a `DynamicsCompressorNode` has no lookahead, so a hard transient passes its 3 ms attack
   nearly unreduced, and the spec's automatic makeup gain (+1.71 dB at the −3 dB / 20:1 seed) lifts

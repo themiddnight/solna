@@ -86,7 +86,9 @@ describe('renderStems: the stems are the mix before the master', () => {
       });
       // The one master stage a neutral master still has is the 0 dBFS output
       // ceiling (UX F-08), and this all-tracks fixture sums above full scale,
-      // so the mix is the stem sum CLAMPED to ±1 — exactly, sample by sample.
+      // so the mix is the stem sum CLAMPED to ±1, sample by sample. Not bit-exact:
+      // the ceiling computes `x + 1` in float32 (~6e-8 absolute error inside
+      // full scale), well inside the tolerance below.
       for (let s = 0; s < sum.length; s += 1) sum[s] = Math.max(-1, Math.min(1, sum[s]));
       expect(maxAbsDiff(sum, mixBuffer.getChannelData(channel))).toBeLessThanOrEqual(1e-5);
     }

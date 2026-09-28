@@ -973,9 +973,12 @@ export class MasterRack {
    *
    * Deliberately NOT a soft curve (tanh and kin): a soft knee bends the signal
    * well below full scale, so it would colour every mix all the time to shave
-   * the rare over. The hard clamp is bit-transparent until a sample would
-   * actually exceed 0 dBFS — which, with the limiter on, is only its attack
-   * overshoot and makeup excess.
+   * the rare over. The hard clamp is NOT bit-transparent: inside full scale it
+   * is the identity only to within ~6e-8 absolute float32 error (the `x + 1`
+   * above; a non-zero |x| below ~3e-8 comes out as exactly 0), so it changes
+   * a rendered file's bytes by at most 1 int16 LSB on a few samples. It
+   * reshapes the signal only where a sample would exceed 0 dBFS — which, with
+   * the limiter on, is only its attack overshoot.
    *
    * Paired with `oversample = 'none'`, also deliberately: '2x'/'4x' low-pass
    * the SHAPED signal before decimating, and that filter rings (Gibbs) on a

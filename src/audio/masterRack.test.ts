@@ -271,7 +271,8 @@ describe("master chain", () => {
     // NOTHING owns headroom by default, and that is the intended state
     // (DEV-385): both stages exist as nodes but neither is in the path, so the
     // mix reaches the output exactly as the user made it — through the 0 dBFS
-    // ceiling (UX F-08), which is transparent below full scale and is the one
+    // ceiling (UX F-08), which is near-transparent below full scale (~6e-8
+    // absolute float32 error) and is the one
     // stage no toggle removes.
     expect(eqHigh._connectTargets).toEqual([masterGain]);
     expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ceiling]);

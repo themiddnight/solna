@@ -9,8 +9,9 @@ import type { BeatPattern, BeatVoiceId, MasterEffects } from '@/types';
 
 /**
  * Every master stage neutral: wets 0, EQ bypassed, no compressor, no limiter.
- * The always-on 0 dBFS output ceiling is the exception: transparent below
- * full scale, a clamp above it.
+ * The always-on 0 dBFS output ceiling is the exception: a clamp above full
+ * scale, and inside it the identity to within ~6e-8 absolute float32 error
+ * (not bit-transparent).
  */
 export const NEUTRAL_EFFECTS: MasterEffects = {
   ...FACTORY_EFFECTS,
