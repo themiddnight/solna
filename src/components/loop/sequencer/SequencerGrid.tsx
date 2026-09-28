@@ -3,6 +3,7 @@ import { useAppStore } from '@/store/store';
 import { useSegmentGatedStep } from '@/components/playbackStep';
 import { StepHeader } from '@/components/ui/StepHeader';
 import { TrackRow } from './TrackRow';
+import { scrollMoreCueClass, useScrollMoreCue } from './useScrollMoreCue';
 import { BEAT_VOICE_ROWS } from '@/components/loop/beat/beatVoices';
 import type { StepCell } from '@/components/sequencerGrid';
 import type { BeatMix, BeatPattern, BeatVoiceId } from '@/types';
@@ -49,39 +50,45 @@ export function SequencerGrid({
 }: SequencerGridProps) {
   const currentStep = useSegmentGatedStep('sequencer', 'beat');
   const isPlaying = useAppStore((s) => s.sequencerPlayer !== 'stopped');
+  const { ref: scrollRef, moreToRight, onScroll } = useScrollMoreCue<HTMLDivElement>();
 
+  // The fade is a sibling of the scroll track, not a child: inside it, it
+  // would scroll away with the cells it is meant to sit over (UX F-03).
   return (
-    <div className="overflow-x-auto">
-      {/* Step Indicator Header — one cell per step of the active bar */}
-      <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
+    <div className="relative">
+      <div ref={scrollRef} onScroll={onScroll} className="overflow-x-auto">
+        {/* Step Indicator Header — one cell per step of the active bar */}
+        <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
 
-      {/* Track Lanes. The min-width is what makes a step button SQUARE: the
-          buttons are `aspect-square`, so their height follows the width this
-          floor leaves them once the gutter and the fifteen gaps are paid for
-          (~27px on a phone at 660, ~26px on a tablet at 700). Below it the row
-          scrolls and TrackRow's gutter stays pinned. Any change here must be
-          mirrored in StepHeader's DRUM_HEADER_CLASS. */}
-      <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
-        {/* One row per CANONICAL voice, in the roster's order — not per stored
-            row. The roster is the same list `planBeatStep` walks, so what the
-            grid draws and what the clock plays can never be two different
-            rosters. */}
-        {BEAT_VOICE_ROWS.map((voice) => (
-          <TrackRow
-            key={voice.id}
-            voiceId={voice.id}
-            steps={pattern.rows[voice.id]}
-            mix={mix.voices[voice.id]}
-            cells={cells}
-            currentStep={currentStep}
-            isPlaying={isPlaying}
-            onToggleStep={onToggleStep}
-            onToggleMute={onToggleMute}
-            onPreview={onPreview}
-            onVolumeChange={onVolumeChange}
-          />
-        ))}
+        {/* Track Lanes. The min-width is what makes a step button SQUARE: the
+            buttons are `aspect-square`, so their height follows the width this
+            floor leaves them once the gutter and the fifteen gaps are paid for
+            (~27px on a phone at 660, ~26px on a tablet at 700). Below it the row
+            scrolls and TrackRow's gutter stays pinned. Any change here must be
+            mirrored in StepHeader's DRUM_HEADER_CLASS. */}
+        <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
+          {/* One row per CANONICAL voice, in the roster's order — not per stored
+              row. The roster is the same list `planBeatStep` walks, so what the
+              grid draws and what the clock plays can never be two different
+              rosters. */}
+          {BEAT_VOICE_ROWS.map((voice) => (
+            <TrackRow
+              key={voice.id}
+              voiceId={voice.id}
+              steps={pattern.rows[voice.id]}
+              mix={mix.voices[voice.id]}
+              cells={cells}
+              currentStep={currentStep}
+              isPlaying={isPlaying}
+              onToggleStep={onToggleStep}
+              onToggleMute={onToggleMute}
+              onPreview={onPreview}
+              onVolumeChange={onVolumeChange}
+            />
+          ))}
+        </div>
       </div>
+      <div id="sequencer-more-cue" aria-hidden="true" className={scrollMoreCueClass(moreToRight)} />
     </div>
   );
 }

@@ -136,6 +136,7 @@ import { stepCells } from '../sequencerGrid';
 import { getMeter } from '@/utils/timeSignature';
 import { StepHeader } from '../ui/StepHeader';
 import { TrackRow } from './sequencer/TrackRow';
+import { scrollMoreCueClass } from './sequencer/useScrollMoreCue';
 import { useSegmentGatedStep } from '../playbackStep';
 import React from 'react';
 
@@ -245,30 +246,35 @@ describe('SequencerGrid', () => {
   // because plain `useAppStore` selectors hit the zustand+renderToString trap
   // documented at the top of this file: a rendered `<SequencerGrid />` always
   // reflects the store's creation-time snapshot, never a later `setState`.
+  // Since UX F-03 the scroll track sits in a `relative` wrapper beside its
+  // more-steps cue, which a server render draws hidden (nothing is measured).
   test('renders exactly the markup SequencerView used to inline', () => {
     stepPublisher.publish('sequencer', 5);
     const isPlaying = useAppStore.getInitialState().sequencerPlayer !== 'stopped';
 
     const before = renderToString(
-      <div className="overflow-x-auto">
-        <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
-        <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
-          {BEAT_VOICE_IDS.map((voice) => (
-            <TrackRow
-              key={voice}
-              voiceId={voice}
-              steps={pattern.rows[voice]}
-              mix={mix.voices[voice]}
-              cells={cells}
-              currentStep={5}
-              isPlaying={isPlaying}
-              onToggleStep={() => {}}
-              onToggleMute={() => {}}
-              onPreview={() => {}}
-              onVolumeChange={() => {}}
-            />
-          ))}
+      <div className="relative">
+        <div className="overflow-x-auto">
+          <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
+          <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
+            {BEAT_VOICE_IDS.map((voice) => (
+              <TrackRow
+                key={voice}
+                voiceId={voice}
+                steps={pattern.rows[voice]}
+                mix={mix.voices[voice]}
+                cells={cells}
+                currentStep={5}
+                isPlaying={isPlaying}
+                onToggleStep={() => {}}
+                onToggleMute={() => {}}
+                onPreview={() => {}}
+                onVolumeChange={() => {}}
+              />
+            ))}
+          </div>
         </div>
+        <div id="sequencer-more-cue" aria-hidden="true" className={scrollMoreCueClass(false)} />
       </div>,
     );
     const after = render();
@@ -405,5 +411,28 @@ describe('Pattern › Beat segment paste button', () => {
   test('the drum pattern card body carries the beat-pattern paste button', () => {
     const src = readFileSync(new URL('./SequencerView.tsx', import.meta.url), 'utf8');
     expect(src).toContain("groups={['beat-pattern']}");
+  });
+});
+
+// UX F-03: the scroll track wears the "more to the right" cue as a sibling
+// overlay, decorative only, so a screen reader reads the grid, not the fade.
+describe('SequencerGrid more-steps cue', () => {
+  test('renders beside the scroll track, hidden from AT and never taking a pointer', () => {
+    const html = renderToString(
+      <SequencerGrid
+        pattern={useAppStore.getState().beatPattern}
+        mix={useAppStore.getState().beatMix}
+        cells={stepCells(getMeter('4/4'))}
+        onToggleStep={() => {}}
+        onToggleMute={() => {}}
+        onPreview={() => {}}
+        onVolumeChange={() => {}}
+      />,
+    );
+    const cue = html.indexOf('id="sequencer-more-cue"');
+    expect(cue).toBeGreaterThan(-1);
+    const tag = html.slice(html.lastIndexOf('<', cue), html.indexOf('>', cue) + 1);
+    expect(tag).toContain('aria-hidden="true"');
+    expect(tag).toContain('pointer-events-none');
   });
 });
