@@ -6,6 +6,13 @@ import { useAppStore } from '@/store/store';
 import { HEADER_FIELD_SHELL } from '../ui/fieldClasses';
 import { LoopSelector, onSelectLoop } from './LoopSelector';
 
+/** The full opening tag of the element whose markup contains `needle`; throws when it is absent. */
+function openTagContaining(html: string, needle: string): string {
+  const idx = html.indexOf(needle);
+  if (idx === -1) throw new Error(`not found in markup: ${needle}`);
+  return html.slice(html.lastIndexOf('<', idx), html.indexOf('>', idx) + 1);
+}
+
 // onSelectLoop -> loadLoop mutates the shared singleton store (the flat
 // per-loop slices, activeLoopId, player states). bun runs every test file in
 // one process without isolation, so restore the default baseline before AND
@@ -50,7 +57,9 @@ describe('LoopSelector', () => {
   // bare name that read as a title rather than a loop picker.
   test('the Loop caption shows at every width, the phone included', () => {
     const html = renderToString(<LoopSelector />);
-    const caption = html.slice(html.lastIndexOf('<span', html.indexOf('>Loop<')), html.indexOf('>Loop<'));
+    // Throws if the caption text changes, rather than slicing '' and passing.
+    const caption = openTagContaining(html, '>Loop<');
+    expect(caption.startsWith('<span')).toBe(true);
     expect(caption).not.toContain('hidden');
   });
 
