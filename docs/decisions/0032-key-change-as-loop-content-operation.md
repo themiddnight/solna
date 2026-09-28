@@ -65,7 +65,15 @@ directly, per loop, without depending on which loop happens to be active or moun
   restoring the active loop.
 - **R282** — `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot
   identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to
-  compile if a `Loop` field is neither.
+  compile if a `Loop` field is neither. All four identity fields are saved project content
+  (`PROJECT_LOOP_KEYS`): `name` is the user's and only a rename writes it; `tempName` is the
+  app's label (`untitled-N`, or the last vibe applied) and only the app writes it.
+  *Amended (UX F-13):* `tempName` used to be excluded from a project and re-stamped
+  `untitled-N` on every install, so a vibe's label was lost on reload or Open. Writing the vibe
+  name into `name` instead was tried and rejected: provenance guessed from the string overwrote
+  a user-typed name equal to a vibe's, and a duplicate of a vibe-named loop stopped following
+  vibes. Saving `tempName` keeps provenance structural. An older body with no `tempName` is
+  validated (`untitled-N` filled, repeats renumbered), never migrated (R214).
 - **R283** — `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop
   default is written; slices read it through their `defaults` parameter, or through the shared
   `default*State()` factories `createDefaultLoopContent` itself spreads.

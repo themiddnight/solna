@@ -167,25 +167,6 @@ function putVibeContext(d: VibeDraft, vibe: ResolvedVibe): void {
   // go on claiming an identity the sound has left. Unconditional, so a loop
   // with a user `name` still tracks the last vibe applied behind it.
   d.put(loopTempNamePatch(d.state, d.state.activeLoopId, vibe.name));
-  // AND the saved name, when nobody chose one (UX F-13). `tempName` is not
-  // project content (R282), so a vibe name kept only there was re-stamped
-  // `untitled-N` by the next reload or Open. Still a snapshot, not an id.
-  d.put(vibeLoopNamePatch(d.state, d.state.activeLoopId, vibe.name));
-}
-
-/**
- * Writes the vibe's name into the loop's `name` only when that name is empty
- * or is itself a vibe's name — i.e. the app wrote it, so a re-roll moves it on.
- * A name the user typed is never touched, and returns `{}`.
- */
-function vibeLoopNamePatch(
-  state: Pick<AppStore, 'loops'>,
-  id: string,
-  vibeName: string,
-): Partial<Pick<AppStore, 'loops'>> {
-  const loop = state.loops.find((l) => l.id === id);
-  if (!loop || (loop.name.trim() !== '' && !isVibeName(loop.name))) return {};
-  return { loops: state.loops.map((l) => (l.id === id ? { ...l, name: vibeName } : l)) };
 }
 
 /** 2. Beat (Sound + Pattern + Drum Filter). */
@@ -344,14 +325,3 @@ export function captureVibeTargets(state: AppStore): Partial<AppStore> {
 
 /** Every vibe's id, in table order — the identity set the invariant tests pin against. */
 export const VIBE_IDS: string[] = VIBES.map((v) => v.id);
-
-const VIBE_NAMES: ReadonlySet<string> = new Set(VIBES.map((v) => v.name));
-
-/**
- * Whether `name` is a vibe's display name — the one question a loop's name is
- * asked to tell a vibe-written name from a user-typed one. Beside `VIBE_IDS`
- * because `src/data/` may declare no function (R022).
- */
-export function isVibeName(name: string): boolean {
-  return VIBE_NAMES.has(name);
-}

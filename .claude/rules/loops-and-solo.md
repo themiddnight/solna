@@ -21,7 +21,7 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 
 ## Loop content
 
-- `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to compile if a `Loop` field is neither. <!-- R282 -->
+- `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot identity (`id`, `name`, `tempName`, `repeatCount`) plus content, and `loop.test.ts` fails to compile if a `Loop` field is neither. All four identity fields are saved project content (`PROJECT_LOOP_KEYS`): `name` is the user's and only a rename writes it; `tempName` is the app's label (`untitled-N`, or the last vibe applied) and only the app writes it. <!-- R282 -->
 - `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop default is written; slices read it through their `defaults` parameter, or through the shared `default*State()` factories `createDefaultLoopContent` itself spreads. <!-- R283 -->
 - `trackSends` is per-loop content: in `LOOP_FLAT_KEYS` and the `mix` copy group, keyed by engine source id (`synth`, `chord`, `bass`, `pad`, `fx`, `sequencer`), levels linear 0..1. Its default is written only in `createDefaultLoopContent`: 1/1/1 on every track except `sequencer` delay 0 and distortion 0; `mixdownFixture.ts` is the one test copy and a test pins it equal. <!-- R301 -->
 

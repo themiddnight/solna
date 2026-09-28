@@ -658,18 +658,15 @@ export interface FxState {
 
 export interface Loop extends PadState, FxState {
   id: string;
-  /**
-   * The saved name. '' until set, '' again if cleared. A rename writes it; so
-   * does applying a vibe, but only while it is '' or still a vibe's own name
-   * (`isVibeName`) — a name the user typed is never overwritten (UX F-13).
-   */
+  /** The USER's name. '' until they set one, '' again if they clear it; nothing but a rename writes it. */
   name: string;
   /**
    * The APP's label, never empty. Starts at `untitled-{n}` and is overwritten
    * with a vibe's display NAME (a snapshot, not a reference) whenever a vibe
    * is applied to this loop. Deliberately NOT in LOOP_FLAT_KEYS: it is
    * loop-slot identity, not loop content, so it never rides in
-   * `LoopContent` and no copy group can name it.
+   * `LoopContent` and no copy group can name it. It IS saved with the
+   * project (PROJECT_LOOP_KEYS), so a vibe label survives a reload (UX F-13).
    */
   tempName: string;
   repeatCount?: number; // default 1, number of times this loop plays before advancing in song mode

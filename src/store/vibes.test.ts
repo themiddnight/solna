@@ -1,6 +1,6 @@
 import { describe, test, expect, afterEach, beforeEach } from 'bun:test';
 import { VIBES } from '../data/vibes';
-import { isVibeName, resolveVibe, resolveVibeSynthParams, VIBE_IDS } from './vibes';
+import { resolveVibe, resolveVibeSynthParams, VIBE_IDS } from './vibes';
 import { applyProjectContent, buildProjectContent } from './projectFormat';
 import { writeVibe } from './vibeWriteFixture';
 import { LEAD_TICKS_PER_BAR } from '../utils/stepResolution';
@@ -682,52 +682,73 @@ describe('a vibe stamps the active loop with its display name', () => {
   });
 });
 
-// UX F-13: `tempName` is not project content (R282), so a vibe name that
-// lived only there was re-stamped `untitled-N` by every reload or Open. A loop
-// with no user name, or one still wearing a vibe's name, now takes the vibe's
-// name as its `name`, which IS saved; a name the user chose is never touched.
-describe('a vibe names an unnamed loop, and the name survives a reload', () => {
+// UX F-13: a vibe's label lives in `tempName`, the app's label, and
+// `tempName` is saved with the project, so the label survives a reload or
+// Open. `name` stays the user's alone: a vibe never writes it, so a typed name
+// (even one that equals a vibe's) is never touched, and a duplicate of a
+// vibe-labelled loop keeps following vibes (R282).
+describe('a vibe labels an unnamed loop, and the label survives a reload', () => {
   beforeEach(() => {
     useAppStore.setState({ activeTab: 'sound', playbackScope: SCOPE_NONE });
   });
 
   const vibe = (id: string) => RESOLVED_VIBES.find((v) => v.id === id)!;
 
-  test('an unnamed loop takes the vibe name, and the saved project carries it', () => {
+  test('the vibe label rides the saved project and comes back on install', () => {
     const loop = { ...createDefaultLoop(), id: 'loop-a', name: '', tempName: 'untitled-1' };
     useAppStore.setState({ loops: [loop], activeLoopId: 'loop-a' });
 
     writeVibe(vibe('synthwave-80s'));
 
-    expect(useAppStore.getState().loops[0].name).toBe('Synthwave 80s');
+    const after = useAppStore.getState().loops[0];
+    expect(after.name).toBe('');
+    expect(after.tempName).toBe('Synthwave 80s');
     const reopened = applyProjectContent(buildProjectContent(useAppStore.getState()));
+    expect(reopened.loops[0].tempName).toBe('Synthwave 80s');
     expect(loopLabel(reopened.loops[0])).toBe('Synthwave 80s');
   });
 
-  test('a re-roll to another vibe moves the name with it', () => {
+  test('a re-roll to another vibe moves the label with it', () => {
     const loop = { ...createDefaultLoop(), id: 'loop-a', name: '', tempName: 'untitled-1' };
     useAppStore.setState({ loops: [loop], activeLoopId: 'loop-a' });
 
     writeVibe(vibe('synthwave-80s'));
     writeVibe(vibe('lofi-chill'));
 
-    expect(useAppStore.getState().loops[0].name).toBe('Lo-Fi Chill');
+    expect(loopLabel(useAppStore.getState().loops[0])).toBe('Lo-Fi Chill');
   });
 
-  test('a user-chosen name is never touched', () => {
-    const loop = { ...createDefaultLoop(), id: 'loop-a', name: 'Drop', tempName: 'untitled-1' };
+  // The review repro: the copy of a vibe-labelled loop used to take a *named*
+  // label ('Synthwave 80s 2') and then ignore the next vibe applied to it.
+  test('a duplicate of a vibe-labelled loop follows the next vibe applied to it', () => {
+    const loop = { ...createDefaultLoop(), id: 'loop-a', name: '', tempName: 'untitled-1' };
     useAppStore.setState({ loops: [loop], activeLoopId: 'loop-a' });
+    writeVibe(vibe('synthwave-80s'));
+
+    // Duplicating the active loop activates the copy (the action returns null).
+    useAppStore.getState().duplicateLoop('loop-a');
+    const dup = useAppStore.getState().loops[1];
+    const copyId = dup.id;
+    expect(loopLabel(dup)).toBe('Synthwave 80s 2');
+    useAppStore.setState({ activeLoopId: copyId, ...loopStatePatch(dup) });
+    writeVibe(vibe('lofi-chill'));
+
+    const copy = useAppStore.getState().loops.find((l) => l.id === copyId)!;
+    expect(copy.name).toBe('');
+    expect(loopLabel(copy)).toBe('Lo-Fi Chill');
+  });
+
+  test('a user-typed name is never touched, even one equal to a vibe name', () => {
+    const loop = { ...createDefaultLoop(), id: 'loop-a', name: '', tempName: 'untitled-1' };
+    useAppStore.setState({ loops: [loop], activeLoopId: 'loop-a' });
+    useAppStore.getState().setLoopName('loop-a', 'Deep Ambient');
 
     writeVibe(vibe('synthwave-80s'));
 
-    expect(useAppStore.getState().loops[0].name).toBe('Drop');
-  });
-
-  test('isVibeName knows the roster by display name, not id', () => {
-    for (const v of VIBES) expect(isVibeName(v.name)).toBe(true);
-    expect(isVibeName('synthwave-80s')).toBe(false);
-    expect(isVibeName('Drop')).toBe(false);
-    expect(isVibeName('')).toBe(false);
+    const after = useAppStore.getState().loops[0];
+    expect(after.name).toBe('Deep Ambient');
+    expect(loopLabel(after)).toBe('Deep Ambient');
+    expect(after.tempName).toBe('Synthwave 80s');
   });
 });
 

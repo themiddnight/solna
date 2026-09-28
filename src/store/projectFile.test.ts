@@ -168,21 +168,25 @@ describe('parseProjectFile sanitises wrong-typed content instead of refusing', (
     expect(result.warnings).toHaveLength(0);
   });
 
-  // Regression: sanitizeContent is the SECOND producer of a ProjectContent
-  // (buildProjectContent in projectFormat.ts is the first) and used to assign
-  // sanitizeLoops' full Loop[] straight into the ProjectLoop[]-typed field
-  // with no strip — so a loop that carried an explicit tempName (or fell
-  // back to sanitizeLoops' synthesized one) rode straight through into a
-  // parsed body. That body reaches normalizeStoredBody's callers unstripped
-  // too (the library load, and an opened file), permanently writing tempName
-  // into a stored/exported project. Both loop.ts and normalizeStoredBody route
-  // through this same sanitizeContent, so pinning it here covers both paths.
-  test('strips tempName from every loop, explicit or synthesized', () => {
-    const withExplicit = { ...createDefaultLoop(), tempName: 'my-slot-name' };
-    const result = parseProjectFile(JSON.stringify({ ...body, content: { ...body.content, loops: [withExplicit] } }));
+  // UX F-13: `tempName` (the app's label, e.g. the last vibe applied) is
+  // project content, so a file keeps it. Validated, not trusted: a missing
+  // one is filled `untitled-N`, and a repeat is renumbered so no two loops
+  // share a label (sanitizeLoops' resolveTempName).
+  test('keeps an explicit tempName, fills a missing one, renumbers a repeat', () => {
+    const labelled = { ...createDefaultLoop(), id: 'a', tempName: 'Synthwave 80s' };
+    const repeat = { ...createDefaultLoop(), id: 'b', tempName: 'Synthwave 80s' };
+    const unlabelled: Record<string, unknown> = { ...createDefaultLoop(), id: 'c' };
+    delete unlabelled.tempName;
+    const result = parseProjectFile(
+      JSON.stringify({ ...body, content: { ...body.content, loops: [labelled, repeat, unlabelled] } }),
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect((result.body.content.loops[0] as unknown as Record<string, unknown>).tempName).toBeUndefined();
+    const names = result.body.content.loops.map((l) => l.tempName);
+    expect(names[0]).toBe('Synthwave 80s');
+    expect(names[1]).toMatch(/^untitled-\d+$/);
+    expect(names[2]).toMatch(/^untitled-\d+$/);
+    expect(new Set(names).size).toBe(3);
   });
 });
 
