@@ -31,9 +31,11 @@ forever on a surface nobody is looking at.
   absolute float32 error, from computing `x + 1` — not bit-transparent, so it moves a rendered
   file's bytes by at most 1 int16 LSB on a few samples) and
   `oversample = 'none'`, wired in every dynamics topology and never toggled. The limiter is not a
-  ceiling: a `DynamicsCompressorNode` has no lookahead, so a hard transient passes its 3 ms attack
-  nearly unreduced, and the spec's automatic makeup gain (+1.71 dB at the −3 dB / 20:1 seed) lifts
-  its settled output above its threshold. Measured offline before the ceiling existed, a +18 dB
+  ceiling, even though a `DynamicsCompressorNode` has a fixed look-ahead (the spec's pre-delay:
+  Chromium 6 ms, node-web-audio-api 384 samples). The causes are its finite 20:1 ratio (the settled
+  output still rises above threshold), its attack time constant (a hard onset is reduced, about
+  14.5 dB in the case below, but not fully) and the spec's automatic makeup gain (+1.71 dB at the
+  −3 dB / 20:1 seed) on every sample. More look-ahead would fix none of them. Measured offline before the ceiling existed, a +18 dB
   sine switched on hard peaked at 1.51 and settled at 1.046 with the factory limiter on.
   `oversample = 'none'` is deliberate: '2x'/'4x' low-pass the clipped signal before decimating and
   that filter rings back above ±1 (measured 1.011 at '4x', 1.012 at '2x'), and a soft curve would

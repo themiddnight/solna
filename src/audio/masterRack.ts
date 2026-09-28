@@ -599,11 +599,15 @@ export class MasterRack {
     this.limiterMakeupTrim.gain.value = limiterMakeupCompensation(-3, 20);
 
     // Output ceiling — the last master stage, ALWAYS in the path, whichever
-    // dynamics stages are on (UX F-08, R359). The limiter above is not a ceiling: a
-    // DynamicsCompressorNode has a 3 ms attack and no lookahead, so a hard
-    // transient passes its first milliseconds nearly unreduced, and the Web
-    // Audio spec applies automatic makeup gain on top ((1/fullRangeGain)^0.6,
-    // +1.71 dB at the −3 dB / 20:1 seed). Measured offline before this stage
+    // dynamics stages are on (UX F-08, R359). The limiter above is not a ceiling,
+    // even though a DynamicsCompressorNode does have a fixed look-ahead (the
+    // spec's pre-delay: Chromium 6 ms, node-web-audio-api 384 samples): its
+    // ratio is a finite 20:1, so the settled output still rises above
+    // threshold; its attack is a time constant, not a brick wall, so a hard
+    // onset is reduced (about 14.5 dB here) but not fully; and the spec's
+    // automatic makeup gain ((1/fullRangeGain)^0.6, +1.71 dB at the
+    // −3 dB / 20:1 seed) lifted every sample. More look-ahead would not fix
+    // any of the three. Measured offline before this stage
     // existed: a +18 dB sine switched on hard peaked at 1.51 (+3.6 dBFS) and
     // SETTLED at 1.046 with the factory limiter on. The makeup trim above now
     // cancels the makeup gain (the same case settles at 0.86, and its

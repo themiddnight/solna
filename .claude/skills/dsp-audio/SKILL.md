@@ -140,8 +140,10 @@ Key consequences:
   default only catches occasional peaks rather than compressing continuously. When a stage is
   off it is genuinely disconnected, not neutralised. The "limiter" is a
   max-ratio compressor with a hard knee — the standard Web Audio stand-in, since the API has no
-  dedicated limiter. It is NOT a ceiling (no lookahead, 3 ms attack, automatic makeup gain), so the
-  always-wired `outputCeiling` WaveShaper after it clamps the output to ±1 (R359, UX F-08). The
+  dedicated limiter. It is NOT a ceiling: it does have a fixed look-ahead, but its ratio is a
+  finite 20:1, its attack is a time constant and the spec adds automatic makeup gain, and more
+  look-ahead fixes none of that. So the always-wired `outputCeiling` WaveShaper after it clamps
+  the output to ±1 (R359, UX F-08). The
   limiter's makeup gain is cancelled by `limiterMakeupTrim` (`fullRangeGain^0.6`, re-derived in
   `updateEffects`, wired only with the limiter — R360), so below threshold the limiter is unity.
 - A SERIES stage cannot use the `*Bypass` mechanism: bypass flags force a wet/send gain to 0,

@@ -10,7 +10,7 @@ const RATE = 44100;
 
 /**
  * A sine driven `driveGain` times full scale, switched on hard at 50 ms (the
- * transient a 3 ms-attack limiter cannot catch in time), fed into the master's
+ * transient a 20:1 limiter with a 3 ms attack time constant only partly reduces), fed into the master's
  * dry bus so it crosses the EQ, the master trim and whatever dynamics stages
  * `fx` enables — the same master tail a live session and the mixdown build.
  * Returns the absolute peak and the peak of the last 100 ms (the settled
