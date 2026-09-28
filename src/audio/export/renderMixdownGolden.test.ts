@@ -10,6 +10,13 @@
  * (`<sha256> <platform>`), and a render passes when it matches any of them.
  * The call log is platform-independent and stays single. GOLDEN_UPDATE=1 on a
  * new platform whose call log matches adds that platform's line.
+ *
+ * The linux-x64 line comes ONLY from a native x64 CI runner: copy the hash the
+ * CI failure reports. Docker `linux/amd64` emulation on Apple silicon also
+ * reports `linux-x64` but renders different bytes (855ea423 recorded such a
+ * hash and CI rejected it), and GOLDEN_UPDATE=1 replaces a platform's line
+ * outright — so never run GOLDEN_UPDATE=1 under an emulated linux-x64; it
+ * would overwrite the CI-accepted value and turn CI red.
  */
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';

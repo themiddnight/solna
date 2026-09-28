@@ -32,7 +32,13 @@ bun run verify           # the full gate: what CI runs
    need one.
 2. Write commit messages in the same conventional-commit form: `feat(presets): add Lo-Fi Rhodes`.
 3. Run `bun run verify` and fix everything it reports. CI runs the same command on your pull request,
-   so a green run locally is a green run in CI.
+   so a green run locally is a green run in CI. One exception: the mixdown golden
+   (`src/audio/export/renderMixdownGolden.wav.sha256`) holds one hash per platform. If your change
+   moves the rendered audio, re-record your own platform with `GOLDEN_UPDATE=1` in a commit that
+   changes nothing else, and leave the `linux-x64` line alone: a maintainer copies it from the CI
+   failure log. Never record it under Docker `linux/amd64` emulation on Apple silicon — that also
+   reports `linux-x64` but renders different bytes, and `GOLDEN_UPDATE=1` would overwrite the value
+   CI accepts.
 4. Open the pull request and fill in the template. For content, the template asks what the addition
    sounds like and what it is for. That answer is what the listening review below checks against.
 

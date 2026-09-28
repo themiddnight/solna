@@ -24,7 +24,11 @@ recorded as risk R2, which assumed the golden would only ever run on the machine
 - **Per-platform WAV golden.** `renderMixdownGolden.wav.sha256` holds one `<sha256> <platform>` line
   per platform the golden has been recorded on, and a render passes when it matches any of them. A
   new platform's line is recorded only when that platform's call log already matches, in a commit
-  that changes nothing else.
+  that changes nothing else. The `linux-x64` line is taken only from a native x64 CI runner (the
+  hash its failure log reports). Docker `linux/amd64` emulation on Apple silicon reports the same
+  `linux-x64` platform key but renders different bytes — a hash recorded that way was rejected by
+  CI — and `GOLDEN_UPDATE=1` replaces the line for its platform key, so running it under emulation
+  silently overwrites the CI-accepted value. Never run `GOLDEN_UPDATE=1` on an emulated platform.
 - **Licence: Apache-2.0 for the code, trademarks kept.** The owner does not want to restrict the
   code, only the brand. Apache-2.0 section 6 grants no trademark rights, and section 5 licenses
   contributions under the same terms, so no CLA is needed. `NOTICE` and `TRADEMARKS.md` name the
@@ -71,6 +75,8 @@ code is reused. Apache-2.0 was preferred over MIT for its explicit trademark and
   changes in `package.json`, never by running a subset in the workflow.
 - **R352** — A platform-dependent golden records one value per platform; a new platform's value is
   added only when its platform-independent evidence matches, in a commit that changes nothing else.
+  A platform's value comes from native hardware for that platform (linux-x64: the CI runner), never
+  from emulation, and `GOLDEN_UPDATE=1` never runs on an emulated platform.
 - **R353** — A content-table invariant is a test, not a separate `check:*` script; `check:content`
   is a fast subset for contributors and stays out of `verify`.
 - **R354** — The code is Apache-2.0; the Solna and murva names and the images under
