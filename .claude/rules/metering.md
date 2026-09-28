@@ -28,8 +28,9 @@ How meters read level, where the analysers tap, and the analyser-consumer exempt
 ## Level and taps
 
 - Meters compute peak and windowed RMS in dBFS from `getFloatTimeDomainData`; never `getByteFrequencyData` (it measures brightness, not loudness). <!-- R238 -->
-- Master analysers are observe-only sends off `masterGain`: post-fader, ahead of both the compressor and the limiter. <!-- R239 -->
+- Master analysers are observe-only sends off `masterGain`: post-fader, ahead of the compressor, the limiter and the output ceiling. <!-- R239 -->
 - The compressor defaults off; the limiter defaults on at -3 dB; the -6 dB source-bus default keeps the `over` zone reachable. <!-- R240 -->
+- The last master stage is the output ceiling: a `WaveShaperNode` with the two-point curve `[-1, 1]` and `oversample = 'none'`, always wired whichever dynamics stages are on, so the master output never exceeds 0 dBFS. It has no toggle, and `rewireMasterDynamics` only re-points the stage feeding it. <!-- R359 -->
 - Every meter ticks through `utils/meterScheduler.ts` (one rAF loop, a tier per registration, a per-element `IntersectionObserver` visibility gate — every view stays mounted). <!-- R241 -->
 - No meter value enters a zustand slice. <!-- R242 -->
 - Meter constants (`-24`/`-6`/`-1` zones, the `0/5/30/100` scale, 14 dB/s decay, −60 dBFS floor) are the murva interop contract in `docs/superpowers/plans/2026-09-07-dev-383-gain-staging-contract.md`; never re-derive them. <!-- R243 -->
@@ -41,7 +42,8 @@ How meters read level, where the analysers tap, and the analyser-consumer exempt
 - Adding a file to the analyser exemption without editing both lists <!-- R041 --> <!-- R043 -->
 - Tonal or taper imports in the four exempt analyser files <!-- R042 -->
 - `getByteFrequencyData` for a level meter <!-- R238 -->
-- Tapping a master analyser after the compressor or limiter <!-- R239 -->
+- Tapping a master analyser after the compressor, the limiter or the output ceiling <!-- R239 -->
+- An oversampled or soft-curved output ceiling, a toggle for it, or any master stage after it <!-- R359 -->
 - A meter with its own rAF loop or no visibility gate <!-- R241 -->
 - A meter value in a zustand slice <!-- R242 -->
 - Re-deriving the murva meter constants <!-- R243 -->

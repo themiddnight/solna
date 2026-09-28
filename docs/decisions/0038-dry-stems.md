@@ -16,7 +16,8 @@ stems are additive, never a rewrite of what already ships.
 1. A stem is its source bus's output after the fader and mute, per loop, exactly as the mixdown
    automates them. Beat's stem includes the per-voice track faders and the drum filter bank. A
    stem carries no send (delay, reverb, distortion), no Beat per-voice reverb feed, no master-rack
-   stage (EQ, compressor, limiter, reverb, delay, distortion, master gain) and no solo.
+   stage (EQ, compressor, limiter, output ceiling, reverb, delay, distortion, master gain) and no
+   solo.
 2. One `STEM_CHANNELS`-channel offline render, not one render per bus: a stereo `'speakers'` tap
    per bus lands on channels `2i`/`2i+1`, and the master is built identically (so its seeded reverb
    impulse still draws from the RNG stream) but connected to an unconnected sink instead of the

@@ -84,6 +84,10 @@ describe('renderStems: the stems are the mix before the master', () => {
         const data = stemBuffer.getChannelData(2 * i + channel);
         for (let s = 0; s < sum.length; s += 1) sum[s] += data[s];
       });
+      // The one master stage a neutral master still has is the 0 dBFS output
+      // ceiling (UX F-08), and this all-tracks fixture sums above full scale,
+      // so the mix is the stem sum CLAMPED to ±1 — exactly, sample by sample.
+      for (let s = 0; s < sum.length; s += 1) sum[s] = Math.max(-1, Math.min(1, sum[s]));
       expect(maxAbsDiff(sum, mixBuffer.getChannelData(channel))).toBeLessThanOrEqual(1e-5);
     }
     for (const { name } of STEM_TRACKS) expect(peakOf(stemChannels(stemBuffer, name)[0])).toBeGreaterThan(1e-3);

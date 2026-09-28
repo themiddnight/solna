@@ -157,6 +157,12 @@ export class MasterRack {
   private levelAnalyser: AnalyserNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  /**
+   * The hard 0 dBFS ceiling: the LAST master stage, always wired, after both
+   * dynamics stages (UX F-08). See `makeCeilingCurve` for the curve and the
+   * oversample choice.
+   */
+  private outputCeiling: WaveShaperNode | null = null;
 
   /**
    * Which master dynamics stages are currently WIRED IN, as a short code:
@@ -368,7 +374,7 @@ export class MasterRack {
     for (const lane of this.drumSendFilterLanes) this.release(lane.filter, lane.gain);
     this.release(
       this.masterGain, this.analyser, this.levelAnalyser, this.compressor, this.limiter,
-      this.reverbNode, this.reverbGain, this.delayNode, this.delayFeedbackGain,
+      this.outputCeiling, this.reverbNode, this.reverbGain, this.delayNode, this.delayFeedbackGain,
       this.delayGain, this.distortionNode, this.distortionGain, this.reverbSendGate,
       this.delaySendGate, this.distortionSendGate, this.eqLowNode, this.eqMidNode,
       this.eqHighNode, this.dryGain, this.drumBusFilter, this.drumSendFilter,
@@ -392,6 +398,7 @@ export class MasterRack {
     this.levelAnalyser = null;
     this.compressor = null;
     this.limiter = null;
+    this.outputCeiling = null;
     this.reverbNode = null;
     this.reverbGain = null;
     this.delayNode = null;
@@ -561,6 +568,23 @@ export class MasterRack {
     this.limiter.attack.value = 0.003;
     this.limiter.release.value = 0.15;
 
+    // Output ceiling — the last master stage, ALWAYS in the path, whichever
+    // dynamics stages are on (UX F-08, R359). The limiter above is not a ceiling: a
+    // DynamicsCompressorNode has a 3 ms attack and no lookahead, so a hard
+    // transient passes its first milliseconds nearly unreduced, and the Web
+    // Audio spec applies automatic makeup gain on top ((1/fullRangeGain)^0.6,
+    // +1.71 dB at the −3 dB / 20:1 seed). Measured offline before this stage
+    // existed: a +18 dB sine switched on hard peaked at 1.51 (+3.6 dBFS) and
+    // SETTLED at 1.046 with the factory limiter on. This clipper makes the
+    // guarantee the limiter cannot. It is connected once here, to the final
+    // output, and never torn down: rewireMasterDynamics only re-points the
+    // stage that feeds it. Built by setupMasterChain, so the live context and
+    // the offline mixdown share it (R031).
+    this.outputCeiling = this.ctx.createWaveShaper();
+    this.outputCeiling.curve = this.makeCeilingCurve();
+    this.outputCeiling.oversample = 'none';
+    this.outputCeiling.connect(this.masterOutput ?? this.ctx.destination);
+
     // 3-Band EQ
     this.eqLowNode = this.ctx.createBiquadFilter();
     this.eqLowNode.type = 'lowshelf';
@@ -712,6 +736,7 @@ export class MasterRack {
       !this.masterGain ||
       !this.compressor ||
       !this.limiter ||
+      !this.outputCeiling ||
       !this.analyser ||
       !this.levelAnalyser
     ) {
@@ -745,7 +770,9 @@ export class MasterRack {
       node.connect(stage);
       node = stage;
     }
-    node.connect(this.masterOutput ?? this.ctx.destination);
+    // The ceiling's own output was connected once in setupMasterChain and is
+    // never disconnected here, so every topology ends in the same clipper.
+    node.connect(this.outputCeiling);
 
     this.dynamicsTopology = topology;
   }
@@ -893,6 +920,35 @@ export class MasterRack {
       curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
     }
     return curve;
+  }
+
+  /**
+   * The output ceiling's transfer curve: the two points `[-1, 1]`.
+   *
+   * A WaveShaper maps input x to curve position `(N - 1) * (x + 1) / 2`,
+   * interpolates linearly between points, and CLAMPS to the end points outside
+   * −1..1. With exactly the two end points that is the identity inside full
+   * scale (to float32 rounding of `x + 1`, ~6e-8 absolute, below a 24-bit LSB)
+   * and a hard clamp at ±1 outside it; an interpolation between −1 and 1 can
+   * never land outside them, so the bound is exact.
+   *
+   * Deliberately NOT a soft curve (tanh and kin): a soft knee bends the signal
+   * well below full scale, so it would colour every mix all the time to shave
+   * the rare over. The hard clamp is bit-transparent until a sample would
+   * actually exceed 0 dBFS — which, with the limiter on, is only its attack
+   * overshoot and makeup excess.
+   *
+   * Paired with `oversample = 'none'`, also deliberately: '2x'/'4x' low-pass
+   * the SHAPED signal before decimating, and that filter rings (Gibbs) on a
+   * clipped edge, putting samples back above ±1 — the one thing this stage
+   * exists to prevent (measured: this curve at '4x' on a +18 dB sine peaks at
+   * 1.011, at '2x' 1.012; at 'none', exactly 1). It would also low-pass the unclipped signal and add
+   * latency. The audible cost of 'none' is aliasing of the clip's harmonics,
+   * and only while a sample is actually being clipped; with the limiter off
+   * the float mix used to be clamped at the output conversion anyway.
+   */
+  private makeCeilingCurve(): Float32Array<ArrayBuffer> {
+    return new Float32Array([-1, 1]);
   }
 
   /**

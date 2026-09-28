@@ -87,7 +87,9 @@ drums: osc/noise -> drumEnv -> drumBusFilter(bank) -> sequencer TAP -> sequencer
                                     -> masterGain (user master trim, setMasterVolume)
                                        |-> analyser (fftSize 256)    [TAP: no output]
                                        |-> levelAnalyser (fftSize 2048) [TAP: no output]
-                                       -> [compressor?] -> [limiter?] -> ctx.destination
+                                       -> [compressor?] -> [limiter?]
+                                          -> outputCeiling (WaveShaper [-1,1], no oversample)
+                                             -> ctx.destination
 ```
 
 Two taps on `masterGain`, not one: `analyser` is the spectrum node `AudioVisualizer` draws,
@@ -138,7 +140,8 @@ Key consequences:
   default only catches occasional peaks rather than compressing continuously. When a stage is
   off it is genuinely disconnected, not neutralised. The "limiter" is a
   max-ratio compressor with a hard knee — the standard Web Audio stand-in, since the API has no
-  dedicated limiter.
+  dedicated limiter. It is NOT a ceiling (no lookahead, 3 ms attack, automatic makeup gain), so the
+  always-wired `outputCeiling` WaveShaper after it clamps the output to ±1 (R359, UX F-08).
 - A SERIES stage cannot use the `*Bypass` mechanism: bypass flags force a wet/send gain to 0,
   which for a compressor is silence rather than passthrough. `rewireMasterDynamics` reconnects
   the master tail instead. The three nodes are built once and never re-created, so a rewire can
