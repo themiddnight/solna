@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import {
@@ -176,6 +176,12 @@ describe('heldNoteReleaseKey', () => {
 });
 
 describe('subscribeArpState', () => {
+  // Both tests start from Lead focus (the ref below is seeded with Lead's
+  // patch); the store default focuses an accompaniment track (R356).
+  beforeEach(() => {
+    useAppStore.getState().setFocusTrack('synth');
+  });
+
   test('mirrors the focused patch and bpm into the ref, then stops on dispose', () => {
     const ref = {
       current: {

@@ -15,6 +15,7 @@ import { LOOP_TABS, SONG_TABS } from '../types';
 import { VIEW_ORDER } from './viewMeta';
 import { GROUP_LABEL, HEADER_FIELD_SHELL } from './ui/fieldClasses';
 import { useAppStore } from '../store/store';
+import { DEFAULT_FOCUS_TRACK } from '../store/focusTrack';
 import { SCALES } from '@/data/scales';
 
 /** The full opening tag of the element whose markup contains `needle` — pins the tag name, not text position. */
@@ -99,7 +100,7 @@ describe('PatternSegmentRow', () => {
       const drumHtml = renderToString(<PatternSegmentRow />);
       expect(openTagContaining(drumHtml, 'id="segment-beat"')).toContain('aria-current="page"');
     } finally {
-      useAppStore.setState({ focusTrack: 'synth' });
+      useAppStore.setState({ focusTrack: DEFAULT_FOCUS_TRACK });
     }
   });
 
