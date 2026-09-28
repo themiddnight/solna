@@ -24,7 +24,10 @@ export function hasMoreToRight({ scrollLeft, clientWidth, scrollWidth }: Horizon
  * unmounting, so the cue eases out at the scroll end.
  */
 export function scrollMoreCueClass(visible: boolean): string {
-  return `pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-box bg-linear-to-l from-base-100 to-transparent transition-opacity ${
+  // `group-has-[:focus-visible]/more`: hidden while a step cell holds keyboard
+  // focus, so the fade never sits over a focused cell and its ring. The width
+  // (w-10) is the track's scroll-pr-10 in SequencerGrid.
+  return `pointer-events-none absolute inset-y-0 right-0 w-10 rounded-r-box bg-linear-to-l from-base-100 to-transparent transition-opacity group-has-[:focus-visible]/more:opacity-0 ${
     visible ? 'opacity-100' : 'opacity-0'
   }`;
 }

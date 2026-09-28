@@ -253,8 +253,8 @@ describe('SequencerGrid', () => {
     const isPlaying = useAppStore.getInitialState().sequencerPlayer !== 'stopped';
 
     const before = renderToString(
-      <div className="relative">
-        <div className="overflow-x-auto">
+      <div className="group/more relative">
+        <div className="overflow-x-auto scroll-pr-10">
           <StepHeader cells={cells} currentStep={5} isPlaying={isPlaying} />
           <div className="min-w-[660px] sm:min-w-[700px] rounded-box border border-base-300 overflow-clip divide-y divide-base-300">
             {BEAT_VOICE_IDS.map((voice) => (
@@ -434,5 +434,23 @@ describe('SequencerGrid more-steps cue', () => {
     const tag = html.slice(html.lastIndexOf('<', cue), html.indexOf('>', cue) + 1);
     expect(tag).toContain('aria-hidden="true"');
     expect(tag).toContain('pointer-events-none');
+  });
+
+  // Review 4123991391: a cell Tabbed into view scrolls clear of the fade
+  // (scroll padding the width of the cue), and the frame is the group the
+  // cue hides on while focus is inside it.
+  test('the track pads its scroll by the cue width, inside the group the cue hides on', () => {
+    const html = renderToString(
+      <SequencerGrid
+        pattern={useAppStore.getState().beatPattern}
+        mix={useAppStore.getState().beatMix}
+        cells={stepCells(getMeter('4/4'))}
+        onToggleStep={() => {}}
+        onToggleMute={() => {}}
+        onPreview={() => {}}
+        onVolumeChange={() => {}}
+      />,
+    );
+    expect(html.startsWith('<div class="group/more relative"><div class="overflow-x-auto scroll-pr-10"')).toBe(true);
   });
 });

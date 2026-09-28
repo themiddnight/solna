@@ -33,6 +33,12 @@ describe('scrollMoreCueClass', () => {
     expect(scrollMoreCueClass(true)).not.toMatch(/(slate|gray|white|black)-/);
   });
 
+  // Review 4123991391: the fade sits over the last 40px of the track, so a
+  // keyboard-focused step cell there was half-hidden, focus ring included.
+  test('hides while a cell in the grid holds keyboard focus', () => {
+    expect(scrollMoreCueClass(true)).toContain('group-has-[:focus-visible]/more:opacity-0');
+  });
+
   test('shown while there is more, hidden at the end', () => {
     expect(scrollMoreCueClass(true)).toContain('opacity-100');
     expect(scrollMoreCueClass(false)).toContain('opacity-0');

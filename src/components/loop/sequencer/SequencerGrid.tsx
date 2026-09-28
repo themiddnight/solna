@@ -53,10 +53,13 @@ export function SequencerGrid({
   const { ref: scrollRef, moreToRight, onScroll } = useScrollMoreCue<HTMLDivElement>();
 
   // The fade is a sibling of the scroll track, not a child: inside it, it
-  // would scroll away with the cells it is meant to sit over (UX F-03).
+  // would scroll away with the cells it is meant to sit over (UX F-03). The
+  // track's scroll padding is the cue's width, so a cell Tabbed into view
+  // lands clear of it; the frame is the `more` group the cue hides on while
+  // a cell holds keyboard focus.
   return (
-    <div className="relative">
-      <div ref={scrollRef} onScroll={onScroll} className="overflow-x-auto">
+    <div className="group/more relative">
+      <div ref={scrollRef} onScroll={onScroll} className="overflow-x-auto scroll-pr-10">
         {/* Step Indicator Header — one cell per step of the active bar */}
         <StepHeader cells={cells} currentStep={currentStep} isPlaying={isPlaying} />
 
