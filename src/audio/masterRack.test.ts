@@ -249,7 +249,7 @@ describe("master chain", () => {
     expect(tap._connectTargets).toContain(bus);
   });
 
-  test('both dynamics stages default OFF, so masterGain reaches the destination directly', () => {
+  test('both dynamics stages default OFF, so masterGain reaches the output ceiling directly', () => {
     const engine = makeEngine();
     const ctx = masterChainCtx();
     bindFakeCtx(engine, ctx);
@@ -261,6 +261,7 @@ describe("master chain", () => {
     const levelAnalyser = (engine as any).masterRack.levelAnalyser;
     const compressor = (engine as any).masterRack.compressor;
     const eqHigh = (engine as any).masterRack.eqHighNode;
+    const ceiling = (engine as any).masterRack.outputCeiling;
 
     // masterGain is the user's master trim and nothing else: engineSync pushes
     // masterVolume with fireImmediately, so any "staging" value seeded here is
@@ -269,11 +270,21 @@ describe("master chain", () => {
 
     // NOTHING owns headroom by default, and that is the intended state
     // (DEV-385): both stages exist as nodes but neither is in the path, so the
-    // mix reaches the destination exactly as the user made it.
+    // mix reaches the output exactly as the user made it — through the 0 dBFS
+    // ceiling (UX F-08), which is near-transparent below full scale (~6e-8
+    // absolute float32 error) and is the one
+    // stage no toggle removes.
     expect(eqHigh._connectTargets).toEqual([masterGain]);
-    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ctx.destination]);
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ceiling]);
+    expect(ceiling._connectTargets).toEqual([ctx.destination]);
+    // A hard clamp at ±1 with no oversampling: an oversampled clip rings back
+    // above full scale through its anti-alias filter (masterRack.makeCeilingCurve).
+    expect(Array.from(ceiling.curve as Float32Array)).toEqual([-1, 1]);
+    expect(ceiling.oversample).toBe('none');
     expect(compressor._connectTargets).toEqual([]);
     expect(limiter._connectTargets).toEqual([]);
+    // The limiter's makeup trim leaves the path with the limiter.
+    expect((engine as any).masterRack.limiterMakeupTrim._connectTargets).toEqual([]);
     // BOTH taps are SENDS with no onward output (DEV-384), so each reads the
     // post-fader, pre-dynamics mix and feeds nothing. levelAnalyser is the one
     // getMasterLevelAnalyser() returns — it IS the meter, and asserting only
@@ -308,10 +319,16 @@ describe("master chain", () => {
     const analyser = (engine as any).masterRack.analyser;
     const levelAnalyser = (engine as any).masterRack.levelAnalyser;
     const compressor = (engine as any).masterRack.compressor;
+    const ceiling = (engine as any).masterRack.outputCeiling;
 
     expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, compressor]);
     expect(compressor._connectTargets).toEqual([limiter]);
-    expect(limiter._connectTargets).toEqual([ctx.destination]);
+    const trim = (engine as any).masterRack.limiterMakeupTrim;
+    // The limiter feeds its makeup-compensation trim, and the ceiling stays
+    // LAST: the limiter's attack overshoot is what it exists to catch.
+    expect(limiter._connectTargets).toEqual([trim]);
+    expect(trim._connectTargets).toEqual([ceiling]);
+    expect(ceiling._connectTargets).toEqual([ctx.destination]);
     // NEITHER tap moved, and neither is in series: an honest meter still reads
     // the mix the user made, not the squashed output. DEV-384 put both here and
     // DEV-385 must not undo either.
@@ -332,9 +349,16 @@ describe("master chain", () => {
     const analyser = (engine as any).masterRack.analyser;
     const levelAnalyser = (engine as any).masterRack.levelAnalyser;
     const compressor = (engine as any).masterRack.compressor;
+    const ceiling = (engine as any).masterRack.outputCeiling;
 
+    const trim = (engine as any).masterRack.limiterMakeupTrim;
     expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, limiter]);
-    expect(limiter._connectTargets).toEqual([ctx.destination]);
+    expect(limiter._connectTargets).toEqual([trim]);
+    expect(trim._connectTargets).toEqual([ceiling]);
+    // The trim is the inverse of the spec's automatic makeup gain,
+    // fullRangeGain^0.6 — −1.71 dB at the −3 dB / 20:1 seed.
+    expect(20 * Math.log10(trim.gain.value)).toBeCloseTo(-1.71, 2);
+    expect(ceiling._connectTargets).toEqual([ctx.destination]);
     expect(compressor._connectTargets).toEqual([]);
     expect(analyser._connectTargets).toEqual([]);
     expect(levelAnalyser._connectTargets).toEqual([]);
@@ -422,6 +446,7 @@ describe("master chain rebuilds, and its two analysers", () => {
     const limiterBefore = (engine as any).masterRack.limiter;
     const analyser = (engine as any).masterRack.analyser;
     const levelAnalyser = (engine as any).masterRack.levelAnalyser;
+    const ceiling = (engine as any).masterRack.outputCeiling;
 
     engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: true }));
     engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: false }));
@@ -432,19 +457,23 @@ describe("master chain rebuilds, and its two analysers", () => {
     // by whatever pointed at it — the orphan this test exists to forbid.
     expect((engine as any).masterRack.compressor).toBe(compressorBefore);
     expect((engine as any).masterRack.limiter).toBe(limiterBefore);
+    expect((engine as any).masterRack.outputCeiling).toBe(ceiling);
 
     // Back to the default topology, with no leftover edge from the round trip.
-    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ctx.destination]);
+    expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, ceiling]);
     expect(compressorBefore._connectTargets).toEqual([]);
     expect(limiterBefore._connectTargets).toEqual([]);
     expect(analyser._connectTargets).toEqual([]);
     expect(levelAnalyser._connectTargets).toEqual([]);
 
-    // Every edge below the fader, collected: exactly the two taps and the output.
-    const edges = [masterGain, compressorBefore, limiterBefore, analyser, levelAnalyser].flatMap(
+    // Every edge below the fader, collected: exactly the two taps, the
+    // ceiling, and the ceiling's one edge to the output.
+    const trim = (engine as any).masterRack.limiterMakeupTrim;
+    expect(trim._connectTargets).toEqual([]);
+    const edges = [masterGain, compressorBefore, limiterBefore, trim, analyser, levelAnalyser, ceiling].flatMap(
       (n: any) => n._connectTargets as unknown[],
     );
-    expect(edges).toEqual([analyser, levelAnalyser, ctx.destination]);
+    expect(edges).toEqual([analyser, levelAnalyser, ceiling, ctx.destination]);
   });
 
   test('a full toggle cycle never drops the meter tap', () => {
@@ -470,7 +499,7 @@ describe("master chain rebuilds, and its two analysers", () => {
 
     engine.updateEffects(fxWith({ compressorEnabled: true, limiterEnabled: false }));
     // The rewire really RAN — masterGain now feeds the compressor instead of
-    // the destination — and the tap survived it. Without this first assertion
+    // the output ceiling — and the tap survived it. Without this first assertion
     // the test would also pass against an engine that never rewires at all,
     // which is the one state it must not be green in.
     expect(taps()).toContain((engine as any).masterRack.compressor);
@@ -479,7 +508,7 @@ describe("master chain rebuilds, and its two analysers", () => {
     expect(levelAnalyser._connectTargets).toEqual([]);
 
     engine.updateEffects(fxWith({ compressorEnabled: false, limiterEnabled: false }));
-    expect(taps()).toContain(ctx.destination);
+    expect(taps()).toContain((engine as any).masterRack.outputCeiling);
     expect(taps()).not.toContain((engine as any).masterRack.compressor);
     expect(taps()).toContain(levelAnalyser);
     expect(levelAnalyser._connectTargets).toEqual([]);
@@ -530,7 +559,7 @@ describe("master chain rebuilds, and its two analysers", () => {
     // And the graph is still exactly one set of edges, not a doubled one.
     expect((engine as any).masterRack.dynamicsTopology).toBe('c');
     expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, compressor]);
-    expect(compressor._connectTargets).toEqual([ctx.destination]);
+    expect(compressor._connectTargets).toEqual([(engine as any).masterRack.outputCeiling]);
   });
 
   test('an engaged stage receives its stored parameters', () => {

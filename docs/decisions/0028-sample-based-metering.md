@@ -24,7 +24,35 @@ forever on a surface nobody is looking at.
   bar became a continuous fill — there is no `vuMeter.ts` any more).
 - The master analysers are **observe-only sends off `masterGain`**, post-fader and ahead of *both*
   dynamics stages — the compressor and the limiter sit downstream of the tap, so a reading is never
-  capped by either regardless of which is engaged.
+  capped by either regardless of which is engaged. The output ceiling (below) is downstream of the
+  tap too.
+- The last master stage is a hard 0 dBFS **output ceiling** (UX F-08): a `WaveShaperNode` with the
+  two-point curve `[-1, 1]` (a clamp outside full scale; inside it the identity to within ~6e-8
+  absolute float32 error, from computing `x + 1` — not bit-transparent, so it moves a rendered
+  file's bytes by at most 1 int16 LSB on a few samples) and
+  `oversample = 'none'`, wired in every dynamics topology and never toggled. The limiter is not a
+  ceiling, even though a `DynamicsCompressorNode` has a fixed look-ahead (the spec's pre-delay:
+  Chromium 6 ms, node-web-audio-api 384 samples). The causes are its finite 20:1 ratio (the settled
+  output still rises above threshold), its attack time constant (a hard onset is reduced, about
+  14.5 dB in the case below, but not fully) and the spec's automatic makeup gain (+1.71 dB at the
+  −3 dB / 20:1 seed) on every sample. More look-ahead would fix none of them. Measured offline before the ceiling existed, a +18 dB
+  sine switched on hard peaked at 1.51 and settled at 1.046 with the factory limiter on.
+  `oversample = 'none'` is deliberate: '2x'/'4x' low-pass the clipped signal before decimating and
+  that filter rings back above ±1 (measured 1.011 at '4x', 1.012 at '2x'), and a soft curve would
+  colour the mix below full scale. The cost is aliasing of the clip's harmonics, only while a sample
+  is actually over.
+- The limiter's automatic makeup gain is cancelled by a post-limiter trim, `limiterMakeupTrim`, of
+  `fullRangeGain^0.6`. With the limiter's knee fixed at 0 the spec's curve is closed-form:
+  `fullRangeGain` is the output at 0 dBFS input, `threshold + (0 − threshold) / ratio` dB, so the
+  trim is `0.6 · threshold · (1 − 1/ratio)` dB (−1.71 dB at the seed). It is re-derived in
+  `updateEffects` on the same 0.05 s glide as threshold and ratio, and it is in the path only while
+  the limiter is. Without it the makeup applied to every sample: 0.3 in came out at 0.365 far below
+  threshold, the "Ceiling" knob was not the settled level, and — because the WAV encoder clamps
+  anyway — the ceiling alone left the exported file's clipping unchanged (the +18 dB case had 9392
+  full-scale int16 samples with or without it). With the trim that case settles at 0.86 and has
+  180 full-scale samples, all in the onset transient the ceiling now exists to catch. The
+  compressor's makeup gain is left as the spec defines it (not in scope of this fix). Calibration renders force both
+  stages off, so the trim table and `check:levels` are unaffected.
 - The compressor defaults off; the limiter defaults on (DEV-383) but only catches occasional peaks at
   its -3 dB threshold given the -6 dB source-bus default, so the `over` zone stays reachable in the
   common case.
@@ -68,9 +96,13 @@ A reviewer keeps them free of such imports by hand. `eslint.config.js` is the li
 - **R238** — Meters compute peak + windowed RMS in dBFS from `getFloatTimeDomainData`; never
   `getByteFrequencyData`.
 - **R239** — Master analysers are observe-only sends off `masterGain`, post-fader, ahead of
-  compressor and limiter.
+  compressor, limiter and output ceiling.
 - **R240** — Compressor defaults off; limiter defaults on at -3 dB; source-bus default -6 dB keeps
   `over` reachable.
+- **R359** — The last master stage is the output ceiling: a `WaveShaperNode`, curve `[-1, 1]`,
+  `oversample = 'none'`, always wired and never toggled, so the master output never exceeds 0 dBFS.
+- **R360** — The limiter is followed by `limiterMakeupTrim` = `fullRangeGain^0.6`, re-derived from
+  threshold and ratio in `updateEffects` and wired only while the limiter is.
 - **R241** — Every meter ticks through `utils/meterScheduler.ts` (one rAF loop, tiers, per-element
   `IntersectionObserver` visibility gate).
 - **R242** — No meter value enters a zustand slice.

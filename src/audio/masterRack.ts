@@ -143,6 +143,19 @@ class DebouncedSendGate {
   }
 }
 
+/**
+ * The inverse of the automatic makeup gain the Web Audio spec applies inside a
+ * DynamicsCompressorNode: `makeupGain = (1 / fullRangeGain)^0.6`, where
+ * `fullRangeGain` is the compression curve evaluated at a 0 dBFS input. With a
+ * hard knee (the limiter's knee is fixed at 0) that curve is closed-form: the
+ * output at 0 dBFS is `threshold + (0 − threshold) / ratio` dB. Returns
+ * `fullRangeGain^0.6` as a linear gain, ≤ 1.
+ */
+function limiterMakeupCompensation(thresholdDb: number, ratio: number): number {
+  const fullRangeDb = thresholdDb - thresholdDb / ratio;
+  return Math.pow(10, (0.6 * fullRangeDb) / 20);
+}
+
 export class MasterRack {
   private disposed = false;
   // Master bus nodes
@@ -157,6 +170,17 @@ export class MasterRack {
   private levelAnalyser: AnalyserNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  /**
+   * Cancels the limiter's automatic makeup gain: wired directly after the
+   * limiter, and only while the limiter is. See `limiterMakeupCompensation`.
+   */
+  private limiterMakeupTrim: GainNode | null = null;
+  /**
+   * The hard 0 dBFS ceiling: the LAST master stage, always wired, after both
+   * dynamics stages (UX F-08). See `makeCeilingCurve` for the curve and the
+   * oversample choice.
+   */
+  private outputCeiling: WaveShaperNode | null = null;
 
   /**
    * Which master dynamics stages are currently WIRED IN, as a short code:
@@ -368,7 +392,7 @@ export class MasterRack {
     for (const lane of this.drumSendFilterLanes) this.release(lane.filter, lane.gain);
     this.release(
       this.masterGain, this.analyser, this.levelAnalyser, this.compressor, this.limiter,
-      this.reverbNode, this.reverbGain, this.delayNode, this.delayFeedbackGain,
+      this.limiterMakeupTrim, this.outputCeiling, this.reverbNode, this.reverbGain, this.delayNode, this.delayFeedbackGain,
       this.delayGain, this.distortionNode, this.distortionGain, this.reverbSendGate,
       this.delaySendGate, this.distortionSendGate, this.eqLowNode, this.eqMidNode,
       this.eqHighNode, this.dryGain, this.drumBusFilter, this.drumSendFilter,
@@ -392,6 +416,8 @@ export class MasterRack {
     this.levelAnalyser = null;
     this.compressor = null;
     this.limiter = null;
+    this.limiterMakeupTrim = null;
+    this.outputCeiling = null;
     this.reverbNode = null;
     this.reverbGain = null;
     this.delayNode = null;
@@ -561,6 +587,40 @@ export class MasterRack {
     this.limiter.attack.value = 0.003;
     this.limiter.release.value = 0.15;
 
+    // The Web Audio spec applies automatic makeup gain to EVERY sample a
+    // DynamicsCompressorNode passes, (1/fullRangeGain)^0.6 — +1.71 dB at the
+    // seed above — so 0.3 in used to come out at 0.365 even far below
+    // threshold, the settled output of a hot mix sat above 0 dBFS, and the
+    // Effects view's "Ceiling" knob was not the level the output settled at.
+    // This trim is the exact inverse, so below threshold the limiter is unity
+    // and above it the output settles at the threshold's static curve.
+    // updateEffects re-derives it whenever threshold or ratio change.
+    this.limiterMakeupTrim = this.ctx.createGain();
+    this.limiterMakeupTrim.gain.value = limiterMakeupCompensation(-3, 20);
+
+    // Output ceiling — the last master stage, ALWAYS in the path, whichever
+    // dynamics stages are on (UX F-08, R359). The limiter above is not a ceiling,
+    // even though a DynamicsCompressorNode does have a fixed look-ahead (the
+    // spec's pre-delay: Chromium 6 ms, node-web-audio-api 384 samples): its
+    // ratio is a finite 20:1, so the settled output still rises above
+    // threshold; its attack is a time constant, not a brick wall, so a hard
+    // onset is reduced (about 14.5 dB here) but not fully; and the spec's
+    // automatic makeup gain ((1/fullRangeGain)^0.6, +1.71 dB at the
+    // −3 dB / 20:1 seed) lifted every sample. More look-ahead would not fix
+    // any of the three. Measured offline before this stage
+    // existed: a +18 dB sine switched on hard peaked at 1.51 (+3.6 dBFS) and
+    // SETTLED at 1.046 with the factory limiter on. The makeup trim above now
+    // cancels the makeup gain (the same case settles at 0.86, and its
+    // full-scale int16 samples fell from 9392 to 180), so this clipper is the
+    // transient backstop: it makes the guarantee the limiter cannot. It is connected once here, to the final
+    // output, and never torn down: rewireMasterDynamics only re-points the
+    // stage that feeds it. Built by setupMasterChain, so the live context and
+    // the offline mixdown share it (R031).
+    this.outputCeiling = this.ctx.createWaveShaper();
+    this.outputCeiling.curve = this.makeCeilingCurve();
+    this.outputCeiling.oversample = 'none';
+    this.outputCeiling.connect(this.masterOutput ?? this.ctx.destination);
+
     // 3-Band EQ
     this.eqLowNode = this.ctx.createBiquadFilter();
     this.eqLowNode.type = 'lowshelf';
@@ -712,6 +772,7 @@ export class MasterRack {
       !this.masterGain ||
       !this.compressor ||
       !this.limiter ||
+      !this.outputCeiling ||
       !this.analyser ||
       !this.levelAnalyser
     ) {
@@ -739,13 +800,22 @@ export class MasterRack {
     const stages: DynamicsCompressorNode[] = [];
     if (compressorOn) stages.push(this.compressor);
     if (limiterOn) stages.push(this.limiter);
+    this.limiterMakeupTrim?.disconnect();
 
     let node: AudioNode = this.masterGain;
     for (const stage of stages) {
       node.connect(stage);
       node = stage;
     }
-    node.connect(this.masterOutput ?? this.ctx.destination);
+    // The makeup trim rides with the limiter: it cancels that node's own
+    // makeup gain, so it is in the path exactly when the limiter is.
+    if (limiterOn && this.limiterMakeupTrim) {
+      node.connect(this.limiterMakeupTrim);
+      node = this.limiterMakeupTrim;
+    }
+    // The ceiling's own output was connected once in setupMasterChain and is
+    // never disconnected here, so every topology ends in the same clipper.
+    node.connect(this.outputCeiling);
 
     this.dynamicsTopology = topology;
   }
@@ -893,6 +963,38 @@ export class MasterRack {
       curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
     }
     return curve;
+  }
+
+  /**
+   * The output ceiling's transfer curve: the two points `[-1, 1]`.
+   *
+   * A WaveShaper maps input x to curve position `(N - 1) * (x + 1) / 2`,
+   * interpolates linearly between points, and CLAMPS to the end points outside
+   * −1..1. With exactly the two end points that is the identity inside full
+   * scale (to float32 rounding of `x + 1`, ~6e-8 absolute, below a 24-bit LSB)
+   * and a hard clamp at ±1 outside it; an interpolation between −1 and 1 can
+   * never land outside them, so the bound is exact.
+   *
+   * Deliberately NOT a soft curve (tanh and kin): a soft knee bends the signal
+   * well below full scale, so it would colour every mix all the time to shave
+   * the rare over. The hard clamp is NOT bit-transparent: inside full scale it
+   * is the identity only to within ~6e-8 absolute float32 error (the `x + 1`
+   * above; a non-zero |x| below ~3e-8 comes out as exactly 0), so it changes
+   * a rendered file's bytes by at most 1 int16 LSB on a few samples. It
+   * reshapes the signal only where a sample would exceed 0 dBFS — which, with
+   * the limiter on, is only its attack overshoot.
+   *
+   * Paired with `oversample = 'none'`, also deliberately: '2x'/'4x' low-pass
+   * the SHAPED signal before decimating, and that filter rings (Gibbs) on a
+   * clipped edge, putting samples back above ±1 — the one thing this stage
+   * exists to prevent (measured: this curve at '4x' on a +18 dB sine peaks at
+   * 1.011, at '2x' 1.012; at 'none', exactly 1). It would also low-pass the unclipped signal and add
+   * latency. The audible cost of 'none' is aliasing of the clip's harmonics,
+   * and only while a sample is actually being clipped; with the limiter off
+   * the float mix used to be clamped at the output conversion anyway.
+   */
+  private makeCeilingCurve(): Float32Array<ArrayBuffer> {
+    return new Float32Array([-1, 1]);
   }
 
   /**
@@ -1221,6 +1323,15 @@ export class MasterRack {
       this.limiter.ratio.setTargetAtTime(fx.limiterRatio, this.ctx.currentTime, 0.05);
       this.limiter.attack.setTargetAtTime(fx.limiterAttack, this.ctx.currentTime, 0.05);
       this.limiter.release.setTargetAtTime(fx.limiterRelease, this.ctx.currentTime, 0.05);
+    }
+    // Same time constant as the threshold/ratio glide above, so the
+    // compensation tracks the makeup gain it cancels.
+    if (this.limiterMakeupTrim) {
+      this.limiterMakeupTrim.gain.setTargetAtTime(
+        limiterMakeupCompensation(fx.limiterThreshold, fx.limiterRatio),
+        this.ctx.currentTime,
+        0.05,
+      );
     }
 
     // Parameters first, topology second: a stage that is about to be inserted
