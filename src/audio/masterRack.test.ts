@@ -282,6 +282,8 @@ describe("master chain", () => {
     expect(ceiling.oversample).toBe('none');
     expect(compressor._connectTargets).toEqual([]);
     expect(limiter._connectTargets).toEqual([]);
+    // The limiter's makeup trim leaves the path with the limiter.
+    expect((engine as any).masterRack.limiterMakeupTrim._connectTargets).toEqual([]);
     // BOTH taps are SENDS with no onward output (DEV-384), so each reads the
     // post-fader, pre-dynamics mix and feeds nothing. levelAnalyser is the one
     // getMasterLevelAnalyser() returns — it IS the meter, and asserting only
@@ -320,9 +322,11 @@ describe("master chain", () => {
 
     expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, compressor]);
     expect(compressor._connectTargets).toEqual([limiter]);
-    // The ceiling stays LAST: the limiter's attack overshoot and makeup gain
-    // are exactly what it exists to catch.
-    expect(limiter._connectTargets).toEqual([ceiling]);
+    const trim = (engine as any).masterRack.limiterMakeupTrim;
+    // The limiter feeds its makeup-compensation trim, and the ceiling stays
+    // LAST: the limiter's attack overshoot is what it exists to catch.
+    expect(limiter._connectTargets).toEqual([trim]);
+    expect(trim._connectTargets).toEqual([ceiling]);
     expect(ceiling._connectTargets).toEqual([ctx.destination]);
     // NEITHER tap moved, and neither is in series: an honest meter still reads
     // the mix the user made, not the squashed output. DEV-384 put both here and
@@ -346,8 +350,13 @@ describe("master chain", () => {
     const compressor = (engine as any).masterRack.compressor;
     const ceiling = (engine as any).masterRack.outputCeiling;
 
+    const trim = (engine as any).masterRack.limiterMakeupTrim;
     expect(masterGain._connectTargets).toEqual([analyser, levelAnalyser, limiter]);
-    expect(limiter._connectTargets).toEqual([ceiling]);
+    expect(limiter._connectTargets).toEqual([trim]);
+    expect(trim._connectTargets).toEqual([ceiling]);
+    // The trim is the inverse of the spec's automatic makeup gain,
+    // fullRangeGain^0.6 — −1.71 dB at the −3 dB / 20:1 seed.
+    expect(20 * Math.log10(trim.gain.value)).toBeCloseTo(-1.71, 2);
     expect(ceiling._connectTargets).toEqual([ctx.destination]);
     expect(compressor._connectTargets).toEqual([]);
     expect(analyser._connectTargets).toEqual([]);
@@ -458,7 +467,9 @@ describe("master chain rebuilds, and its two analysers", () => {
 
     // Every edge below the fader, collected: exactly the two taps, the
     // ceiling, and the ceiling's one edge to the output.
-    const edges = [masterGain, compressorBefore, limiterBefore, analyser, levelAnalyser, ceiling].flatMap(
+    const trim = (engine as any).masterRack.limiterMakeupTrim;
+    expect(trim._connectTargets).toEqual([]);
+    const edges = [masterGain, compressorBefore, limiterBefore, trim, analyser, levelAnalyser, ceiling].flatMap(
       (n: any) => n._connectTargets as unknown[],
     );
     expect(edges).toEqual([analyser, levelAnalyser, ceiling, ctx.destination]);

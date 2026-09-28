@@ -141,7 +141,9 @@ Key consequences:
   off it is genuinely disconnected, not neutralised. The "limiter" is a
   max-ratio compressor with a hard knee — the standard Web Audio stand-in, since the API has no
   dedicated limiter. It is NOT a ceiling (no lookahead, 3 ms attack, automatic makeup gain), so the
-  always-wired `outputCeiling` WaveShaper after it clamps the output to ±1 (R359, UX F-08).
+  always-wired `outputCeiling` WaveShaper after it clamps the output to ±1 (R359, UX F-08). The
+  limiter's makeup gain is cancelled by `limiterMakeupTrim` (`fullRangeGain^0.6`, re-derived in
+  `updateEffects`, wired only with the limiter — R360), so below threshold the limiter is unity.
 - A SERIES stage cannot use the `*Bypass` mechanism: bypass flags force a wet/send gain to 0,
   which for a compressor is silence rather than passthrough. `rewireMasterDynamics` reconnects
   the master tail instead. The three nodes are built once and never re-created, so a rewire can

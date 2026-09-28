@@ -19,7 +19,7 @@ const RATE = 44100;
 async function renderHot(
   fx: Partial<MasterEffects>,
   driveGain: number,
-): Promise<{ peak: number; settledPeak: number }> {
+): Promise<{ peak: number; settledPeak: number; fullScaleCount: number }> {
   const seconds = 0.6;
   const ctx: any = new OfflineAudioContext(2, Math.round(RATE * seconds), RATE);
   const engine = createRenderEngine(ctx);
@@ -37,6 +37,7 @@ async function renderHot(
   const buffer: any = await ctx.startRendering();
   let peak = 0;
   let settledPeak = 0;
+  let fullScaleCount = 0;
   const settledFrom = buffer.length - Math.round(RATE * 0.1);
   for (let ch = 0; ch < buffer.numberOfChannels; ch += 1) {
     const data: Float32Array = buffer.getChannelData(ch);
@@ -44,9 +45,14 @@ async function renderHot(
       const a = Math.abs(data[i]);
       if (a > peak) peak = a;
       if (i >= settledFrom && a > settledPeak) settledPeak = a;
+      // The int16 conversion encodeWav performs: a sample that lands on
+      // ±full scale there is a clipped sample in the exported file.
+      const clamped = Math.max(-1, Math.min(1, data[i]));
+      const int16 = Math.trunc(clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff);
+      if (int16 === 0x7fff || int16 === -0x8000) fullScaleCount += 1;
     }
   }
-  return { peak, settledPeak };
+  return { peak, settledPeak, fullScaleCount };
 }
 
 describe('master output ceiling (UX F-08)', () => {
@@ -79,5 +85,35 @@ describe('master output ceiling (UX F-08)', () => {
     const quiet = await renderHot({ limiterEnabled: false, compressorEnabled: false }, 0.5);
     expect(quiet.peak).toBeGreaterThan(0.49);
     expect(quiet.peak).toBeLessThanOrEqual(0.5 + 1e-6);
+  });
+});
+
+describe('limiter makeup compensation', () => {
+  // The Web Audio spec applies automatic makeup gain, (1/fullRangeGain)^0.6, to
+  // EVERY sample the compressor passes — +1.71 dB at the −3 dB / 20:1 seed —
+  // so without a compensating trim a signal far below threshold came out at
+  // 0.365 for 0.3 in, and the settled output of a hot signal sat above full
+  // scale. The trim after the limiter cancels it.
+  test('a signal well below threshold passes the factory limiter at unity', async () => {
+    const { settledPeak } = await renderHot({ limiterEnabled: true }, 0.3);
+    expect(settledPeak).toBeGreaterThan(0.297);
+    expect(settledPeak).toBeLessThan(0.303);
+  });
+
+  test('the compensation follows the limiter threshold and ratio', async () => {
+    const { settledPeak } = await renderHot(
+      { limiterEnabled: true, limiterThreshold: -12, limiterRatio: 8 },
+      0.1,
+    );
+    expect(settledPeak).toBeGreaterThan(0.099);
+    expect(settledPeak).toBeLessThan(0.101);
+  });
+
+  test('a +18 dB signal through the factory limiter clips only its onset transient', async () => {
+    // 9392 full-scale int16 samples before the trim: the settled level sat at
+    // +0.4 dBFS and every peak of every cycle hit the ceiling.
+    const { fullScaleCount, settledPeak } = await renderHot({ limiterEnabled: true }, 8);
+    expect(settledPeak).toBeLessThan(1);
+    expect(fullScaleCount).toBeLessThan(500);
   });
 });
