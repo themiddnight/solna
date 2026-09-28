@@ -6,6 +6,7 @@ import { PROJECT_FILE_ACCEPT, PROJECT_FILE_MIME, parseProjectFile, serializeProj
 import type { ProjectSaveResult } from '@/store/projectSlice';
 import type { FeedbackTone } from '@/store/feedback';
 import { selectExportBusy } from '@/store/exportSlice';
+import { useAppStore } from '@/store/store';
 import type { ProjectSource } from '@/store/projectSource';
 import type { DriveUserProfile } from '@/store/driveClient';
 import type { AppStore } from '@/store/types';
@@ -355,6 +356,51 @@ export async function openPickedLocalFile({
 }
 
 /**
+ * The success toast's text: the name of the file the save wrote. A local file
+ * is named by its handle (the name the user picked); a Drive file is created
+ * as `projectFileName(name)` (driveClient); an untitled body has no name to
+ * show, so the message stays generic.
+ */
+export function savedMessage(source: ProjectSource, projectName: string | null): string {
+  if (source.kind === 'local') return `Saved ${source.handle.name}`;
+  if (projectName !== null) return `Saved ${projectFileName(projectName)}`;
+  return 'Project saved';
+}
+
+export interface SaveResultHandlers {
+  notify: (message: string, tone: FeedbackTone) => void;
+  report: (message: string | null) => void;
+  downloadCopy: () => void;
+  savedMessage: () => string;
+}
+
+/**
+ * The one place a save result becomes UI. `download` is the no-File-System-
+ * Access fallback (Safari, Firefox): Save As degrades to a downloaded copy.
+ * `cancelled` is a dismissed picker: nothing happened, so nothing is said. A
+ * save that landed clears the banner and says so (UX F-01): an explicit Save
+ * with no answer read as a click that did nothing. The autosave never comes
+ * through here, so it stays silent.
+ *
+ * Exported standalone, like `openParsedProjectFile`, so it is tested directly.
+ */
+export function settleSaveResult(result: ProjectSaveResult, handlers: SaveResultHandlers): void {
+  if (result.ok === false) {
+    // An explicit save failure / handle denial (§5.6): the result of THIS
+    // action, so a toast, never the persistent banner.
+    handlers.notify(result.message, 'error');
+    return;
+  }
+  if (result.destination === 'download') {
+    handlers.downloadCopy();
+    return;
+  }
+  if (result.destination === 'cancelled') return;
+  handlers.report(null);
+  handlers.notify(handlers.savedMessage(), 'success');
+}
+
+/**
  * Every project-file command the menu can run, with the store actions behind
  * it. The component below owns only which dialog is open; what a row DOES
  * lives here, so the markup and the operations can be read separately.
@@ -401,23 +447,19 @@ function useProjectFileCommands({
     }
   };
 
-  /**
-   * The one place a save result becomes UI. `download` is the no-File-System-
-   * Access fallback (Safari, Firefox): Save As degrades to a downloaded copy.
-   * `cancelled` is a dismissed picker: nothing happened, so nothing is said.
-   */
+  /** The one place a save result becomes UI — see `settleSaveResult`. */
   const finishSave = (result: ProjectSaveResult) => {
-    if (result.ok === false) {
-      // An explicit save failure / handle denial (§5.6): the result of THIS
-      // action, so a toast, never the persistent banner.
-      notify(result.message, 'error');
-      return;
-    }
-    if (result.destination === 'download') {
-      downloadCopy();
-      return;
-    }
-    if (result.destination !== 'cancelled') report(null);
+    settleSaveResult(result, {
+      notify,
+      report,
+      downloadCopy,
+      // Read after the await, not from a render-time selector: a Save As has
+      // just re-pointed the source and renamed the project.
+      savedMessage: () => {
+        const { projectSource, projectName } = useAppStore.getState();
+        return savedMessage(projectSource, projectName);
+      },
+    });
   };
 
   /**

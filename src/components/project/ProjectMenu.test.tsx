@@ -21,6 +21,8 @@ import {
   replaceConfirmMessage,
   replacesProject,
   saveLabel,
+  savedMessage,
+  settleSaveResult,
   visibleMenuSections,
   type OpenProjectFile,
 } from './ProjectMenu';
@@ -404,5 +406,61 @@ describe('report-bug action', () => {
     expect(JSON.stringify(current)).not.toContain('secret-project-name');
     expect(routeCategory('/somewhere/else')).toBe('unknown');
     await clearIncident();
+  });
+});
+
+describe('explicit save feedback (UX F-01)', () => {
+  function harness() {
+    const calls: { notify: [string, string][]; report: (string | null)[]; downloads: number } = {
+      notify: [],
+      report: [],
+      downloads: 0,
+    };
+    const handlers = {
+      notify: (message: string, tone: string) => calls.notify.push([message, tone]),
+      report: (message: string | null) => calls.report.push(message),
+      downloadCopy: () => {
+        calls.downloads += 1;
+      },
+      savedMessage: () => 'Saved song.solna',
+    };
+    return { calls, handlers };
+  }
+
+  test('a landed save clears the banner AND shows a success toast', () => {
+    for (const destination of ['local', 'drive'] as const) {
+      const { calls, handlers } = harness();
+      settleSaveResult({ ok: true, destination }, handlers);
+      expect(calls.report).toEqual([null]);
+      expect(calls.notify).toEqual([['Saved song.solna', 'success']]);
+    }
+  });
+
+  test('a cancelled picker says nothing', () => {
+    const { calls, handlers } = harness();
+    settleSaveResult({ ok: true, destination: 'cancelled' }, handlers);
+    expect(calls.report).toEqual([]);
+    expect(calls.notify).toEqual([]);
+  });
+
+  test('the download fallback downloads and does not claim a save', () => {
+    const { calls, handlers } = harness();
+    settleSaveResult({ ok: true, destination: 'download' }, handlers);
+    expect(calls.downloads).toBe(1);
+    expect(calls.notify).toEqual([]);
+  });
+
+  test('a failure is an error toast, never a success', () => {
+    const { calls, handlers } = harness();
+    settleSaveResult({ ok: false, message: 'nope' }, handlers);
+    expect(calls.notify).toEqual([['nope', 'error']]);
+    expect(calls.report).toEqual([]);
+  });
+
+  test('the message names the file the save wrote', () => {
+    const handle = { name: 'My Beat.solna' } as FileSystemFileHandle;
+    expect(savedMessage({ kind: 'local', handle }, 'My Beat')).toBe('Saved My Beat.solna');
+    expect(savedMessage({ kind: 'drive', fileId: 'x' }, 'Night Drive')).toBe('Saved night-drive.solna');
+    expect(savedMessage({ kind: 'untitled' }, null)).toBe('Project saved');
   });
 });
