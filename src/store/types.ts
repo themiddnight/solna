@@ -179,9 +179,9 @@ export interface ChordsSlice {
   chordVolume: number;
   setChords: (chords: ChordItem[]) => void;
   /**
-   * Puts a roll's snapshot back verbatim, in one `set()` — only while the
-   * active loop, key, scale and meter all equal the snapshot's; otherwise a
-   * no-op that notifies nobody.
+   * Puts a roll's snapshot back verbatim, in one `set()` that also clears the
+   * Auto-Reharmonized badge — only while the active loop, key, scale and
+   * meter all equal the snapshot's; otherwise a no-op that notifies nobody.
    */
   restoreChordsSnapshot: (snapshot: ChordsSnapshot) => void;
   setChordRhythmId: (rhythmId: string) => void;

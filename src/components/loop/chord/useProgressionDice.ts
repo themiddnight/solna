@@ -8,6 +8,7 @@ import { useLoopUndo } from '@/components/useLoopUndo';
 import {
   generateProgression,
   resolveBars,
+  sameChord,
   type RollBarsPerChord,
   type RollChordCount,
 } from './markovProgression';
@@ -76,7 +77,7 @@ export const rollUndoMessage = (undo: RollUndo): string => `Randomized ${undo.ro
 function sameProgression(next: readonly ChordItem[], current: readonly ChordItem[]): boolean {
   return (
     next.length === current.length &&
-    next.every((c, i) => c.root === current[i].root && c.quality === current[i].quality && c.bars === current[i].bars)
+    next.every((c, i) => sameChord(c, current[i]) && c.bars === current[i].bars)
   );
 }
 

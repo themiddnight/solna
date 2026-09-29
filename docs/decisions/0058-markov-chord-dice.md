@@ -51,7 +51,8 @@ chords and the custom chord and bass lanes that `chordsPatch` re-clamps against 
   `Randomized <roman>`. Its payload is a `ChordsSnapshot`: `chords` plus the six custom-lane fields,
   and the `loopId`, `scaleRoot`, `scaleType` and `meterId` it was taken under.
   `restoreChordsSnapshot` writes the seven fields back in one `set()` only while all four still
-  match; otherwise it is a no-op. The key, scale and meter guard goes beyond the design, which
+  match; otherwise it is a no-op. The same `set()` clears the Auto-Reharmonized badge: the Undo
+  replaces the chords wholesale, like the roll it reverts (R281). The key, scale and meter guard goes beyond the design, which
   guarded the loop only: without it an Undo after a key change would put old-key chords into the
   new key, and one after a meter change would put back holds clamped against another bar length.
   A pending Undo is dismissed as soon as any of the four changes, so the snackbar never offers a

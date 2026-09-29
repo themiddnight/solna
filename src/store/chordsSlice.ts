@@ -133,13 +133,15 @@ export function createChordsSlice(set: Set, defaults: LoopContent): ChordsSlice 
 
     setChords: (chords) => set((state) => chordsPatch(state, chords)),
     // Verbatim, never through chordsPatch: the lanes were already clamped
-    // against these chords when the snapshot was taken. Returning `state`
-    // unchanged is a true no-op — zustand skips an identical state and the
-    // loop mirror sees no changed field.
+    // against these chords when the snapshot was taken. The restore replaces
+    // the chords wholesale, so the Auto-Reharmonized badge clears with it
+    // (R281). Returning `state` unchanged is a true no-op — zustand skips an
+    // identical state and the loop mirror sees no changed field.
     restoreChordsSnapshot: (snapshot) =>
       set((state) =>
         snapshotApplies(state, snapshot)
           ? {
+              reharmonizedIndicator: false,
               chords: snapshot.chords,
               customChordRhythm: snapshot.customChordRhythm,
               customChordHoldSteps: snapshot.customChordHoldSteps,

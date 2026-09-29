@@ -83,6 +83,14 @@ describe('restoreChordsSnapshot', () => {
     expect(restorable(useAppStore.getState())).toEqual(restorable(snapshot));
   });
 
+  test('clears the Auto-Reharmonized badge with the chords it replaces (R281)', () => {
+    const snapshot = chordsSnapshotOf(useAppStore.getState());
+    scribble();
+    useAppStore.setState({ reharmonizedIndicator: true });
+    useAppStore.getState().restoreChordsSnapshot(snapshot);
+    expect(useAppStore.getState().reharmonizedIndicator).toBe(false);
+  });
+
   test('mirrors the restore into the active loop in loops[]', () => {
     const snapshot = chordsSnapshotOf(useAppStore.getState());
     scribble();

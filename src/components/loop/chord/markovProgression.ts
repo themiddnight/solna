@@ -102,7 +102,8 @@ export function isStableQuality(quality: ChordQuality): boolean {
  * The chain's states: one per degree of the HARMONY scale (R358), each with
  * the degree's own quality as a triad or a 7th; then, when `allowBorrowed`,
  * one per `getBorrowedChords` entry with that list's own quality (the 7ths
- * choice never reaches it), minus any that repeat a diatonic root+quality.
+ * choice never reaches it). That list already drops anything the in-scale
+ * palette holds, as a triad or a 7th, so no state repeats a diatonic one.
  * Index 0 is always the diatonic tonic.
  */
 export function buildChainStates(
@@ -118,16 +119,14 @@ export function buildChainStates(
   });
   if (!allowBorrowed) return diatonic;
   const tonic = rootSemitone(scaleRoot);
-  const borrowed: ChainState[] = getBorrowedChords(scaleRoot, scaleType)
-    .filter((b) => !diatonic.some((d) => d.root === b.root && d.quality === b.quality))
-    .map((b) => ({
-      root: b.root,
-      quality: b.quality,
-      semi: mod12(rootSemitone(b.root) - tonic),
-      borrowed: true,
-      degree: null,
-      roman: b.label,
-    }));
+  const borrowed: ChainState[] = getBorrowedChords(scaleRoot, scaleType).map((b) => ({
+    root: b.root,
+    quality: b.quality,
+    semi: mod12(rootSemitone(b.root) - tonic),
+    borrowed: true,
+    degree: null,
+    roman: b.label,
+  }));
   return [...diatonic, ...borrowed];
 }
 
@@ -217,15 +216,21 @@ function pickWeighted<T>(items: readonly T[], weightOf: (item: T) => number, rng
   return lastWeighted;
 }
 
-function drawStart(states: readonly ChainState[], rng: () => number): ChainState {
-  const functions = eligibleStartFunctions(states);
+type StartFunctions = ReturnType<typeof eligibleStartFunctions>;
+
+function drawStart(states: readonly ChainState[], functions: StartFunctions, rng: () => number): ChainState {
   if (functions.length === 0) return states[0];
   const chosen = pickWeighted(functions, (f) => f.weight, rng);
   return pickWeighted(chosen.states, startWeight, rng);
 }
 
-function walk(states: readonly ChainState[], length: number, rng: () => number): ChainState[] {
-  const sequence = [drawStart(states, rng)];
+function walk(
+  states: readonly ChainState[],
+  starts: StartFunctions,
+  length: number,
+  rng: () => number,
+): ChainState[] {
+  const sequence = [drawStart(states, starts, rng)];
   while (sequence.length < length) {
     const previous = sequence[sequence.length - 1];
     sequence.push(pickWeighted(states, (next) => transitionWeight(previous, next), rng));
@@ -233,7 +238,8 @@ function walk(states: readonly ChainState[], length: number, rng: () => number):
   return sequence;
 }
 
-const sameChord = (a: { root: string; quality: string }, b: { root: string; quality: string }): boolean =>
+/** Same root and quality: the chord identity every roll constraint compares. */
+export const sameChord = (a: { root: string; quality: string }, b: { root: string; quality: string }): boolean =>
   a.root === b.root && a.quality === b.quality;
 
 /** Constraints 1 and 2: no immediate repeat (wrap included) and a closing last→first motion. */
@@ -282,10 +288,11 @@ function toResult(sequence: readonly ChainState[], bars: readonly number[]): Pro
 export function generateProgression(input: ProgressionInput, rng: () => number): ProgressionResult {
   const bars = input.bars.length > 0 ? input.bars : [1];
   const states = buildChainStates(input.scaleRoot, input.scaleType, input.use7ths, input.allowBorrowed);
+  const starts = eligibleStartFunctions(states);
   let structural: ChainState[] | null = null;
   let latest: ChainState[] = [];
   for (let attempt = 0; attempt < MAX_ROLL_ATTEMPTS; attempt += 1) {
-    latest = walk(states, bars.length, rng);
+    latest = walk(states, starts, bars.length, rng);
     if (!passesStructure(latest)) continue;
     structural = latest;
     if (differsFrom(latest, input.current)) return toResult(latest, bars);
