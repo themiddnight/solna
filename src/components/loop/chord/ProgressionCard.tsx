@@ -11,6 +11,8 @@ import type { ChordQuality } from '@/musicCore';
 import { markDiagnosticRender } from '@/diagnostics/renderCounts';
 import { usePlayingChord } from '@/components/playingChord';
 import { chordStartBars } from './chordStartBars';
+import { RollProgressionButton } from './RollProgressionButton';
+import type { UseProgressionDice } from './useProgressionDice';
 import type {
   ChordPalette,
   ChordViewState,
@@ -202,6 +204,8 @@ interface ProgressionActionsProps {
   onReharmonize: () => void;
   autoReharmonize: boolean;
   onToggleAutoReharmonize: () => void;
+  /** The Roll split button's state and actions, from `useProgressionDice` in ChordView. */
+  dice: UseProgressionDice;
   /**
    * The paste button, built by ChordView: which clipboard groups a surface
    * accepts is the surface's decision, and the source-text guard in
@@ -216,6 +220,7 @@ function ProgressionActions({
   onReharmonize,
   autoReharmonize,
   onToggleAutoReharmonize,
+  dice,
   pasteButton,
 }: ProgressionActionsProps) {
   return (
@@ -242,6 +247,9 @@ function ProgressionActions({
         <Sparkles className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Re-harmonize</span>
       </button>
+
+      {/* Roll a new progression in the key (ADR-0058); the caret holds its options. */}
+      <RollProgressionButton dice={dice} />
 
       {/* Auto-Reharmonize Toggle */}
       <button
@@ -340,6 +348,7 @@ export interface ProgressionCardProps {
   harmonize: ProgressionHarmonize;
   palette: ChordPalette;
   previews: HeldChordPreview;
+  dice: UseProgressionDice;
   pasteButton: React.ReactNode;
 }
 
@@ -349,6 +358,7 @@ export function ProgressionCard({
   harmonize,
   palette,
   previews,
+  dice,
   pasteButton,
 }: ProgressionCardProps) {
   const { chords, scaleRoot, scaleType, spellingKey } = state;
@@ -363,6 +373,7 @@ export function ProgressionCard({
             onReharmonize={harmonize.reharmonizeNow}
             autoReharmonize={harmonize.autoReharmonize}
             onToggleAutoReharmonize={harmonize.toggleAutoReharmonize}
+            dice={dice}
             pasteButton={pasteButton}
           />
         }

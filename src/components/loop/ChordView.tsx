@@ -26,6 +26,7 @@ import {
   useProgressionSaves,
   type PatternPreviews,
 } from './chord/useChordView';
+import { useProgressionDice } from './chord/useProgressionDice';
 
 /** The two header actions. */
 interface ChordViewHeaderProps {
@@ -139,6 +140,7 @@ export const ChordView = React.memo(function ChordView() {
   const saves = useProgressionSaves(state);
   const harmonize = useProgressionHarmonize(state);
   const editor = useProgressionEditor(state, harmonize.clearReharmonizeBadge);
+  const dice = useProgressionDice(editor.use7thsInQuickAdd, harmonize.clearReharmonizeBadge);
   const palette = useChordPalette(
     state.scaleRoot,
     state.scaleType,
@@ -172,6 +174,7 @@ export const ChordView = React.memo(function ChordView() {
         harmonize={harmonize}
         palette={palette}
         previews={chordPreview}
+        dice={dice}
         pasteButton={<ModulePasteButton groups={['chord-progression']} />}
       />
 

@@ -168,6 +168,19 @@ describe('ChordView accompaniment layout', () => {
     }
   });
 
+  test('the Roll split button sits with the progression actions, after Re-harmonize', () => {
+    const progression = html.indexOf('>Chord Progression<');
+    const chordCard = html.indexOf('card bg-panel tint-chord');
+    const reharmonize = html.indexOf('id="btn-reharmonize-chord-progression"');
+    expect(progression).toBeGreaterThan(-1);
+    expect(reharmonize).toBeGreaterThan(-1);
+    for (const id of ['id="btn-roll-progression"', 'id="btn-roll-progression-options"']) {
+      const at = html.indexOf(id);
+      expect(at).toBeGreaterThan(reharmonize);
+      expect(at).toBeLessThan(chordCard);
+    }
+  });
+
   test('the auto-reharmonize label reflects the live flag', () => {
     // React's static-server-renderer inserts a `<!-- -->` boundary comment
     // between two sibling children that both resolve to plain strings (the
