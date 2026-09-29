@@ -124,7 +124,7 @@ Rows are normalized when sampling.
     maj7/7/min7/m7b5/dim7/minMaj7/maj7#5) and over the borrowed lists' qualities (`maj`, `min`,
     `m7b5`); a test pins that every such quality lands in exactly one bucket.
 
-**Start chord.** Functions by root semitone from the tonic: T = 0 (0.5), S = 5 (0.2), D = 7 (0.15),
+**Start chord.** Functions by root semitone from the tonic: T = 0 (0.35), S = 5 (0.2), D = 7 (0.15),
 subtonic = 10 (0.15). A function is eligible when some state has that `semi` and a quality outside
 the diminished and augmented sets above; the subtonic may be the borrowed ♭VII when borrowed is on.
 Renormalize over eligible functions; within a function, pick among its eligible states in
@@ -139,7 +139,8 @@ proportion to `Q × borrowedFactor`. If no function is eligible, start on the to
 5. The root+quality sequence differs from `current`.
 
 **Sampling.** Draw the start, then walk the chain `n − 1` steps. Reject and redraw if any
-constraint fails, up to 50 attempts. Fallback: the latest attempt that passes 1–4, else the last
+constraint fails, up to 500 attempts (50 left up to 6.5% of Lydian Augmented / Whole Tone rolls
+with borrowed on breaking a constraint; 500 left none). Fallback: the latest attempt that passes 1–4, else the last
 attempt. Never throws, never returns an empty progression.
 
 **Output.** `chords[i] = { id, root, quality, bars: input.bars[i] }`. `roman` = the states' `roman`
@@ -154,15 +155,18 @@ The weights are starting values; their final values come from the listening revi
   customChordLoopLength, customBassPattern, customBassHoldSteps, customBassLoopLength }` — the six
   custom-lane fields `chordsPatch` re-clamps, because a roll that changes chord boundaries rewrites
   them.
+- `ChordsSnapshot` also records `scaleRoot`, `scaleType` and `meterId` at roll time.
 - `restoreChordsSnapshot(snapshot)` in `chordsSlice`: one `set()` that writes the seven fields back
-  verbatim when `state.activeLoopId === snapshot.loopId`, and writes nothing otherwise. The active
+  verbatim when the active loop, `scaleRoot`, `scaleType` and `meterId` all still match the
+  snapshot, and writes nothing otherwise (restoring after a key or meter change would write the old
+  key's chords and lanes into the new one). The active
   loop is read from the store's `activeLoopId` field (`AppStore`, `src/store/types.ts`).
 - Offered through the moved `useLoopUndo(restore, 'btn-undo-roll-progression', messageOf)` with
   module-level `restore`/`messageOf` (its stability contract). Message: `Rolled <roman>`. The
   snackbar's action window is the feedback host's standard action duration (`feedbackDurationMs`).
 - Single level and session only; a new roll replaces the pending undo (same key); a project install
-  dismisses it (`projectInstallCount` subscription); a changed active loop makes it a no-op. Undo
-  restores the snapshot regardless of edits made after the roll.
+  dismisses it (`projectInstallCount` subscription); a changed active loop, key, scale or meter makes it a
+  no-op. Undo restores the snapshot regardless of other edits made after the roll.
 
 ## UI
 
@@ -185,8 +189,9 @@ The weights are starting values; their final values come from the listening revi
     `allowBorrowed` is off.
   - Q mapping totality: every quality `resolveDegreeQuality` emits across `SCALES`, and every
     borrowed quality, maps to exactly one Q bucket.
-  - Statistical, C Major, triads, borrowed off, 4 chords, 500 rolls from a fixed seed: at least 60
-    distinct progressions; tonic-start share in [0.40, 0.75]; at least 95% differ from `current`.
+  - Statistical, C Major, triads, borrowed off, 4 chords, 500 rolls from a fixed seed: at least 150
+    distinct progressions; tonic-start share in [0.40, 0.75]; at least 99% differ from `current`
+    (measured at seed 0xd1ce with T = 0.35: 193 distinct, 0.622 tonic-start, 100% differ).
     These thresholds are provisional and are confirmed empirically in the plan before they are
     pinned.
 - `resolveBars` unit test (keep, keep on empty, each count × bars).
@@ -240,7 +245,9 @@ persisting the dice options.
 - The borrowed list is non-empty for every current `SCALES` key (1–6 entries), so the disabled
   Borrowed state is a guard no scale reaches today.
 - Locrian, Locrian #2/Diminished (dim tonic) and Lydian Augmented/Whole Tone (aug tonic) have an
-  ineligible T function; S/D/subtonic cover them. The "start on the tonic if nothing is eligible"
+  ineligible T function; S/D/subtonic cover them where they exist. Lydian Augmented/Whole Tone have
+  no chord at semitone 5, 7 or 10, so with borrowed off they always start on the (aug) tonic via the
+  fallback. The "start on the tonic if nothing is eligible"
   fallback and the within-function split are gap-fills, not changes to approved decisions.
 - `degreeToRoman` writes flats as ASCII `b` (`bVII`), while borrowed labels use `♭` (`♭VII`). The
   snackbar reuses both as-is, matching the in-scale palette and borrowed badges today; normalizing

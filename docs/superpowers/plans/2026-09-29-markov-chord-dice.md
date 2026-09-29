@@ -23,7 +23,7 @@
 - Every warning seen (build, tsc, ESLint, tests, browser console) is fixed or suppressed at the narrowest scope with a reason, and named in the task's summary.
 - daisyUI v5 classes only; every class used below was checked against the v5 docs (`join`, `join-item`, `btn`, `btn-xs`, `btn-sm`, `btn-soft`, `btn-secondary`, `btn-primary`, `btn-ghost`, `btn-active`, `toggle`, `toggle-sm`, `toggle-secondary`, `fieldset`, `fieldset-legend`, `label`, `dropdown*` via `ui/Popup`). Re-check any class you add that is not on this list.
 - Fixed ids and copy: `#btn-roll-progression` (`aria-label="Roll progression"`, visible "Roll" from `sm`), `#btn-roll-progression-options` (`aria-haspopup="dialog"`, `aria-expanded`), `#btn-roll-progression-apply`, `#chk-roll-borrowed`, `btn-roll-chords-<keep|2|3|4|6|8>`, `btn-roll-bars-<1|2|4>`, Undo key and button id `btn-undo-roll-progression`, snackbar message `Rolled <roman>`, ADR `0058`, rules `R361`–`R363`.
-- Weights, verbatim from the spec: M by ascending interval 0→0, 1→0.3, 2→0.7, 3→0.5, 4→0.4, 5→1.0, 6→0.1, 7→0.6, 8→0.6, 9→0.8, 10→0.6, 11→0.3; Q 1.0 stable / 0.25 diminished / 0.15 augmented; borrowed factor 0.15; diatonic tonic boost 1.3; start T(0)=0.5, S(5)=0.2, D(7)=0.15, subtonic(10)=0.15; closure `M ≥ 0.4`.
+- Weights, verbatim from the spec: M by ascending interval 0→0, 1→0.3, 2→0.7, 3→0.5, 4→0.4, 5→1.0, 6→0.1, 7→0.6, 8→0.6, 9→0.8, 10→0.6, 11→0.3; Q 1.0 stable / 0.25 diminished / 0.15 augmented; borrowed factor 0.15; diatonic tonic boost 1.3; start T(0)=0.35, S(5)=0.2, D(7)=0.15, subtonic(10)=0.15; closure `M ≥ 0.4`.
 
 ### Deviations from the spec (each argued in its task)
 
@@ -229,9 +229,9 @@ describe('transitionWeight', () => {
     expect(transitionWeight(find('IV'), find('iv'))).toBe(0);
   });
 
-  test('start functions are T, S, D and the subtonic, weighted 0.5 / 0.2 / 0.15 / 0.15', () => {
+  test('start functions are T, S, D and the subtonic, weighted 0.35 / 0.2 / 0.15 / 0.15', () => {
     expect(START_FUNCTIONS).toEqual([
-      { semi: 0, weight: 0.5 },
+      { semi: 0, weight: 0.35 },
       { semi: 5, weight: 0.2 },
       { semi: 7, weight: 0.15 },
       { semi: 10, weight: 0.15 },
@@ -323,7 +323,7 @@ export const TONIC_BOOST = 1.3;
 
 /** Start functions by root semitone above the tonic: T, S, D, subtonic. */
 export const START_FUNCTIONS: readonly { semi: number; weight: number }[] = [
-  { semi: 0, weight: 0.5 },
+  { semi: 0, weight: 0.35 },
   { semi: 5, weight: 0.2 },
   { semi: 7, weight: 0.15 },
   { semi: 10, weight: 0.15 },
@@ -637,8 +637,8 @@ describe('generateProgression — differs from the current progression', () => {
 });
 
 describe('generateProgression — statistics (C Major, triads, no borrowed, 4 chords, 500 rolls)', () => {
-  // Measured at seed 0xd1ce when these bounds were set: 191 distinct, a
-  // tonic-start share of 0.696 and a differ share of 1.0. The bounds leave room
+  // Measured at seed 0xd1ce when these bounds were set: 193 distinct, a
+  // tonic-start share of 0.622 and a differ share of 1.0. The bounds leave room
   // for the listening review to retune the weights without editing this test.
   test('varied, mostly tonic-led but not always, and always new', () => {
     const rng = mulberry32(0xd1ce);
@@ -818,14 +818,14 @@ for (const seed of [0xd1ce, 1, 2, 3, 42]) {
 Expected output (measured when this plan was written, with the code above):
 
 ```
-d1ce 191 0.696 1
-1 174 0.7 1
-2 172 0.716 1
-3 172 0.738 1
-2a 186 0.716 1
+d1ce 193 0.622 1
+1 181 0.612 1
+2 177 0.646 1
+3 177 0.662 1
+2a 184 0.626 1
 ```
 
-Pinning rule: the test runs seed `0xd1ce` only. Set `distinct ≥` about 20% below the measured value (191 → 150), keep the spec's tonic-start band `[0.40, 0.75]` because the measured 0.696 sits inside it, and set `differ ≥ 0.99` (measured 1.0; constraint 5 makes anything lower a bug). If your measured values differ from the table, your generator diverges from this plan's code: find out why before changing a threshold. Note for the listening review, recorded in ADR-0058: rejection raises the tonic-start share from the 0.5 start weight to about 0.70, because tonic-led attempts satisfy constraint 3 more often; seeds 1–42 reach 0.738, close to the band's top.
+Pinning rule: the test runs seed `0xd1ce` only. Set `distinct ≥` about 20% below the measured value (193 → 150), keep the spec's tonic-start band `[0.40, 0.75]` because the measured 0.622 sits inside it, and set `differ ≥ 0.99` (measured 1.0; constraint 5 makes anything lower a bug). If your measured values differ from the table, your generator diverges from this plan's code: find out why before changing a threshold. Note for the listening review, recorded in ADR-0058: rejection raises the tonic-start share well above the tonic's start weight (T 0.35 of 0.85 total, ~41%) to about 0.62–0.66, because tonic-led attempts satisfy constraint 3 more often. A rolled share of ~0.50 needs T ≈ 0.2 (measured 0.47–0.51 over seeds 0xd1ce, 1, 2, 3, 42).
 
 - [ ] **Step 6: Type-check, lint, dead-code**
 
@@ -2029,8 +2029,8 @@ Rejected:
 
 - The weights are starting values; the listening review in `CONTRIBUTING.md` tunes them. The
   constraints, not the weights, carry the guarantees, and the seeded tests pin the constraints.
-- Rejection skews the start: the tonic leads about 70% of C Major four-chord rolls, not the 50%
-  its start weight alone would give, because tonic-led attempts pass the tonic constraint more
+- Rejection skews the start: the tonic leads about 62–66% of C Major four-chord rolls, not the
+  ~41% its start weight (0.35 of 0.85) alone would give, because tonic-led attempts pass the tonic constraint more
   often. A later tuning of the start weights has to measure the rolled share, not read the table.
 - A roll's numerals come from `degreeToRoman` (ASCII `b`) and the borrowed labels (`♭`), so the
   snackbar mixes the two glyphs, as the in-scale palette and borrowed badges already do.
