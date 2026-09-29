@@ -130,6 +130,26 @@ export interface SynthSlice {
   toggleSynthMuted: () => void;
 }
 
+/**
+ * A progression roll's Undo payload (R363): the chords AND the six custom-lane
+ * fields `chordsPatch` re-clamps, because a roll that moves chord boundaries
+ * rewrites them. `loopId`, `scaleRoot`, `scaleType` and `meterId` are the
+ * guard: `restoreChordsSnapshot` writes only while all four still match.
+ */
+export interface ChordsSnapshot {
+  loopId: string;
+  scaleRoot: string;
+  scaleType: string;
+  meterId: MeterId;
+  chords: ChordItem[];
+  customChordRhythm: boolean[];
+  customChordHoldSteps: number[];
+  customChordLoopLength: number;
+  customBassPattern: BassStepChoice[];
+  customBassHoldSteps: number[];
+  customBassLoopLength: number;
+}
+
 export interface ChordsSlice {
   chords: ChordItem[];
   chordRhythmId: string;
@@ -158,6 +178,12 @@ export interface ChordsSlice {
    *  the store->engine boundary in engineSync.ts, never in a component. */
   chordVolume: number;
   setChords: (chords: ChordItem[]) => void;
+  /**
+   * Puts a roll's snapshot back verbatim, in one `set()` — only while the
+   * active loop, key, scale and meter all equal the snapshot's; otherwise a
+   * no-op that notifies nobody.
+   */
+  restoreChordsSnapshot: (snapshot: ChordsSnapshot) => void;
   setChordRhythmId: (rhythmId: string) => void;
   setChordFeel: (feel: number) => void;
   setChordOctave: (octave: number) => void;
