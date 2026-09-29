@@ -54,6 +54,11 @@ chords and the custom chord and bass lanes that `chordsPatch` re-clamps against 
   match; otherwise it is a no-op. The key, scale and meter guard goes beyond the design, which
   guarded the loop only: without it an Undo after a key change would put old-key chords into the
   new key, and one after a meter change would put back holds clamped against another bar length.
+  A pending Undo is dismissed as soon as any of the four changes, so the snackbar never offers a
+  button that would do nothing.
+- **A roll that cannot change anything** (a one-chord tonic loop in Lydian Augmented or Whole
+  Tone without borrowed chords, where the tonic is the only start) writes nothing, offers no
+  Undo and says "No other progression fits this key".
 
 Rejected:
 
@@ -68,10 +73,10 @@ Rejected:
 
 - The weights are starting values; the listening review in `CONTRIBUTING.md` tunes them. The
   constraints, not the weights, carry the guarantees, and the seeded tests pin the constraints.
-- Rejection skews the start: the tonic leads about 62–66% of C Major four-chord rolls, not the
-  ~41% its start weight (0.35 of 0.85) alone would give, because tonic-led attempts pass the tonic
-  constraint more often; a rolled share near 50% needs a tonic weight near 0.2. A later tuning of
-  the start weights has to measure the rolled share, not read the table.
+- Rejection skews the start: tonic-led attempts pass the tonic constraint more often, so the
+  rolled tonic share runs well above the tonic's start weight (T = 0.35 measured 62–66%). The
+  tonic weight is therefore 0.2, which rolls a tonic start in about 47–51% of C Major four-chord
+  rolls. A later tuning of the start weights has to measure the rolled share, not read the table.
 - A roll's numerals come from `degreeToRoman` (ASCII `b`) and the borrowed labels (`♭`), so the
   snackbar mixes the two glyphs, as the in-scale palette and borrowed badges already do.
 - Undo restores the snapshot regardless of edits made after the roll, as long as the loop, key,
@@ -86,7 +91,8 @@ Rejected:
 - **R362** — A roll writes through the library-apply path: `setChords` with fresh ids, then
   `clearReharmonizeBadge()`.
 - **R363** — A roll's Undo snapshot holds the six custom-lane fields beside `chords`; it is restored
-  in one `set()` and only onto the loop, key, scale and meter it was taken under.
+  in one `set()` and only onto the loop, key, scale and meter it was taken under; a pending roll
+  Undo is dismissed when any of those four changes.
 
 ## Sources
 

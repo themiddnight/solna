@@ -124,7 +124,7 @@ Rows are normalized when sampling.
     maj7/7/min7/m7b5/dim7/minMaj7/maj7#5) and over the borrowed lists' qualities (`maj`, `min`,
     `m7b5`); a test pins that every such quality lands in exactly one bucket.
 
-**Start chord.** Functions by root semitone from the tonic: T = 0 (0.35), S = 5 (0.2), D = 7 (0.15),
+**Start chord.** Functions by root semitone from the tonic: T = 0 (0.2), S = 5 (0.2), D = 7 (0.15),
 subtonic = 10 (0.15). A function is eligible when some state has that `semi` and a quality outside
 the diminished and augmented sets above; the subtonic may be the borrowed ♭VII when borrowed is on.
 Renormalize over eligible functions; within a function, pick among its eligible states in
@@ -165,8 +165,10 @@ The weights are starting values; their final values come from the listening revi
   module-level `restore`/`messageOf` (its stability contract). Message: `Randomized <roman>`. The
   snackbar's action window is the feedback host's standard action duration (`feedbackDurationMs`).
 - Single level and session only; a new roll replaces the pending undo (same key); a project install
-  dismisses it (`projectInstallCount` subscription); a changed active loop, key, scale or meter makes it a
-  no-op. Undo restores the snapshot regardless of other edits made after the roll.
+  dismisses it (`projectInstallCount` subscription); a changed active loop, key, scale or meter dismisses the
+  pending Undo (and the restore itself stays a guarded no-op). If a roll can only return the
+  current progression, it writes nothing, offers no Undo and shows the info toast "No other
+  progression fits this key". Undo restores the snapshot regardless of other edits made after the roll.
 
 ## UI
 
@@ -191,7 +193,7 @@ The weights are starting values; their final values come from the listening revi
     borrowed quality, maps to exactly one Q bucket.
   - Statistical, C Major, triads, borrowed off, 4 chords, 500 rolls from a fixed seed: at least 150
     distinct progressions; tonic-start share in [0.40, 0.75]; at least 99% differ from `current`
-    (measured at seed 0xd1ce with T = 0.35: 193 distinct, 0.622 tonic-start, 100% differ).
+    (measured at seed 0xd1ce with T = 0.2: 196 distinct, 0.498 tonic-start, 100% differ).
     These thresholds are provisional and are confirmed empirically in the plan before they are
     pinned.
 - `resolveBars` unit test (keep, keep on empty, each count × bars).

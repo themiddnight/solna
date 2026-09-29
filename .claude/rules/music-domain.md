@@ -93,7 +93,7 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 
 - The progression generator (`loop/chord/markovProgression.ts`) is pure — no React, no store — and takes its randomness as an injected `rng`; the call site passes `Math.random`, a test a seeded `mulberry32`. <!-- R361 -->
 - A roll writes through the library-apply path: `setChords` with fresh ids, then `clearReharmonizeBadge()`. <!-- R362 -->
-- A roll's Undo snapshot (`ChordsSnapshot`) holds the six custom-lane fields beside `chords`; `restoreChordsSnapshot` restores them in one `set()` and only while the active loop, `scaleRoot`, `scaleType` and `meterId` equal the snapshot's. <!-- R363 -->
+- A roll's Undo snapshot (`ChordsSnapshot`) holds the six custom-lane fields beside `chords`; `restoreChordsSnapshot` restores them in one `set()` and only while the active loop, `scaleRoot`, `scaleType` and `meterId` equal the snapshot's; a pending roll Undo is dismissed when any of those four changes. <!-- R363 -->
 
 ([ADR-0058](../../docs/decisions/0058-markov-chord-dice.md))
 

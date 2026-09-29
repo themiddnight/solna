@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { chordsSnapshotOf } from '@/store/chordsSlice';
 import { useAppStore } from '@/store/store';
 import type { ChordsSnapshot } from '@/store/types';
@@ -14,6 +14,8 @@ import {
 
 /** The Undo snackbar's feedback key, which is also its button's DOM id. */
 export const ROLL_UNDO_KEY = 'btn-undo-roll-progression';
+/** The info toast a roll raises when no other progression fits the key. */
+export const ROLL_UNCHANGED_KEY = 'roll-progression-unchanged';
 
 export interface RollOptions {
   chordCount: RollChordCount;
@@ -70,10 +72,22 @@ export const restoreRoll = (undo: RollUndo): void =>
 /** Module-level, per `useLoopUndo`'s stability contract. */
 export const rollUndoMessage = (undo: RollUndo): string => `Randomized ${undo.roman}`;
 
+/** Would writing `next` leave the progression exactly as it is (roots, qualities and bars)? */
+function sameProgression(next: readonly ChordItem[], current: readonly ChordItem[]): boolean {
+  return (
+    next.length === current.length &&
+    next.every((c, i) => c.root === current[i].root && c.quality === current[i].quality && c.bars === current[i].bars)
+  );
+}
+
 /**
  * One roll against the live store, through the library-apply path (R362):
  * `setChords` with fresh ids, then `clearReharmonizeBadge()`, then the Undo
- * offer. Outside React so a test drives it without a render.
+ * offer. Outside React so a test drives it without a render. When the
+ * generator's fallback could only return the current progression (a
+ * one-chord tonic loop in Lydian Augmented or Whole Tone without borrowed
+ * chords), it writes nothing, offers no Undo, raises an info toast and
+ * returns null.
  */
 export function performRoll(
   options: RollOptions,
@@ -81,13 +95,30 @@ export function performRoll(
   now: number,
   clearReharmonizeBadge: () => void,
   offer: (undo: RollUndo) => void,
-): RollPlan {
+): RollPlan | null {
   const store = useAppStore.getState();
   const plan = planRoll(store, options, rng, now);
+  if (sameProgression(plan.chords, store.chords)) {
+    store.showFeedback({ key: ROLL_UNCHANGED_KEY, message: 'No other progression fits this key', tone: 'info' });
+    return null;
+  }
   store.setChords(plan.chords);
   clearReharmonizeBadge();
   offer({ snapshot: plan.snapshot, roman: plan.roman });
   return plan;
+}
+
+/**
+ * Dismisses a pending roll Undo once the active loop, key, scale or meter
+ * changes: `restoreChordsSnapshot` would refuse it then (R363), so the button
+ * would do nothing. A plain store subscription, testable outside React;
+ * returns the unsubscribe.
+ */
+export function subscribeRollUndoDismissOnContextChange(): () => void {
+  return useAppStore.subscribe(
+    (s) => `${s.activeLoopId}|${s.scaleRoot}|${s.scaleType}|${s.meterId}`,
+    () => useAppStore.getState().dismissFeedback(ROLL_UNDO_KEY),
+  );
 }
 
 export interface UseProgressionDice {
@@ -126,6 +157,7 @@ export function useProgressionDice(use7ths: boolean, clearReharmonizeBadge: () =
     [scaleRoot, scaleType],
   );
   const { offer } = useLoopUndo(restoreRoll, ROLL_UNDO_KEY, rollUndoMessage);
+  useEffect(subscribeRollUndoDismissOnContextChange, []);
 
   const roll = () => {
     const options = { chordCount, barsPerChord, allowBorrowed: allowBorrowed && borrowedAvailable, use7ths };

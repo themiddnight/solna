@@ -10,10 +10,12 @@ import { useAppStore } from '@/store/store';
 import type { ChordItem } from '@/types';
 import {
   ROLL_UNDO_KEY,
+  ROLL_UNCHANGED_KEY,
   performRoll,
   planRoll,
   restoreRoll,
   rollUndoMessage,
+  subscribeRollUndoDismissOnContextChange,
   useProgressionDice,
   type RollOptions,
   type RollUndo,
@@ -80,7 +82,7 @@ describe('performRoll', () => {
     const plan = performRoll(KEEP, mulberry32(4), 1000, () => calls.push('clear'), (undo) => {
       calls.push('offer');
       offered.push(undo);
-    });
+    })!;
     expect(calls).toEqual(['clear', 'offer']);
     expect(offered).toEqual([{ snapshot: plan.snapshot, roman: plan.roman }]);
     expect(useAppStore.getState().chords).toEqual(plan.chords);
@@ -110,6 +112,50 @@ describe('performRoll', () => {
     useAppStore.setState({ scaleRoot: 'D' });
     useAppStore.getState().runFeedbackAction(ROLL_UNDO_KEY);
     expect(useAppStore.getState().chords).toBe(rolled);
+  });
+});
+
+describe('a roll with nothing new to offer', () => {
+  test('a one-chord Whole Tone tonic loop: no write, no Undo, an info message instead', () => {
+    useAppStore.setState({ scaleRoot: 'C', scaleType: 'Whole Tone' });
+    useAppStore.getState().setChords([{ id: 'only', root: 'C', quality: 'aug', bars: 1 }]);
+    const before = useAppStore.getState().chords;
+    const calls: string[] = [];
+    const plan = performRoll(KEEP, mulberry32(1), 1000, () => calls.push('clear'), () => calls.push('offer'));
+    expect(plan).toBeNull();
+    expect(calls).toEqual([]);
+    expect(useAppStore.getState().chords).toBe(before);
+    const info = useAppStore.getState().feedback.find((e) => e.key === ROLL_UNCHANGED_KEY);
+    expect(info?.tone).toBe('info');
+    expect(info?.message).toBe('No other progression fits this key');
+    useAppStore.getState().dismissFeedback(ROLL_UNCHANGED_KEY);
+  });
+});
+
+describe('subscribeRollUndoDismissOnContextChange', () => {
+  const changes = [
+    { scaleRoot: 'D' },
+    { scaleType: 'Dorian' },
+    { meterId: '3/4' as const },
+    { activeLoopId: 'loop-elsewhere' },
+  ];
+  for (const change of changes) {
+    test(`a pending Undo is dismissed when ${Object.keys(change)[0]} changes`, () => {
+      const stop = subscribeRollUndoDismissOnContextChange();
+      performRoll(KEEP, mulberry32(11), 1000, () => {}, offerUndo);
+      expect(pendingUndos()).toHaveLength(1);
+      useAppStore.setState(change);
+      expect(pendingUndos()).toHaveLength(0);
+      stop();
+    });
+  }
+
+  test('an edit that keeps the loop, key, scale and meter leaves the Undo pending', () => {
+    const stop = subscribeRollUndoDismissOnContextChange();
+    performRoll(KEEP, mulberry32(12), 1000, () => {}, offerUndo);
+    useAppStore.getState().setChords(useAppStore.getState().chords.slice(0, 2));
+    expect(pendingUndos()).toHaveLength(1);
+    stop();
   });
 });
 

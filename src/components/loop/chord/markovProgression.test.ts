@@ -162,9 +162,9 @@ describe('transitionWeight', () => {
     expect(transitionWeight(find('IV'), find('iv'))).toBe(0);
   });
 
-  test('start functions are T, S, D and the subtonic, weighted 0.35 / 0.2 / 0.15 / 0.15', () => {
+  test('start functions are T, S, D and the subtonic, weighted 0.2 / 0.2 / 0.15 / 0.15', () => {
     expect(START_FUNCTIONS).toEqual([
-      { semi: 0, weight: 0.35 },
+      { semi: 0, weight: 0.2 },
       { semi: 5, weight: 0.2 },
       { semi: 7, weight: 0.15 },
       { semi: 10, weight: 0.15 },
@@ -311,8 +311,8 @@ describe('generateProgression — differs from the current progression', () => {
 });
 
 describe('generateProgression — statistics (C Major, triads, no borrowed, 4 chords, 500 rolls)', () => {
-  // Measured at seed 0xd1ce when these bounds were set: 193 distinct, a
-  // tonic-start share of 0.622 and a differ share of 1.0. The bounds leave room
+  // Measured at seed 0xd1ce when these bounds were set: 196 distinct, a
+  // tonic-start share of 0.498 and a differ share of 1.0. The bounds leave room
   // for the listening review to retune the weights without editing this test.
   test('varied, mostly tonic-led but not always, and always new', () => {
     const rng = mulberry32(0xd1ce);

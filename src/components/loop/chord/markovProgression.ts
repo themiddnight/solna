@@ -71,7 +71,7 @@ export const TONIC_BOOST = 1.3;
 
 /** Start functions by root semitone above the tonic: T, S, D, subtonic. */
 export const START_FUNCTIONS: readonly { semi: number; weight: number }[] = [
-  { semi: 0, weight: 0.35 },
+  { semi: 0, weight: 0.2 },
   { semi: 5, weight: 0.2 },
   { semi: 7, weight: 0.15 },
   { semi: 10, weight: 0.15 },
