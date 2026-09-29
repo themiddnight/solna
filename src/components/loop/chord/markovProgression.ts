@@ -173,3 +173,122 @@ export function resolveBars(
   if (chordCount === 'keep') return current.length > 0 ? current.map((c) => c.bars) : [1, 1, 1, 1];
   return new Array<number>(chordCount).fill(barsPerChord);
 }
+
+/** Rejection-sampling budget per roll. */
+const MAX_ROLL_ATTEMPTS = 500;
+/** Constraint 2: the last→first motion must weigh at least this much in M. */
+export const CLOSURE_MIN_WEIGHT = 0.4;
+
+export interface ProgressionInput {
+  scaleRoot: string;
+  scaleType: string;
+  use7ths: boolean;
+  allowBorrowed: boolean;
+  /** One entry per chord to generate; its length is the chord count. */
+  bars: readonly number[];
+  /** The progression being replaced, for the "differs from current" constraint. */
+  current: readonly ChordItem[];
+}
+
+export interface ProgressionResult {
+  /** Placeholder ids (`roll-<i>`), no `bassNote`; the caller re-ids them. */
+  chords: ChordItem[];
+  /** The states' numerals joined with an en dash, e.g. `I–V–vi–IV`. */
+  roman: string;
+}
+
+/**
+ * One draw in proportion to `weightOf`. Never throws: an all-zero row returns
+ * the first item, and float rounding past the end lands on the last item
+ * that has weight.
+ */
+function pickWeighted<T>(items: readonly T[], weightOf: (item: T) => number, rng: () => number): T {
+  const weights = items.map(weightOf);
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  if (total <= 0) return items[0];
+  let remaining = rng() * total;
+  let lastWeighted = items[0];
+  for (let i = 0; i < items.length; i += 1) {
+    if (weights[i] <= 0) continue;
+    lastWeighted = items[i];
+    remaining -= weights[i];
+    if (remaining < 0) return items[i];
+  }
+  return lastWeighted;
+}
+
+function drawStart(states: readonly ChainState[], rng: () => number): ChainState {
+  const functions = eligibleStartFunctions(states);
+  if (functions.length === 0) return states[0];
+  const chosen = pickWeighted(functions, (f) => f.weight, rng);
+  return pickWeighted(chosen.states, startWeight, rng);
+}
+
+function walk(states: readonly ChainState[], length: number, rng: () => number): ChainState[] {
+  const sequence = [drawStart(states, rng)];
+  while (sequence.length < length) {
+    const previous = sequence[sequence.length - 1];
+    sequence.push(pickWeighted(states, (next) => transitionWeight(previous, next), rng));
+  }
+  return sequence;
+}
+
+const sameChord = (a: { root: string; quality: string }, b: { root: string; quality: string }): boolean =>
+  a.root === b.root && a.quality === b.quality;
+
+/** Constraints 1 and 2: no immediate repeat (wrap included) and a closing last→first motion. */
+function loopsCleanly(sequence: readonly ChainState[]): boolean {
+  const n = sequence.length;
+  if (n < 2) return true;
+  const repeats = sequence.some((s, i) => sameChord(s, sequence[(i + 1) % n]));
+  const closure = ROOT_MOTION_WEIGHT[mod12(sequence[0].semi - sequence[n - 1].semi)];
+  return !repeats && closure >= CLOSURE_MIN_WEIGHT;
+}
+
+/** Constraint 4: at most ceil(n/4) borrowed chords, never two adjacent (wrap included). */
+function borrowedSparse(sequence: readonly ChainState[]): boolean {
+  const n = sequence.length;
+  const count = sequence.filter((s) => s.borrowed).length;
+  if (count > Math.ceil(n / 4)) return false;
+  if (n < 2) return true;
+  return !sequence.some((s, i) => s.borrowed && sequence[(i + 1) % n].borrowed);
+}
+
+/** Constraints 1–4. */
+function passesStructure(sequence: readonly ChainState[]): boolean {
+  const hasTonic = sequence.length < 3 || sequence.some((s) => s.degree === 0);
+  return loopsCleanly(sequence) && hasTonic && borrowedSparse(sequence);
+}
+
+/** Constraint 5: the root+quality sequence differs from `current`. */
+function differsFrom(sequence: readonly ChainState[], current: readonly ChordItem[]): boolean {
+  return sequence.length !== current.length || sequence.some((s, i) => !sameChord(s, current[i]));
+}
+
+function toResult(sequence: readonly ChainState[], bars: readonly number[]): ProgressionResult {
+  return {
+    chords: sequence.map((s, i) => ({ id: `roll-${i}`, root: s.root, quality: s.quality, bars: bars[i] })),
+    roman: sequence.map((s) => s.roman).join('–'),
+  };
+}
+
+/**
+ * A new progression in the key: draw a start, walk the chain, and keep the
+ * first attempt that passes all five constraints. After MAX_ROLL_ATTEMPTS
+ * it falls back to the latest attempt that passed constraints 1–4, else the
+ * last attempt. Never throws and never returns an empty progression: empty
+ * `bars` roll one chord of one bar.
+ */
+export function generateProgression(input: ProgressionInput, rng: () => number): ProgressionResult {
+  const bars = input.bars.length > 0 ? input.bars : [1];
+  const states = buildChainStates(input.scaleRoot, input.scaleType, input.use7ths, input.allowBorrowed);
+  let structural: ChainState[] | null = null;
+  let latest: ChainState[] = [];
+  for (let attempt = 0; attempt < MAX_ROLL_ATTEMPTS; attempt += 1) {
+    latest = walk(states, bars.length, rng);
+    if (!passesStructure(latest)) continue;
+    structural = latest;
+    if (differsFrom(latest, input.current)) return toResult(latest, bars);
+  }
+  return toResult(structural ?? latest, bars);
+}
