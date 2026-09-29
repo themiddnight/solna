@@ -32,13 +32,13 @@ function openTag(html: string, marker: string): string {
 }
 
 describe('RollProgressionButton', () => {
-  test('a join of the Roll button and the options caret, panel closed', () => {
+  test('a join of the Random button and the options caret, panel closed', () => {
     const html = renderToString(<RollProgressionButton dice={dice()} />);
     expect(html.startsWith('<div class="join">')).toBe(true);
     const roll = openTag(html, 'id="btn-roll-progression"');
-    expect(roll).toContain('aria-label="Roll progression"');
+    expect(roll).toContain('aria-label="Random progression"');
     expect(roll).toContain('btn btn-xs btn-secondary btn-soft join-item gap-1');
-    expect(html).toContain('<span class="hidden sm:inline">Roll</span>');
+    expect(html).toContain('<span class="hidden sm:inline">Random</span>');
     const caret = openTag(html, 'id="btn-roll-progression-options"');
     expect(caret).toContain('aria-haspopup="dialog"');
     expect(caret).toContain('aria-expanded="false"');
@@ -49,7 +49,7 @@ describe('RollProgressionButton', () => {
   test('open: aria-expanded flips and the options panel mounts', () => {
     const html = renderToString(<RollProgressionButton dice={dice({ optionsOpen: true })} />);
     expect(openTag(html, 'id="btn-roll-progression-options"')).toContain('aria-expanded="true"');
-    expect(html).toContain('<div role="dialog" aria-label="Roll options"');
+    expect(html).toContain('<div role="dialog" aria-label="Random options"');
   });
 });
 
@@ -80,7 +80,7 @@ describe('RollOptionsPanel', () => {
     expect(none).toContain('This scale has no borrowed chords.');
   });
 
-  test('notes that 7ths follow Quick Add, and offers its own Roll', () => {
+  test('notes that 7ths follow Quick Add, and offers its own Random', () => {
     const html = renderToString(<RollOptionsPanel dice={dice()} />);
     expect(html).toContain('7ths follow Quick Add.');
     expect(html).toContain('id="btn-roll-progression-apply"');

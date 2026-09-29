@@ -84,7 +84,7 @@ describe('performRoll', () => {
     expect(calls).toEqual(['clear', 'offer']);
     expect(offered).toEqual([{ snapshot: plan.snapshot, roman: plan.roman }]);
     expect(useAppStore.getState().chords).toEqual(plan.chords);
-    expect(rollUndoMessage({ snapshot: plan.snapshot, roman: 'I–V–vi–IV' })).toBe('Rolled I–V–vi–IV');
+    expect(rollUndoMessage({ snapshot: plan.snapshot, roman: 'I–V–vi–IV' })).toBe('Randomized I–V–vi–IV');
   });
 
   test('Undo restores the exact pre-roll chords and custom lanes', () => {
@@ -142,7 +142,7 @@ describe('useProgressionDice', () => {
     expect(after.map((c) => c.bars)).toEqual(before.map((c) => c.bars));
     expect(cleared).toBe(1);
     const [entry] = pendingUndos();
-    expect(entry.message.startsWith('Rolled ')).toBe(true);
+    expect(entry.message.startsWith('Randomized ')).toBe(true);
     expect(entry.action?.id).toBe('btn-undo-roll-progression');
   });
 });

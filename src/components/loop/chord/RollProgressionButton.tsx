@@ -1,4 +1,4 @@
-import { ChevronDown, Dices } from 'lucide-react';
+import { ChevronDown, Shuffle } from 'lucide-react';
 import { Popup } from '@/components/ui/Popup';
 import { HINT_TEXT } from '@/components/ui/fieldClasses';
 import type { RollBarsPerChord, RollChordCount } from './markovProgression';
@@ -52,11 +52,11 @@ function OptionRow<T extends string | number>({ idPrefix, legend, options, value
 
 /**
  * The options popup's body: Chords, Bars per chord (hidden while Keep),
- * Borrowed, and a Roll that rolls with them. Exported for its render test.
+ * Borrowed, and a Random that rolls with them. Exported for its render test.
  */
 export function RollOptionsPanel({ dice }: { dice: UseProgressionDice }) {
   return (
-    <div role="dialog" aria-label="Roll options" className="flex flex-col gap-3">
+    <div role="dialog" aria-label="Random options" className="flex flex-col gap-3">
       <OptionRow
         idPrefix="btn-roll-chords"
         legend="Chords"
@@ -96,16 +96,16 @@ export function RollOptionsPanel({ dice }: { dice: UseProgressionDice }) {
         onClick={dice.rollFromOptions}
         className="btn btn-sm btn-secondary gap-1"
       >
-        <Dices className="w-3.5 h-3.5" aria-hidden="true" />
-        Roll
+        <Shuffle className="w-3.5 h-3.5" aria-hidden="true" />
+        Random
       </button>
     </div>
   );
 }
 
 /**
- * The Roll split button: the main half rolls with the current options, the
- * caret opens them in a `ui/Popup` (overlay kind popup, R325). Icon only
+ * The Random split button (the Beat grid's word and icon): the main half
+ * rolls with the current options, the caret opens them in a `ui/Popup` (overlay kind popup, R325). Icon only
  * below `sm`, like its neighbours. The Popup wrapper is `flex` so the caret
  * keeps the join's height.
  */
@@ -116,12 +116,12 @@ export function RollProgressionButton({ dice }: { dice: UseProgressionDice }) {
         id="btn-roll-progression"
         type="button"
         onClick={dice.roll}
-        aria-label="Roll progression"
-        title="Roll a new progression in this key"
+        aria-label="Random progression"
+        title="Randomize a new progression in this key"
         className={`${ROLL_BUTTON} gap-1`}
       >
-        <Dices className="w-3.5 h-3.5" aria-hidden="true" />
-        <span className="hidden sm:inline">Roll</span>
+        <Shuffle className="w-3.5 h-3.5" aria-hidden="true" />
+        <span className="hidden sm:inline">Random</span>
       </button>
       <Popup
         open={dice.optionsOpen}
@@ -134,7 +134,7 @@ export function RollProgressionButton({ dice }: { dice: UseProgressionDice }) {
             id="btn-roll-progression-options"
             type="button"
             onClick={dice.toggleOptions}
-            aria-label="Roll options"
+            aria-label="Random options"
             aria-haspopup="dialog"
             aria-expanded={dice.optionsOpen}
             className={`${ROLL_BUTTON} px-1`}

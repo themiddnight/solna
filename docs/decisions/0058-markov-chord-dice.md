@@ -14,8 +14,9 @@ chords and the custom chord and bass lanes that `chordsPatch` re-clamps against 
 
 ## Decision
 
-- **A Roll split button** in the progression card (`ProgressionActions` →
-  `loop/chord/RollProgressionButton.tsx`) replaces the active loop's progression. Its caret opens a
+- **A Random split button** (the Beat grid's `Random` label and `Shuffle` icon, for consistency)
+  in the progression card (`ProgressionActions` → `loop/chord/RollProgressionButton.tsx`), after
+  Add Chord and before a divider and the Re-harmonize pair, replaces the active loop's progression. Its caret opens a
   `ui/Popup` with Chords (Keep | 2 | 3 | 4 | 6 | 8), Bars per chord (1 | 2 | 4, hidden while Keep)
   and a Borrowed toggle. The options are local state in `loop/chord/useProgressionDice.ts`,
   never persisted. The 7ths choice is Quick Add's own toggle.
@@ -47,7 +48,7 @@ chords and the custom chord and bass lanes that `chordsPatch` re-clamps against 
   behave exactly as they do for a library apply.
 - **Undo** is a single-level snackbar through `useLoopUndo` (lifted from `song/` to the
   `src/components/` root now that two areas use it), key `btn-undo-roll-progression`, message
-  `Rolled <roman>`. Its payload is a `ChordsSnapshot`: `chords` plus the six custom-lane fields,
+  `Randomized <roman>`. Its payload is a `ChordsSnapshot`: `chords` plus the six custom-lane fields,
   and the `loopId`, `scaleRoot`, `scaleType` and `meterId` it was taken under.
   `restoreChordsSnapshot` writes the seven fields back in one `set()` only while all four still
   match; otherwise it is a no-op. The key, scale and meter guard goes beyond the design, which

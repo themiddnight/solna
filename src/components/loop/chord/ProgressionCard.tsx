@@ -236,6 +236,12 @@ function ProgressionActions({
         <span className="hidden sm:inline">Add Chord</span>
       </button>
 
+      {/* Roll a new progression in the key (ADR-0058); the caret holds its options. */}
+      <RollProgressionButton dice={dice} />
+
+      {/* Builders [Add Chord][Roll] | rewriters [Re-harmonize][Auto-Reharmonize]. */}
+      <div aria-hidden="true" id="progression-actions-separator" className="self-stretch w-px bg-base-300" />
+
       {/* Option B Re-harmonize Button */}
       <button
         id="btn-reharmonize-chord-progression"
@@ -247,9 +253,6 @@ function ProgressionActions({
         <Sparkles className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Re-harmonize</span>
       </button>
-
-      {/* Roll a new progression in the key (ADR-0058); the caret holds its options. */}
-      <RollProgressionButton dice={dice} />
 
       {/* Auto-Reharmonize Toggle */}
       <button

@@ -68,7 +68,7 @@ export const restoreRoll = (undo: RollUndo): void =>
   useAppStore.getState().restoreChordsSnapshot(undo.snapshot);
 
 /** Module-level, per `useLoopUndo`'s stability contract. */
-export const rollUndoMessage = (undo: RollUndo): string => `Rolled ${undo.roman}`;
+export const rollUndoMessage = (undo: RollUndo): string => `Randomized ${undo.roman}`;
 
 /**
  * One roll against the live store, through the library-apply path (R362):
@@ -104,7 +104,7 @@ export interface UseProgressionDice {
   closeOptions: () => void;
   /** Rolls with the current options. */
   roll: () => void;
-  /** The popup's own Roll: closes it, then rolls. */
+  /** The popup's own Random: closes it, then rolls. */
   rollFromOptions: () => void;
 }
 

@@ -1,11 +1,11 @@
-# Markov chord dice ("Roll") — design
+# Markov chord dice ("Random") — design
 
 Status: design approved in conversation; this written spec awaits review before the implementation plan.
 Branch `feat/markov-chord-progression`.
 
 ## Goal and success criteria
 
-A **Roll** button in the Chord progression view (`ChordView` → `ProgressionCard`) replaces the
+A **Random** button in the Chord progression view (`ChordView` → `ProgressionCard`) replaces the
 active loop's progression with a newly generated one, in the loop's key and scale, from a
 first-order Markov chain over root motion.
 
@@ -21,7 +21,7 @@ Done when:
 
 ## User-facing behavior
 
-- **Roll** (`#btn-roll-progression`) generates a whole new progression and replaces the current one.
+- **Random** (`#btn-roll-progression`) generates a whole new progression and replaces the current one.
   Mode is whole-progression only — no next-chord suggestion, no chord lock (lock is a future
   extension).
 - **Structure.** By default the roll keeps the current chord count and each chord's `bars`. An empty
@@ -32,7 +32,7 @@ Done when:
   adds the scale's `getBorrowedChords()` list, each with the list's own quality (the 7ths toggle
   does not apply to it). The toggle is disabled, with a hint, when that list is empty.
 - **Start chord** is automatic (no picker): see the function table under Algorithm.
-- **Undo.** A snackbar `Rolled <roman>` with an Undo button (`btn-undo-roll-progression`). Single
+- **Undo.** A snackbar `Randomized <roman>` with an Undo button (`btn-undo-roll-progression`). Single
   level, session only; a new roll replaces the pending undo.
 - **Playback.** Rolling while playing swaps the chords live, the same as a library apply.
 - **Length side effects.** When the chord count or bars change the loop length, the effects on the
@@ -49,7 +49,7 @@ Done when:
 | `src/components/loop/chord/markovProgression.ts` | **New.** Pure: no React, no store. `generateProgression`, `resolveBars`, the weight constants. |
 | `src/components/loop/chord/markovProgression.test.ts` | **New.** Seeded exhaustive + statistical tests. |
 | `src/components/loop/chord/useProgressionDice.ts` | **New.** Options state, `roll()`, the Undo offer. |
-| `src/components/loop/chord/ProgressionCard.tsx` | `ProgressionActions` gains the Roll split button and its popup. |
+| `src/components/loop/chord/ProgressionCard.tsx` | `ProgressionActions` gains the Random split button and its popup. |
 | `src/components/loop/ChordView.tsx` | Calls `useProgressionDice(use7thsInQuickAdd, clearReharmonizeBadge)` and passes the result down. |
 | `src/store/chordsSlice.ts`, `src/store/types.ts` | New action `restoreChordsSnapshot` and the `ChordsSnapshot` type. |
 | `src/components/useLoopUndo.ts` (+ `.test.ts`) | **Moved** from `src/components/song/`; importers updated. |
@@ -162,7 +162,7 @@ The weights are starting values; their final values come from the listening revi
   key's chords and lanes into the new one). The active
   loop is read from the store's `activeLoopId` field (`AppStore`, `src/store/types.ts`).
 - Offered through the moved `useLoopUndo(restore, 'btn-undo-roll-progression', messageOf)` with
-  module-level `restore`/`messageOf` (its stability contract). Message: `Rolled <roman>`. The
+  module-level `restore`/`messageOf` (its stability contract). Message: `Randomized <roman>`. The
   snackbar's action window is the feedback host's standard action duration (`feedbackDurationMs`).
 - Single level and session only; a new roll replaces the pending undo (same key); a project install
   dismisses it (`projectInstallCount` subscription); a changed active loop, key, scale or meter makes it a
@@ -170,14 +170,14 @@ The weights are starting values; their final values come from the listening revi
 
 ## UI
 
-- A daisyUI `join` split button in `ProgressionActions`, beside Re-harmonize:
-  - Main: `#btn-roll-progression`, lucide `Dices` icon, label "Roll" (`hidden sm:inline`, icon only
-    below `sm`, like its neighbors), `aria-label="Roll progression"`.
+- A daisyUI `join` split button in `ProgressionActions`, grouped `[Add Chord][Roll] | [Re-harmonize][Auto-Reharmonize]` (builders, a divider, then rewriters):
+  - Main: `#btn-roll-progression`, lucide `Shuffle` icon, label "Random" as on the Beat grid
+    (`hidden sm:inline`, icon only below `sm`, like its neighbors), `aria-label="Random progression"`.
   - Caret: `#btn-roll-progression-options`, `aria-haspopup="dialog"`, `aria-expanded`, opens a
     `ui/Popup` (overlay kind **popup**, R325) built on `usePopup`.
 - Popup contents: **Chords** segmented control (Keep | 2 | 3 | 4 | 6 | 8); **Bars per chord**
   (1 | 2 | 4, hidden while Keep); **Borrowed** toggle (disabled with a hint when unavailable); a note
-  "7ths follow Quick Add"; a **Roll** button that rolls with these options.
+  "7ths follow Quick Add"; a **Random** button that rolls with these options.
 - Verify every daisyUI class against the v5 docs before writing it.
 
 ## Testing
