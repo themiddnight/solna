@@ -10,7 +10,7 @@ import {
   writePatternEvent,
 } from './loop';
 import { getMeter } from '../utils/timeSignature';
-import type { AppStore, ChordsSlice } from './types';
+import type { AppStore, ChordsSlice, ChordsSnapshot } from './types';
 import type { ChordItem } from '../types';
 
 type Set = StoreApi<AppStore>['setState'];
@@ -61,6 +61,56 @@ export function chordsPatch(
   };
 }
 
+type SnapshotSource = Pick<
+  AppStore,
+  | 'activeLoopId'
+  | 'scaleRoot'
+  | 'scaleType'
+  | 'meterId'
+  | 'chords'
+  | 'customChordRhythm'
+  | 'customChordHoldSteps'
+  | 'customChordLoopLength'
+  | 'customBassPattern'
+  | 'customBassHoldSteps'
+  | 'customBassLoopLength'
+>;
+
+/**
+ * The Undo snapshot a progression roll takes before it writes (R363). The
+ * arrays are shared, not copied: persisted values are replaced, never
+ * mutated in place (R210), so a later edit cannot reach into the snapshot.
+ */
+export function chordsSnapshotOf(state: SnapshotSource): ChordsSnapshot {
+  return {
+    loopId: state.activeLoopId,
+    scaleRoot: state.scaleRoot,
+    scaleType: state.scaleType,
+    meterId: state.meterId,
+    chords: state.chords,
+    customChordRhythm: state.customChordRhythm,
+    customChordHoldSteps: state.customChordHoldSteps,
+    customChordLoopLength: state.customChordLoopLength,
+    customBassPattern: state.customBassPattern,
+    customBassHoldSteps: state.customBassHoldSteps,
+    customBassLoopLength: state.customBassLoopLength,
+  };
+}
+
+/**
+ * A snapshot restores only onto the loop, key, scale and meter it was taken
+ * in: after a key or scale change its chords would be in the old key, and
+ * after a meter change its holds were clamped against another bar length.
+ */
+function snapshotApplies(state: SnapshotSource, snapshot: ChordsSnapshot): boolean {
+  return (
+    state.activeLoopId === snapshot.loopId &&
+    state.scaleRoot === snapshot.scaleRoot &&
+    state.scaleType === snapshot.scaleType &&
+    state.meterId === snapshot.meterId
+  );
+}
+
 /**
  * Chords slice. `setChordOctave` writes only the octave: `ChordItem` carries
  * no `notes` to keep in sync, so there is nothing left for this action to
@@ -82,6 +132,26 @@ export function createChordsSlice(set: Set, defaults: LoopContent): ChordsSlice 
     chordVolume: defaults.chordVolume,
 
     setChords: (chords) => set((state) => chordsPatch(state, chords)),
+    // Verbatim, never through chordsPatch: the lanes were already clamped
+    // against these chords when the snapshot was taken. The restore replaces
+    // the chords wholesale, so the Auto-Reharmonized badge clears with it
+    // (R281). Returning `state` unchanged is a true no-op — zustand skips an
+    // identical state and the loop mirror sees no changed field.
+    restoreChordsSnapshot: (snapshot) =>
+      set((state) =>
+        snapshotApplies(state, snapshot)
+          ? {
+              reharmonizedIndicator: false,
+              chords: snapshot.chords,
+              customChordRhythm: snapshot.customChordRhythm,
+              customChordHoldSteps: snapshot.customChordHoldSteps,
+              customChordLoopLength: snapshot.customChordLoopLength,
+              customBassPattern: snapshot.customBassPattern,
+              customBassHoldSteps: snapshot.customBassHoldSteps,
+              customBassLoopLength: snapshot.customBassLoopLength,
+            }
+          : state,
+      ),
     setChordRhythmId: (chordRhythmId) => set({ chordRhythmId }),
     setChordRhythmMode: (chordRhythmMode) => set({ chordRhythmMode }),
     // Stored at a fixed MAX width (non-destructive, drum-row style): the UI

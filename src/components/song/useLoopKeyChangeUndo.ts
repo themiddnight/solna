@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useAppStore } from '@/store/store';
 import type { KeyChangeOptions } from '@/store/keyChange';
 import type { BatchKeyTarget, LoopKeyChangeUndo } from '@/store/loopKeyChange';
-import { useLoopUndo } from './useLoopUndo';
+import { useLoopUndo } from '@/components/useLoopUndo';
 
 export interface UseLoopKeyChangeUndo {
   keyChangeOpen: boolean;

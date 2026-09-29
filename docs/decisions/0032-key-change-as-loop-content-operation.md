@@ -60,7 +60,8 @@ directly, per loop, without depending on which loop happens to be active or moun
   `partializeAppState`, `PROJECT_CONTENT_KEYS` or `LOOP_FLAT_KEYS`); turning the toggle on
   rewrites nothing.
 - **R281** — The badge clears only where chords are replaced wholesale: a vibe's single write,
-  `applyLoopCopy` with `chord-progression`, library apply, toggle off, the
+  `applyLoopCopy` with `chord-progression`, library apply, a progression roll and its Undo
+  (ADR-0058), toggle off, the
   `reharmonizeNav.ts` subscription (loop change, project install), and `undoLoopKeyChange`
   restoring the active loop.
 - **R282** — `LoopContent` (`store/loop.ts`) is `Pick<Loop, LoopFlatKey>`; a loop is slot

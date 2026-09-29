@@ -168,6 +168,24 @@ describe('ChordView accompaniment layout', () => {
     }
   });
 
+  test('the actions group as [Add Chord][Random] | [Re-harmonize][Auto-Reharmonize]', () => {
+    const at = (marker: string) => {
+      const index = html.indexOf(marker);
+      expect(index).toBeGreaterThan(-1);
+      return index;
+    };
+    const order = [
+      at('id="btn-add-chord"'),
+      at('id="btn-roll-progression"'),
+      at('id="btn-roll-progression-options"'),
+      at('id="progression-actions-separator"'),
+      at('id="btn-reharmonize-chord-progression"'),
+      at('id="btn-toggle-auto-reharmonize"'),
+      at('card bg-panel tint-chord'),
+    ];
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   test('the auto-reharmonize label reflects the live flag', () => {
     // React's static-server-renderer inserts a `<!-- -->` boundary comment
     // between two sibling children that both resolve to plain strings (the

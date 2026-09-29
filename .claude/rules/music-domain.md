@@ -85,9 +85,17 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 
 - A key change's chord harmonize runs only in `changeKey` (`store/keyChange.ts`), transpose then snap; never in a component effect. <!-- R279 -->
 - `autoReharmonize` and `reharmonizedIndicator` are session-only store fields (not in `partializeAppState`, `PROJECT_CONTENT_KEYS` or `LOOP_FLAT_KEYS`); turning the toggle on rewrites nothing. <!-- R280 -->
-- The badge clears only where chords are replaced wholesale: a vibe's single write, `applyLoopCopy` with `chord-progression`, library apply, toggle off, the `reharmonizeNav.ts` subscription (loop change, project install), and `undoLoopKeyChange` restoring the active loop. <!-- R281 -->
+- The badge clears only where chords are replaced wholesale: a vibe's single write, `applyLoopCopy` with `chord-progression`, library apply, a progression roll and its Undo, toggle off, the `reharmonizeNav.ts` subscription (loop change, project install), and `undoLoopKeyChange` restoring the active loop. <!-- R281 -->
 
-([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
+([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md), [ADR-0058](../../docs/decisions/0058-markov-chord-dice.md))
+
+## Progression dice
+
+- The progression generator (`loop/chord/markovProgression.ts`) is pure — no React, no store — and takes its randomness as an injected `rng`; the call site passes `Math.random`, a test a seeded `mulberry32`. <!-- R361 -->
+- A roll writes through the library-apply path: `setChords` with fresh ids, then `clearReharmonizeBadge()`. <!-- R362 -->
+- A roll's Undo snapshot (`ChordsSnapshot`) holds the six custom-lane fields beside `chords`; `restoreChordsSnapshot` restores them in one `set()` and only while the active loop, `scaleRoot`, `scaleType` and `meterId` equal the snapshot's; a pending roll Undo is dismissed when any of those four changes. <!-- R363 -->
+
+([ADR-0058](../../docs/decisions/0058-markov-chord-dice.md))
 
 ## Prohibited
 
@@ -113,3 +121,6 @@ Music Core, chord qualities, scale-degree derivation, note spelling, chord notes
 - Harmonizing chords on a key change outside `changeKey` <!-- R279 -->
 - Persisting the reharmonize toggle or badge <!-- R280 -->
 - A per-writer badge clear on loop change instead of `reharmonizeNav.ts` <!-- R281 -->
+- `Math.random`, React or a store read inside the progression generator <!-- R361 -->
+- A roll that writes chords other than through `setChords` with fresh ids, or skips `clearReharmonizeBadge()` <!-- R362 -->
+- A roll Undo that restores `chords` without the six custom-lane fields, over more than one `set()`, or onto another loop, key, scale or meter <!-- R363 -->

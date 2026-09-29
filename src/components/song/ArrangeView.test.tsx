@@ -8,7 +8,7 @@ import { ArrangeView, buildEditRoute, editLoop, useLoopDeleteUndo } from './Arra
 import { loopIdKeyOf } from './loopIdKey';
 import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
 import { keyChangeToastMessage, useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
-import { subscribeLoopUndoDismissOnInstall } from './useLoopUndo';
+import { subscribeLoopUndoDismissOnInstall } from '@/components/useLoopUndo';
 
 // editLoop -> loadLoop mutates the shared singleton store (flat slices,
 // activeLoopId, player states). bun runs every test file in one process

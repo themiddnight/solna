@@ -32,7 +32,7 @@ import { LoopCopyDialog } from './LoopCopyDialog';
 import { SortableLoopCard } from './SortableLoopCard';
 import { arrangeCycleSteps, arrangeStep } from './arrangeStep';
 import { loopIdKeyOf, loopIdsFromKey } from './loopIdKey';
-import { useLoopUndo } from './useLoopUndo';
+import { useLoopUndo } from '@/components/useLoopUndo';
 import { useLoopKeyChangeUndo } from './useLoopKeyChangeUndo';
 
 /** Stable identity for the closed-dialog case — see the `labels` memo below. */
