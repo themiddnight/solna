@@ -55,7 +55,7 @@ recorded as risk R2, which assumed the golden would only ever run on the machine
 - **Taste is reviewed, not gated.** `CONTRIBUTING.md` defines a listening review: the maintainer
   auditions each content addition against the pull-request template's description before merge.
 - **One contributor document.** `CONTRIBUTING.md` holds the how-to for each content type.
-  `CLAUDE.md` points at it and does not duplicate it.
+  `AGENTS.md` points at it and does not duplicate it.
 
 Rejected: PolyForm Strict or another no-derivatives licence, because it conflicts with accepting
 contributions and would need a CLA. AGPL-3.0, because the owner does not want to restrict how the
@@ -81,7 +81,7 @@ code is reused. Apache-2.0 was preferred over MIT for its explicit trademark and
   is a fast subset for contributors and stays out of `verify`.
 - **R354** — The code is Apache-2.0; the Solna and murva names and the images under
   `public/assets/` are trademarks outside the licence (`NOTICE`, `TRADEMARKS.md`).
-- **R355** — `CONTRIBUTING.md` is the contributor guide; `CLAUDE.md` points at it, and a change to how
+- **R355** — `CONTRIBUTING.md` is the contributor guide; `AGENTS.md` points at it, and a change to how
   a content type is added updates it in the same change.
 
 - **R356** — `bun test` has no fixed file order: a test file removes the globals it installs and

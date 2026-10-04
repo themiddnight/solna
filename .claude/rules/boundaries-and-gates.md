@@ -33,7 +33,7 @@ ESLint severity policy, Knip graphs, import-ban mechanics, architecture tests, a
 - A platform-dependent golden records one value per platform; a new platform's value is added only when its platform-independent evidence matches, in a commit that changes nothing else. A platform's value comes from native hardware for that platform — `linux-x64` from the CI runner's failure log — never from emulation (Docker `linux/amd64` on Apple silicon reports `linux-x64` but renders different bytes), and `GOLDEN_UPDATE=1` never runs on an emulated platform, because it replaces that platform key's line. <!-- R352 -->
 - A content-table invariant is a test, not a separate `check:*` script; `check:content` is a fast subset for contributors and stays out of `verify`, whose `bun test` already runs it. <!-- R353 -->
 - The code is Apache-2.0; the Solna and murva names and the images under `public/assets/` are trademarks outside the licence (`NOTICE`, `TRADEMARKS.md`). <!-- R354 -->
-- `CONTRIBUTING.md` is the contributor guide; `CLAUDE.md` points at it, and a change to how a content type is added updates it in the same change. <!-- R355 -->
+- `CONTRIBUTING.md` is the contributor guide; `AGENTS.md` points at it, and a change to how a content type is added updates it in the same change. <!-- R355 -->
 
 ([ADR-0053](../../docs/decisions/0053-contributor-readiness.md))
 

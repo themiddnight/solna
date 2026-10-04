@@ -173,7 +173,7 @@ CI never judges taste. What is objectively checkable is a test. Everything else 
 
 The architecture is documented for both people and agents:
 
-- [`CLAUDE.md`](CLAUDE.md): commands, the completion gate, the layer map and the invariants that
+- [`AGENTS.md`](AGENTS.md): commands, the completion gate, the layer map and the invariants that
   apply everywhere
 - `.claude/rules/*.md`: the detailed rules for each area of the code
 - [`docs/decisions/`](docs/decisions/README.md): why each rule exists and which alternatives were

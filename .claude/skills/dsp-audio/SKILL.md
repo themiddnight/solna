@@ -361,7 +361,7 @@ for the rest of the session.
 | Scheduled pattern notes vanish | Something called `updateSynthPatch`/`stopSource` on future voices and cancelled their ramps |
 | Clicks on mute | Bypassed the `setTargetAtTime(…, 0.01)` ramp in `setSourceMuted` |
 
-Gate: `bun run verify` — see CLAUDE.md's "Completion gate" for what it runs; `bun run eslint` is part of it and must
+Gate: `bun run verify` — see AGENTS.md's "Completion gate" for what it runs; `bun run eslint` is part of it and must
 report nothing at all. Engine tests live in `src/audio/engine.test.ts`, and what the synth voice
 SOUNDS like is measured off rendered samples in `src/audio/synth/subtractiveSignal.test.ts`. A
 graph assertion proves a param was scheduled; only a render proves what came out, and every ratio

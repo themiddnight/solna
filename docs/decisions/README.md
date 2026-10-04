@@ -2,7 +2,7 @@
 
 This folder holds the *why* behind Solna's architecture. The *what* lives elsewhere:
 
-- `CLAUDE.md` — commands, the completion gate, the layer map and one-line cross-cutting invariants.
+- `AGENTS.md` — commands, the completion gate, the layer map and one-line cross-cutting invariants.
 - `.claude/rules/<topic>.md` — normative rules for one area, loaded when a matching file is opened.
   Each rule is tagged `(R###, ADR-NNNN)` and links back here.
 - `docs/decisions/NNNN-<slug>.md` — one decision each: context, decision, consequences, rejected
