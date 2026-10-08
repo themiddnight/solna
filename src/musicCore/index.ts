@@ -29,6 +29,7 @@ export {
   CHORD_QUALITY_ALIASES,
   CHORD_QUALITY_GROUPS,
   ROOTS,
+  chordSymbol,
   formatChordQuality,
   getChordQualityEntry,
   isChordQuality,

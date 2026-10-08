@@ -98,3 +98,14 @@ export function resolveTonalChord(tonalType: string, root: string): TonalChordRe
   const chord = Chord.getChord(tonalType, root);
   return { empty: chord.empty, intervals: chord.intervals };
 }
+
+/**
+ * `Chord.getChord(tonalType, root).symbol` — Tonal's own spelling of the chord,
+ * e.g. `Am7`, `CM` — or `null` when Tonal knows no such chord. For handing a
+ * chord to software outside this app; nothing in the app displays it
+ * (`formatChordQuality` owns the app's labels).
+ */
+export function tonalChordSymbol(tonalType: string, root: string): string | null {
+  const chord = Chord.getChord(tonalType, root);
+  return chord.empty ? null : chord.symbol;
+}

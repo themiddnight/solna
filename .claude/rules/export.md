@@ -9,6 +9,7 @@ paths:
   - "src/audio/export/smfWriter.ts"
   - "src/audio/export/renderStems.ts"
   - "src/audio/export/zipStore.ts"
+  - "src/interop/**"
 ---
 
 # Export
@@ -65,3 +66,12 @@ The export feature: one session-only job, kinds as data, one runner, one dialog;
 - A stem-driven change to the mixdown's calls, graph or golden files <!-- R309 -->
 - Skipping a stem by audibility or by sample content, or normalising a stem <!-- R310 -->
 - Several downloads, a compressing or third-party ZIP writer <!-- R311 -->
+
+## Interop reader
+
+- `src/interop/` is a second entry point (`bun run build:interop` → `dist-interop/solna-interop.js`, not committed); nothing in the app imports it, and it contains no React and no store runtime. <!-- R364 -->
+- `readSolnaSong` builds a song only from `parseProjectFile`, `buildMixdownSnapshotFromContent` and `buildSongTimeline` under `MIXDOWN_SEED`; it calls no lane planner and derives no note, exactly as the MIDI export (R296). <!-- R365 -->
+- `src/interop/contract.ts` imports nothing and names no consumer's vocabulary; a change a consumer could read differently bumps `SOLNA_INTEROP_CONTRACT_VERSION`, and `conformance.test.ts` pins the reader against the timeline and the inline patch against `EnginePatch`. <!-- R366 -->
+- The reader reports a part's mute and never applies it; a Beat voice mute is applied because the walk schedules nothing for it. <!-- R367 -->
+
+([ADR-0059](../../docs/decisions/0059-interop-reader-and-contract.md))

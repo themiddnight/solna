@@ -73,6 +73,7 @@ DEV-425; their **Sources** sections cite line ranges in that snapshot.
 | [0056](0056-popup-migration-complete.md) | Every popup on ui/Popup | The dock menus, the project menu and quick-save move onto `ui/Popup`; `usePopup` reads `onClose` through a latest-ref and hears an outside pointerdown in capture; `Popup` gains `side` and a `tabIndex={-1}` panel; no `role="menu"`; ThemePicker's move dropped; amends R328. |
 | [0057](0057-harmony-scales.md) | Harmony scales | The bebops, whole tone, diminished, double harmonic major, Hungarian minor and flamenco name a 7-note `harmony` whose chords they use wholesale; chord-side code reads `scaleEntry(harmonyKey(scaleType))`, note-side code the scale itself; amends ADR-0054's R061, adds R358. |
 | [0058](0058-markov-chord-dice.md) | Markov chord dice | A Random split button replaces the progression with a first-order Markov chain over root motion in the harmony scale, rejection-sampled against five loop constraints; the generator is pure with an injected `rng`; a roll writes like a library apply; a single-level Undo restores the chords and custom lanes only on the same loop, key, scale and meter; adds R361–R363. |
+| [0059](0059-interop-reader-and-contract.md) | An interop reader with its own contract | `src/interop/` is a second entry point: `readSolnaSong` resolves a `.solna` file into loops, parts and passes in beats and MIDI numbers through the export walk, behind a dependency-free `contract.ts` with its own version; mute is reported, not applied; adds R364–R367. |
 
 ## Adding or changing a decision
 

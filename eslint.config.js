@@ -259,7 +259,8 @@ const NOTE_REGEX_BAN = {
 };
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**'] },
+  // `dist-interop/` is the interop bundle `bun run build:interop` writes: build output, like `dist/`.
+  { ignores: ['dist/**', 'dist-interop/**', 'node_modules/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
