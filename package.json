@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:interop": "bun build src/interop/index.ts --outfile dist-interop/solna-interop.js --format esm --target browser --external tonal",
     "lint": "tsc --noEmit",
     "eslint": "eslint .",
     "check:theme": "bun test scripts/themeTokenGuard.test.ts",

@@ -1,4 +1,4 @@
-import { intervalSemitones, noteMidi, resolveTonalChord } from './tonalAdapter';
+import { intervalSemitones, noteMidi, resolveTonalChord, tonalChordSymbol } from './tonalAdapter';
 
 /** The twelve sharp-spelled pitch-class names, index = chroma. Canonical identity per DEV-380 — nothing here ever spells a flat. */
 export const ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
@@ -226,4 +226,14 @@ export function resolveChordNotes(quality: string, root = 'C', octave = 4): stri
     const oct = Math.floor(midi / 12) - 1;
     return `${noteName}${oct}`;
   });
+}
+
+/**
+ * The Tonal chord symbol for `root` + `quality` (`Am7`, `CM`), or `null` for a
+ * quality that is not registered or that Tonal cannot spell. The interop
+ * reader's vocabulary for a chord — any Tonal-based consumer parses it back.
+ */
+export function chordSymbol(root: string, quality: string): string | null {
+  const entry = getChordQualityEntry(quality);
+  return entry ? tonalChordSymbol(entry.tonalAlias, root) : null;
 }

@@ -1,5 +1,7 @@
 node_modules
 dist
+# The interop bundle (`bun run build:interop`); a consumer vendors its own copy.
+dist-interop
 
 .worktrees/
 .superpowers/

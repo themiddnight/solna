@@ -6,7 +6,7 @@ import type { MixdownBusState, MixdownLoop, MixdownSnapshot } from '@/audio/play
 import { BEAT_VOICE_IDS } from '@/data/beatPresets';
 import type { TrackSends } from '@/types';
 import { getMeter } from '@/utils/timeSignature';
-import { buildProjectContent } from './projectFormat';
+import { buildProjectContent, type ProjectContent } from './projectFormat';
 import { faderDbToGain } from './levelUnits';
 import { SOURCE_BUSES, type SourceBusLevels } from './sourceBuses';
 import type { AppStore } from './types';
@@ -38,7 +38,21 @@ function busRows(mixer: SourceBusLevels & { trackSends: TrackSends }): MixdownBu
  * nothing.
  */
 export function buildMixdownSnapshot(s: AppStore): MixdownSnapshot {
-  const content = buildProjectContent(s);
+  // The raw mute flag, NOT isTrackAudible: solo is a session-only monitoring
+  // gesture and must never reach the export, while mute is arrangement intent
+  // and must.
+  return buildMixdownSnapshotFromContent(buildProjectContent(s), busRows(s));
+}
+
+/**
+ * The same snapshot from a project's CONTENT alone, for a caller that holds a
+ * file rather than the store (the interop reader, `src/interop/`).
+ *
+ * `buses` is the song-level mixer, which is session state and not part of a
+ * project body: the live export passes the store's rows, and a caller that
+ * only walks the timeline passes `[]` — the walk never reads them.
+ */
+export function buildMixdownSnapshotFromContent(content: ProjectContent, buses: MixdownBusState[]): MixdownSnapshot {
   const loops: MixdownLoop[] = content.loops.map((loop) => ({
     ...loop,
     buses: busRows(loop),
@@ -59,10 +73,7 @@ export function buildMixdownSnapshot(s: AppStore): MixdownSnapshot {
     stepsPerBar: getMeter(content.meterId).stepsPerBar,
     masterVolume: faderDbToGain(content.masterVolume),
     effects: content.effects,
-    // The raw mute flag, NOT isTrackAudible: solo is a session-only monitoring
-    // gesture and must never reach the export, while mute is arrangement intent
-    // and must.
-    buses: busRows(s),
+    buses,
     // No arrangement-wide Beat: it belongs to a loop, and every loop row above
     // carries its own.
     loops,
