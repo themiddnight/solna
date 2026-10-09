@@ -1,6 +1,8 @@
 # ADR-0059: An interop reader with its own contract
 
-**Status:** Accepted — 2026-10-09
+**Status:** Accepted — 2026-10-09. Amended by [0060](0060-embedded-resolved-song.md): the app now
+writes the resolved song into every file it saves, and `readSolnaSong` is the reader for files
+without one.
 
 ## Context
 
@@ -19,12 +21,14 @@ The app already resolves a project into timed events without audio: `buildSongTi
 
 1. `src/interop/` is a second entry point beside `src/main.tsx`. `bun run build:interop` bundles
    `src/interop/index.ts` into `dist-interop/solna-interop.js` (ESM, `tonal` external, not
-   committed). Nothing in the app imports the folder.
-2. `readSolnaSong(text)` reads a file through the app's own validator (`parseProjectFile`), the
+   committed). Nothing in the app imports that index. Since [0060](0060-embedded-resolved-song.md),
+   `store/projectFile.ts` imports two modules of the folder, `resolveSong.ts` and `embeddedSong.ts`.
+2. `readSolnaSong(text)` reads a file through the app's own validator (`parseProjectFile`) and
+   hands the body to `resolveSong` (`resolveSong.ts`, split out by 0060), which uses the
    export snapshot (`buildMixdownSnapshotFromContent`) and the export walk (`buildSongTimeline`,
-   under `MIXDOWN_SEED`). It regroups that timeline by loop, part and pass and converts seconds to
+   under `MIXDOWN_SEED`). `resolveSong` regroups that timeline by loop, part and pass and converts seconds to
    beats. It calls no lane planner and derives no note of its own.
-3. `src/interop/contract.ts` is the whole public shape and imports nothing, so a consumer copies
+3. `src/interop/contract.ts` is the whole public shape of the song and imports nothing, so a consumer copies
    it verbatim as the bundle's type declaration. Times are quarter-note beats, pitches MIDI
    numbers, levels fader dB, velocity linear 0..1. The synth patch is restated inline;
    `conformance.test.ts` stops compiling when it drifts from `EnginePatch<'subtractive'>`.
@@ -44,7 +48,9 @@ The app already resolves a project into timed events without audio: `buildSongTi
 ## Consequences
 
 - A content addition that the planners already resolve (a rhythm, a pattern, a preset, a scale)
-  reaches a consumer by rebuilding the bundle, with no contract change.
+  reaches a consumer by rebuilding the bundle, with no contract change. Since
+  [0060](0060-embedded-resolved-song.md) it also reaches a consumer through any file saved after
+  the addition, with no rebuild.
 - A new patch leaf fails the consumer's own exhaustiveness test against `SOLNA_REFERENCE_PATCH`
   on its next bundle update, instead of being dropped silently.
 - The bundle is about 220 kB unminified: it carries the planners and the content tables. It
