@@ -49,6 +49,25 @@ The export feature: one session-only job, kinds as data, one runner, one dialog;
 
 ([ADR-0038](../../docs/decisions/0038-dry-stems.md))
 
+## Interop reader
+
+- `src/interop/` is a second entry point (`bun run build:interop` → `dist-interop/solna-interop.js`, not committed); nothing in the app imports its `index.ts`, and it contains no React and no store runtime. The app imports exactly two of its modules, `resolveSong.ts` and `embeddedSong.ts`, from `store/projectFile.ts`. <!-- R364 -->
+- `readSolnaSong` validates with `parseProjectFile` and resolves with `resolveSong`, which builds a song only from `buildMixdownSnapshotFromContent` and `buildSongTimeline` under `MIXDOWN_SEED`; it calls no lane planner and derives no note, exactly as the MIDI export (R296). `resolveSong.ts` never imports `store/projectFile.ts`. <!-- R365 -->
+- `src/interop/contract.ts` imports nothing (ESLint) and names no consumer's vocabulary; a change a consumer could read differently bumps `SOLNA_INTEROP_CONTRACT_VERSION`, and `conformance.test.ts` pins the reader against the timeline and the inline patch against `EnginePatch`. <!-- R366 -->
+- The reader reports a part's mute and never applies it; a Beat voice mute is applied because the walk schedules nothing for it. <!-- R367 -->
+
+([ADR-0059](../../docs/decisions/0059-interop-reader-and-contract.md))
+
+## Embedded resolved song
+
+- `serializeProject` writes the resolved song as the last top-level member `resolvedSong` of every `.solna` text, minified on one line after the unchanged pretty-printed body; a resolve or pack failure writes the file without it. <!-- R368 -->
+- The app never reads `resolvedSong`: `parseProjectFile` ignores it, every save regenerates it from `body.content`, and it never enters `ProjectBody` or the IndexedDB slot. <!-- R369 -->
+- `src/interop/embeddedSong.ts` imports only `./contract` (ESLint), because a consumer copies both files verbatim. `SHAPE` is the format's one definition: the embedded type is derived from it, and `packSong`/`unpackSong` assign the contract's types through it, so contract drift fails to compile. <!-- R370 -->
+- `unpackSong` is all-or-nothing on hostile input: `null` for anything it does not fully understand or that exceeds an exported size cap (`SOLNA_EMBEDDED_MAX_*`), never a partial song, never a throw. `null` means "use the full reader". <!-- R371 -->
+- The embedded song bumps neither `PROJECT_FORMAT_VERSION` nor `SOLNA_INTEROP_CONTRACT_VERSION`; a change a current reader could not read bumps `SOLNA_EMBEDDED_SONG_VERSION`. <!-- R372 -->
+
+([ADR-0060](../../docs/decisions/0060-embedded-resolved-song.md))
+
 ## Prohibited
 
 - Export state in a persisted key or a project body, or a second "busy" predicate <!-- R291 -->
@@ -66,12 +85,8 @@ The export feature: one session-only job, kinds as data, one runner, one dialog;
 - A stem-driven change to the mixdown's calls, graph or golden files <!-- R309 -->
 - Skipping a stem by audibility or by sample content, or normalising a stem <!-- R310 -->
 - Several downloads, a compressing or third-party ZIP writer <!-- R311 -->
-
-## Interop reader
-
-- `src/interop/` is a second entry point (`bun run build:interop` → `dist-interop/solna-interop.js`, not committed); nothing in the app imports it, and it contains no React and no store runtime. <!-- R364 -->
-- `readSolnaSong` builds a song only from `parseProjectFile`, `buildMixdownSnapshotFromContent` and `buildSongTimeline` under `MIXDOWN_SEED`; it calls no lane planner and derives no note, exactly as the MIDI export (R296). <!-- R365 -->
-- `src/interop/contract.ts` imports nothing and names no consumer's vocabulary; a change a consumer could read differently bumps `SOLNA_INTEROP_CONTRACT_VERSION`, and `conformance.test.ts` pins the reader against the timeline and the inline patch against `EnginePatch`. <!-- R366 -->
-- The reader reports a part's mute and never applies it; a Beat voice mute is applied because the walk schedules nothing for it. <!-- R367 -->
-
-([ADR-0059](../../docs/decisions/0059-interop-reader-and-contract.md))
+- An import in `src/interop/contract.ts`, or any import but `./contract` in `src/interop/embeddedSong.ts` <!-- R366 --> <!-- R370 -->
+- Reading `resolvedSong` back into the app, or keeping it across a save instead of regenerating it <!-- R369 -->
+- A save that fails, or a file that is lost, because the song did not resolve <!-- R368 -->
+- A partial song or a throw out of `unpackSong` <!-- R371 -->
+- A `PROJECT_FORMAT_VERSION` or contract version bump for the embedded song <!-- R372 -->

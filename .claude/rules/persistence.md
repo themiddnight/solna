@@ -65,6 +65,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - `projectStore` resolves availability once, lazily; every failure is a typed result; a storage-less device is a rendered degraded state, never an exception path. <!-- R246 -->
 - IndexedDB has one object store, `project`, with one fixed slot key (`projectStoreIdb.ts`). <!-- R247 -->
 - The slot value is `{ body, source }` (`ProjectSlotRecord`, `store/projectSource.ts`); `source` sits beside the body and never reaches `serializeProject` or the `.solna` body. <!-- R248 -->
+- The `.solna` text is the body plus one derived member, `resolvedSong`, which `serializeProject` regenerates on every save and `parseProjectFile` never reads; the slot stores the body object and never holds it (`export.md`, [ADR-0060](../../docs/decisions/0060-embedded-resolved-song.md)). <!-- R369 -->
 - `projectSource` is not a localStorage persist key (absent from `partializeAppState` and `PROJECT_CONTENT_KEYS`); it lives in the IDB slot record. <!-- R249 -->
 - `sanitizeSlotRecord` reads a pre-source slot as `{ body, source: untitled }`, with no version gate. <!-- R250 -->
 - A project body is the `PROJECT_CONTENT_KEYS` content set only (no view, session or library state). <!-- R251 -->
@@ -96,6 +97,7 @@ The app store, the persist write path, validation on read, storage zones, the pr
 - Touching IndexedDB outside `store/projectStore.ts` <!-- R245 -->
 - A storage failure thrown instead of returned as a typed result <!-- R246 -->
 - `source` inside the project body or `serializeProject` <!-- R248 -->
+- Reading `resolvedSong` out of a `.solna` file, or storing it in the slot <!-- R369 -->
 - `projectSource` as a localStorage persist key <!-- R249 -->
 - A version gate in `sanitizeSlotRecord` <!-- R250 -->
 - View, session or library state in a project body <!-- R251 -->

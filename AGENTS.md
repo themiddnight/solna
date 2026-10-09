@@ -164,7 +164,7 @@ in a `## Prohibited` checklist derived from its own rules):
 | `synth-patch.md` | Engine-tagged complete patches, presets, arp beside the patch, units in field names |
 | `persistence.md` | Persist write path, validation not migration, storage zones, project slot, autosave, Drive token |
 | `playback.md` | Clock, store→engine bridge, `PlaybackHost`, planned-then-performed playback, song timeline, snapshots, pub/subs |
-| `export.md` | The export job: one session-only job, kinds as data, the shared runner, the dialog and the Header trigger; MIDI export (lanes, channels, GM map); stems (dry bus taps, one ZIP); the interop reader and its contract (`src/interop/`) |
+| `export.md` | The export job: one session-only job, kinds as data, the shared runner, the dialog and the Header trigger; MIDI export (lanes, channels, GM map); stems (dry bus taps, one ZIP); the interop reader and its contract, and the resolved song embedded in every saved file (`src/interop/`) |
 | `metering.md` | Sample-based meters, tap point, meter scheduler |
 | `theming.md` | Theme tokens, the theme roster and choice, and the palette contrast gate |
 | `testing.md` | Test conventions, the `renderToString` trap |

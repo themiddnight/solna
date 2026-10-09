@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { SOLNA_EMBEDDED_SONG_KEY, readEmbeddedSong } from '@/interop/embeddedSong';
+import { interopFixtureBody } from '@/interop/fixtures/interopFixture';
+import { readSolnaSong } from '@/interop/readSolnaSong';
+import { resolveSong } from '@/interop/resolveSong';
 import { normalizeStoredBody, parseProjectFile, serializeProject, unknownLibraryReferences } from './projectFile';
-import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope } from './projectFormat';
+import { PROJECT_FORMAT_VERSION, factoryProjectContent, makeEnvelope, type ProjectBody } from './projectFormat';
 import { createDefaultLoop } from './loopSlice';
 import { LOOP_FLAT_KEYS, MAX_CUSTOM_PATTERN_BARS } from './loop';
 import type { BassStepChoice } from '@/data/bassPatterns';
@@ -645,3 +649,56 @@ describe('unknownLibraryReferences', () => {
 // version chain with) and its module were deleted in the final review fix
 // wave: nothing in production imported it, and the three validation cases
 // its docblock explained are already stated at projectFormat.ts:29-38.
+
+describe('serializeProject embeds the resolved song', () => {
+  const withoutEmbeddedSong = (body: ProjectBody): string => JSON.stringify(body, null, 2);
+
+  test('the embedded song is the one the full reader resolves from the same file', () => {
+    const text = serializeProject(interopFixtureBody());
+    const read = readSolnaSong(text);
+    if (!read.ok) throw new Error('fixture did not read');
+    expect(read.song.loops.flatMap((loop) => loop.synths.lead.passes.flat()).length).toBeGreaterThan(0);
+    expect(readEmbeddedSong(text)).toEqual(read.song);
+  });
+
+  test('a file with the embedded song opens to the same body as one without', () => {
+    const body = interopFixtureBody();
+    const text = serializeProject(body);
+    expect(text).toContain(`"${SOLNA_EMBEDDED_SONG_KEY}"`);
+    expect(parseProjectFile(text)).toEqual(parseProjectFile(withoutEmbeddedSong(body)));
+  });
+
+  test('everything before the embedded song is the pretty-printed body, unchanged', () => {
+    const body = interopFixtureBody();
+    const pretty = withoutEmbeddedSong(body);
+    expect(serializeProject(body).startsWith(pretty.slice(0, pretty.lastIndexOf('}')).trimEnd())).toBe(true);
+  });
+
+  test('a re-save regenerates the embedded song from content and never reads the old one back', () => {
+    const body = interopFixtureBody();
+    const stale = JSON.parse(serializeProject(body));
+    stale[SOLNA_EMBEDDED_SONG_KEY].bpm = 999;
+    stale[SOLNA_EMBEDDED_SONG_KEY].loops[0].name = 'stale';
+    const reopened = parseProjectFile(JSON.stringify(stale));
+    if (!reopened.ok) throw new Error('file did not reopen');
+    const resaved = serializeProject(reopened.body);
+    const regenerated = readEmbeddedSong(resaved);
+    expect([regenerated?.bpm, regenerated?.loops[0]?.name]).toEqual([120, 'Verse']);
+    expect(resaved).toBe(serializeProject(body));
+  });
+
+  test('a body the resolver throws on is still written, without the embedded song', () => {
+    const body = interopFixtureBody();
+    const unresolvable = { ...body, content: { ...body.content, loops: [null] } } as unknown as ProjectBody;
+    expect(() => resolveSong(unresolvable, unresolvable.formatVersion, [])).toThrow();
+    expect(serializeProject(unresolvable)).toBe(withoutEmbeddedSong(unresolvable));
+  });
+
+  test('a project name with }, quotes and $ survives the save', () => {
+    const name = 'a } "quoted" $& $1 {';
+    const text = serializeProject({ ...interopFixtureBody(), name });
+    const reopened = parseProjectFile(text);
+    expect(reopened.ok && reopened.body.name).toBe(name);
+    expect(readEmbeddedSong(text)?.name).toBe(name);
+  });
+});
