@@ -704,6 +704,39 @@ export default tseslint.config(
     },
   },
   {
+    // The interop contract's two portable files (R366, R370). A consumer
+    // outside this app copies both verbatim and compiles them under its own
+    // config, so neither may reach into this app: `contract.ts` imports
+    // nothing, `embeddedSong.ts` imports only `./contract`.
+    //
+    // Defined AFTER the catch-all above, which matches both files: flat
+    // config's `no-restricted-imports` replaces rather than merges, and a
+    // total ban already covers everything that block bans.
+    files: ['src/interop/contract.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ regex: '.', message: 'src/interop/contract.ts imports nothing: a consumer copies it verbatim (R366).' }] },
+      ],
+    },
+  },
+  {
+    files: ['src/interop/embeddedSong.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(?!\\./contract$)',
+              message: 'src/interop/embeddedSong.ts imports only ./contract: a consumer copies both files verbatim (R370).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Layering rule 0: src/data/ holds literals and nothing else.
     //
     // Every file here is an INDEPENDENT LEAF — it imports nothing at runtime,
