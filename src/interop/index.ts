@@ -8,7 +8,8 @@ import { SOLNA_REFERENCE_PATCH as REFERENCE_PATCH } from './referencePatch';
 
 export { SOLNA_INTEROP_CONTRACT_VERSION } from './contract';
 export type * from './contract';
-export { SOLNA_DRUM_VOICES, readSolnaSong } from './readSolnaSong';
+export { readSolnaSong } from './readSolnaSong';
+export { SOLNA_DRUM_VOICES } from './resolveSong';
 
 /** `referencePatch.ts`'s patch, published under the contract's own type. */
 export const SOLNA_REFERENCE_PATCH: SolnaSynthPatch = REFERENCE_PATCH;
