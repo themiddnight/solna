@@ -1,5 +1,7 @@
 import { BASS_PATTERNS } from '@/data/bassPatterns';
 import { CHORD_RHYTHMS } from '@/data/chordRhythms';
+import { embedSong } from '@/interop/embeddedSong';
+import { resolveSong } from '@/interop/resolveSong';
 import type { MasterEffects } from '../types';
 import { DEFAULT_METER_ID, isMeterId } from '../utils/timeSignature';
 import { createDefaultLoop } from './loopSlice';
@@ -22,9 +24,27 @@ export type ProjectParseResult =
   | { ok: true; body: ProjectBody; warnings: string[] }
   | { ok: false; error: 'malformed' | 'newer-version'; message: string };
 
-/** Plain JSON, pretty-printed so the file stays readable in a text editor. */
+/**
+ * The text of a `.solna` file: the body as plain JSON, pretty-printed so it
+ * stays readable in a text editor, then the resolved song as one minified
+ * last member (`embeddedSong.ts`) so a consumer outside this app reads the
+ * notes without a copy of this app's pattern tables.
+ *
+ * The embedded song is write-only here. `parseProjectFile` never reads it,
+ * and every save resolves it again from `body.content`, so it cannot drift
+ * from the content beside it. It lives in the file text only: the IndexedDB
+ * slot stores the body object and never sees it.
+ *
+ * A save never fails because the song would not resolve: the file is then
+ * written without it, and a consumer falls back to resolving the content.
+ */
 export function serializeProject(body: ProjectBody): string {
-  return JSON.stringify(body, null, 2);
+  const text = JSON.stringify(body, null, 2);
+  try {
+    return embedSong(text, resolveSong(body, body.formatVersion, []));
+  } catch {
+    return text;
+  }
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
