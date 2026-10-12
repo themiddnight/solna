@@ -15,24 +15,12 @@ import {
 } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { renameFromDraft } from '@/store/loop';
 import { Loop, LoopMixPatch } from '@/store/types';
 import { loopBars } from '@/utils/songStructure';
 import { IconButton } from '../ui/IconButton';
 import { LoopCardMetaRow, LoopCardMixer, LoopMixSummary } from './loopCardBody';
 import { LoopDetailSheet, useLoopDetailSheet } from './LoopDetailSheet';
-
-/**
- * What a rename save should write, or null for "write nothing".
- *
- * `''` is a REAL value here, not a cancel: it is the user clearing the name so
- * the card falls back to `tempName`. The old inline guard was
- * `if (trimmed && trimmed !== loop.name)`, which discarded exactly that
- * gesture. Pure and exported so the rule is testable without a DOM.
- */
-export function renameFromDraft(draft: string, currentName: string): string | null {
-  const trimmed = draft.trim();
-  return trimmed === currentName ? null : trimmed;
-}
 
 /**
  * Calculates which chord index in the progression is active given current step in loop.

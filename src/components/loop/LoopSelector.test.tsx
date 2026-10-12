@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { renderToString } from 'react-dom/server';
+import { sanitizeLoops } from '@/store/sanitize';
 import { loopStatePatch } from '@/store/loop';
 import { createDefaultLoop } from '@/store/loopSlice';
 import { useAppStore } from '@/store/store';
 import { HEADER_FIELD_SHELL } from '../ui/fieldClasses';
-import { LoopSelector, onSelectLoop } from './LoopSelector';
+import { LoopRenameModal, LoopSelector, onSelectLoop, RENAME_LOOP_VALUE } from './LoopSelector';
+import type { UseLoopRename } from './useLoopRename';
 
 /** The full opening tag of the element whose markup contains `needle`; throws when it is absent. */
 function openTagContaining(html: string, needle: string): string {
@@ -50,7 +52,8 @@ describe('LoopSelector', () => {
     expect(html).toContain('>Loop<');
     expect(html).toContain(HEADER_FIELD_SHELL);
     expect(html).toContain('appearance-none');
-    expect(html).not.toContain('max-w-');
+    // Scoped to the select: the rename dialog beside it is a `max-w-sm` Modal.
+    expect(openTagContaining(html, 'id="select-loop"')).not.toContain('max-w-');
   });
 
   // UX F-10: the caption used to drop below `sm`, leaving the phone header a
@@ -75,9 +78,78 @@ describe('LoopSelector', () => {
     const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
     useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
     expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+    let renames = 0;
 
-    onSelectLoop('loop-b');
+    onSelectLoop('loop-b', () => renames++);
 
     expect(useAppStore.getState().activeLoopId).toBe('loop-b');
+    expect(renames).toBe(0);
+  });
+
+  // UX F-10: newcomers open the picker looking for a rename.
+  test('the picker ends with a Rename loop action, set apart from the loops', () => {
+    const html = renderToString(<LoopSelector />);
+    expect(html).toContain(
+      '<option value="loop-default-1" selected="">untitled-1</option><hr/><option value="">Rename loop\u2026</option></select>',
+    );
+  });
+
+  test('choosing the action asks for a rename and never changes the active loop', () => {
+    const loopB = { ...createDefaultLoop(), id: 'loop-b', name: 'Loop B' };
+    useAppStore.setState({ loops: [createDefaultLoop(), loopB], activeLoopId: 'loop-default-1' });
+    let renames = 0;
+
+    onSelectLoop(RENAME_LOOP_VALUE, () => renames++);
+
+    expect(renames).toBe(1);
+    expect(useAppStore.getState().activeLoopId).toBe('loop-default-1');
+  });
+
+  // A project file can carry any non-empty string as a loop id, so the action's
+  // value has to be one no loop can have. sanitizeLoops replaces a blank id.
+  test('no loop id, even a sanitised blank one, equals the action value', () => {
+    const blankId = { ...createDefaultLoop(), id: '' };
+    const ids = (sanitizeLoops([blankId, { ...blankId }]) ?? []).map((loop) => loop.id);
+    expect(ids).toEqual(['loop-0', 'loop-1']);
+    expect(ids).not.toContain(RENAME_LOOP_VALUE);
+  });
+
+  // The dialog stays mounted so closing it hands focus back to the select, and
+  // a dialog without `open` is not showing.
+  test('the rename dialog is mounted closed', () => {
+    const html = renderToString(<LoopSelector />);
+    expect(html).toContain('<dialog class="modal">');
+    expect(html).not.toContain('<dialog class="modal" open');
+  });
+});
+
+describe('LoopRenameModal', () => {
+  const rename: UseLoopRename = {
+    isOpen: true,
+    formId: 'rename-form',
+    inputRef: { current: null },
+    draft: 'untitled-1',
+    placeholder: 'untitled-1',
+    setDraft: () => {},
+    open: () => {},
+    cancel: () => {},
+    submit: () => {},
+  };
+
+  test('a titled sm Modal with one text input holding the draft', () => {
+    const html = renderToString(<LoopRenameModal rename={rename} />);
+    expect(html).toContain('<h3 class="font-bold text-lg flex items-center gap-2">Rename loop</h3>');
+    expect(html).toContain('max-w-sm');
+    expect(html).toContain('<form id="rename-form"');
+    expect(html).toContain('type="text" placeholder="untitled-1" class="input input-sm w-full" value="untitled-1"/>');
+  });
+
+  // R339: the buttons are the Modal footer, and Rename submits the form by id.
+  test('Cancel and Rename sit in the footer, Rename naming the form', () => {
+    const html = renderToString(<LoopRenameModal rename={rename} />);
+    expect(html).toContain(
+      '<div class="modal-action"><button type="button" class="btn btn-sm btn-ghost">Cancel</button><button type="submit" form="rename-form" class="btn btn-sm btn-primary">Rename</button></div>',
+    );
+    expect(html.indexOf('</form>')).toBeLessThan(html.indexOf('modal-action'));
   });
 });

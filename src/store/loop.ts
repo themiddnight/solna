@@ -372,6 +372,20 @@ export function loopLabel(loop: Pick<Loop, 'name' | 'tempName'>): string {
 }
 
 /**
+ * What a rename save should write, or null for "write nothing".
+ *
+ * `''` is a REAL value here, not a cancel: it is the user clearing the name so
+ * the loop falls back to `tempName`. The old inline guard was
+ * `if (trimmed && trimmed !== loop.name)`, which discarded exactly that
+ * gesture. Pure and shared by the Arrange card and the header loop picker, so
+ * the rule is testable without a DOM and cannot drift between them.
+ */
+export function renameFromDraft(draft: string, currentName: string): string | null {
+  const trimmed = draft.trim();
+  return trimmed === currentName ? null : trimmed;
+}
+
+/**
  * The next `untitled-{n}`: one above the highest existing untitled number,
  * read off `tempName`. The number is assigned ONCE at creation and is then a
  * stored string like any other — never recomputed from a position, so dragging

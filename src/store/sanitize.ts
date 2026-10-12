@@ -686,7 +686,7 @@ export function sanitizeLoops(value: unknown, meterId: MeterId = DEFAULT_METER_I
     loops.push(sanitizeCustomPatternSpans({
       id: typeof r.id === 'string' && r.id.length > 0 ? r.id : `loop-${loops.length}`,
       // Trimmed for the same reason tempName is above: renameFromDraft
-      // (SortableLoopCard.tsx) never lets a user save a whitespace-only name
+      // (store/loop.ts) never lets a user save a whitespace-only name
       // in the first place, so an untrimmed sanitize would accept from an
       // imported file the one blank-but-truthy `name` a rename can't produce
       // — and `loopLabel`'s `name || tempName` falls back to tempName only
