@@ -78,6 +78,20 @@ directly, per loop, without depending on which loop happens to be active or moun
 - **R283** — `createDefaultLoopContent()` (`store/loopDefaults.ts`) is the only place a per-loop
   default is written; slices read it through their `defaults` parameter, or through the shared
   `default*State()` factories `createDefaultLoopContent` itself spreads.
+- **R373** — The header loop picker ends with a rule and one `Rename loop…` action entry whose
+  value no loop id can have; choosing it opens a `Modal` and never changes the active loop. The
+  dialog's input is prefilled with `loopLabel`; submitting writes `setLoopName` through
+  `nameToWrite`, which treats the untouched prefill as no change, so an unnamed loop's `tempName`
+  is never promoted into `name` (R282). `renameFromDraft` moved to `store/loop.ts` to be shared
+  with Arrange's card (R276). Saving stays in the project menu (R295, R317).
+  *Added (UX F-10):* newcomers opened the picker looking for a rename and found loop names only,
+  the same finding that put the caption on every width. A rename button beside the field was
+  rejected because the 360px header has no room, a popup because the select's own list already is
+  the quick pick (R327), and an inline-editable picker because a native `<select>` cannot hold
+  a text input. The action's value is `''`: `newLoopId` never writes a blank id and `sanitizeLoops`
+  replaces one, whereas any non-blank literal could equal an imported loop's id. A prefill of the
+  stored `name` (Arrange's choice) would show a blank box for an unnamed loop, so the picker
+  prefills the label and compares against it instead.
 
 ## Sources
 

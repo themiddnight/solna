@@ -12,12 +12,14 @@ paths:
   - "src/store/keyChange.ts"
   - "src/store/loopKeyChange*.ts"
   - "src/components/song/**"
+  - "src/components/loop/LoopSelector.tsx"
+  - "src/components/loop/useLoopRename.ts"
   - "src/components/ui/Solo*.tsx"
 ---
 
 # Loops and solo
 
-Loop content and defaults, atomic loop delete with Undo, and the session-only track solo set.
+Loop content and defaults, loop rename, atomic loop delete with Undo, and the session-only track solo set.
 
 ## Loop content
 
@@ -26,6 +28,12 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 - `trackSends` is per-loop content: in `LOOP_FLAT_KEYS` and the `mix` copy group, keyed by engine source id (`synth`, `chord`, `bass`, `pad`, `fx`, `sequencer`), levels linear 0..1. Its default is written only in `createDefaultLoopContent`: 1/1/1 on every track except `sequencer` delay 0 and distortion 0; `mixdownFixture.ts` is the one test copy and a test pins it equal. <!-- R301 -->
 
 ([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md), [ADR-0037](../../docs/decisions/0037-per-track-sends.md))
+
+## Loop rename
+
+- The header loop picker (`loop/LoopSelector.tsx`) ends its loop list with a rule and one `Rename loop…` action entry, never a button beside the field (the header has no width for one at 360px). Its value is `RENAME_LOOP_VALUE`, which no loop id can have; `onSelectLoop` tells it from a loop id, and choosing it opens a `Modal` and never changes `activeLoopId`, so the select, controlled by `activeLoopId`, shows the active loop again. The dialog is `useLoopRename`'s: one text input prefilled with `loopLabel` and selected, Cancel and a `form`-named Rename in the Modal `footer` (R339), the draft local (R016), the target the loop it was opened on. A submit writes `setLoopName(id, nameToWrite(draft, loop))`, and Escape and Cancel write nothing. `renameFromDraft` (`store/loop.ts`) is the one trim-and-compare shared with Arrange's card. Saving the project is not in the picker; it stays in the project menu (R295, R317). <!-- R373 -->
+
+([ADR-0032](../../docs/decisions/0032-key-change-as-loop-content-operation.md))
 
 ## Batch key change
 
@@ -75,6 +83,7 @@ Loop content and defaults, atomic loop delete with Undo, and the session-only tr
 - Solo overriding per-voice Beat mute <!-- R161 -->
 - A per-loop default literal in a slice <!-- R283 -->
 - A `Loop` field outside identity and `LOOP_FLAT_KEYS` <!-- R282 -->
+- A Save entry, a rename button beside the field, or a picker action whose value could equal a loop id; choosing Rename changing the active loop; a rename that prefills or writes outside `nameToWrite`, or promotes an untouched `tempName` prefill into `name`; a second copy of `renameFromDraft` <!-- R373 -->
 - A `trackSends` default literal outside `createDefaultLoopContent` (the mixdown fixture excepted) <!-- R301 -->
 - Seaming or reloading the active loop for a batch key change <!-- R284 -->
 - A whole-`LoopContent` undo snapshot <!-- R285 -->

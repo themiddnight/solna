@@ -6,7 +6,7 @@ import { createDefaultLoop } from '@/store/loopSlice';
 import { formatChordLabel, generateBlockChordNotes } from '@/utils/musicTheory';
 import { spellNoteInKey } from '@/utils/noteSpelling';
 import { LoopDetailSheet } from './LoopDetailSheet';
-import { getActiveChordIndex, renameFromDraft, SortableLoopCard } from './SortableLoopCard';
+import { getActiveChordIndex, SortableLoopCard } from './SortableLoopCard';
 
 describe('getActiveChordIndex', () => {
   test('returns -1 for empty or invalid inputs', () => {
@@ -349,28 +349,6 @@ describe('loop card chord spelling matches every other DEV-380-compliant surface
     expect(html).not.toContain('D#');
   });
 });
-
-describe('renameFromDraft', () => {
-  // The old guard was `if (trimmed && trimmed !== loop.name)`, so "clear the
-  // name to go back to the temporary label" was silently treated as a cancel.
-  test('an emptied field is a real value, not a cancel', () => {
-    expect(renameFromDraft('', 'Drop')).toBe('');
-    expect(renameFromDraft('   ', 'Drop')).toBe('');
-  });
-
-  test('an unchanged field writes nothing', () => {
-    expect(renameFromDraft('Drop', 'Drop')).toBe(null);
-    expect(renameFromDraft('  Drop  ', 'Drop')).toBe(null);
-    // The blank-to-blank case is the one an untouched, placeholder-only input
-    // produces on blur: nothing changed, so nothing is written.
-    expect(renameFromDraft('', '')).toBe(null);
-  });
-
-  test('a changed field writes the trimmed value', () => {
-    expect(renameFromDraft('  Chorus ', 'Drop')).toBe('Chorus');
-  });
-});
-
 
 describe('the Copy into… button', () => {
   const renderCard = (totalLoops: number) => renderVerseCard({ totalLoops });

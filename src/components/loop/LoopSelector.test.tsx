@@ -52,7 +52,8 @@ describe('LoopSelector', () => {
     expect(html).toContain('>Loop<');
     expect(html).toContain(HEADER_FIELD_SHELL);
     expect(html).toContain('appearance-none');
-    expect(html).not.toContain('max-w-');
+    // Scoped to the select: the rename dialog beside it is a `max-w-sm` Modal.
+    expect(openTagContaining(html, 'id="select-loop"')).not.toContain('max-w-');
   });
 
   // UX F-10: the caption used to drop below `sm`, leaving the phone header a
@@ -89,7 +90,7 @@ describe('LoopSelector', () => {
   test('the picker ends with a Rename loop action, set apart from the loops', () => {
     const html = renderToString(<LoopSelector />);
     expect(html).toContain(
-      '<option value="loop-default-1">untitled-1</option><hr/><option value="">Rename loop\u2026</option></select>',
+      '<option value="loop-default-1" selected="">untitled-1</option><hr/><option value="">Rename loop\u2026</option></select>',
     );
   });
 
@@ -113,10 +114,12 @@ describe('LoopSelector', () => {
     expect(ids).not.toContain(RENAME_LOOP_VALUE);
   });
 
-  test('the rename dialog is not in the markup until the action is chosen', () => {
+  // The dialog stays mounted so closing it hands focus back to the select, and
+  // a dialog without `open` is not showing.
+  test('the rename dialog is mounted closed', () => {
     const html = renderToString(<LoopSelector />);
-    expect(html).not.toContain('Rename loop</h3>');
-    expect(html).not.toContain('<dialog');
+    expect(html).toContain('<dialog class="modal">');
+    expect(html).not.toContain('<dialog class="modal" open');
   });
 });
 
@@ -138,7 +141,7 @@ describe('LoopRenameModal', () => {
     expect(html).toContain('<h3 class="font-bold text-lg flex items-center gap-2">Rename loop</h3>');
     expect(html).toContain('max-w-sm');
     expect(html).toContain('<form id="rename-form"');
-    expect(html).toContain('type="text" value="untitled-1"');
+    expect(html).toContain('type="text" placeholder="untitled-1" class="input input-sm w-full" value="untitled-1"/>');
   });
 
   // R339: the buttons are the Modal footer, and Rename submits the form by id.
