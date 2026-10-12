@@ -13,6 +13,7 @@ import {
   newLoopId,
   nextDuplicateLabel,
   loopLabel,
+  renameFromDraft,
   nextUntitledName,
   loopStatePatch,
   resolveActiveLoop,
@@ -321,5 +322,26 @@ describe('LoopContent', () => {
       createDefaultLoop(),
     );
     expect('id' in content).toBe(false);
+  });
+});
+
+describe('renameFromDraft', () => {
+  // The old guard was `if (trimmed && trimmed !== loop.name)`, so "clear the
+  // name to go back to the temporary label" was silently treated as a cancel.
+  test('an emptied field is a real value, not a cancel', () => {
+    expect(renameFromDraft('', 'Drop')).toBe('');
+    expect(renameFromDraft('   ', 'Drop')).toBe('');
+  });
+
+  test('an unchanged field writes nothing', () => {
+    expect(renameFromDraft('Drop', 'Drop')).toBe(null);
+    expect(renameFromDraft('  Drop  ', 'Drop')).toBe(null);
+    // The blank-to-blank case is the one an untouched, placeholder-only input
+    // produces on blur: nothing changed, so nothing is written.
+    expect(renameFromDraft('', '')).toBe(null);
+  });
+
+  test('a changed field writes the trimmed value', () => {
+    expect(renameFromDraft('  Chorus ', 'Drop')).toBe('Chorus');
   });
 });
