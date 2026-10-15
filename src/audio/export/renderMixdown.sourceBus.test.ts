@@ -3,7 +3,7 @@ import { OfflineAudioContext } from 'node-web-audio-api';
 import { MAX_STEPS_PER_BAR } from '@/utils/timeSignature';
 import type { BassStepChoice } from '@/data/bassPatterns';
 import type { BeatPattern } from '@/types';
-import { MIXDOWN_SAMPLE_RATE, renderMixdown } from './renderMixdown';
+import { MIXDOWN_SAMPLE_RATE, RENDER_WARMUP_SEC, renderMixdown } from './renderMixdown';
 import type { MixdownLoop } from '../playback/plan/songSnapshot';
 import {
   beatPatternFixture,
@@ -163,7 +163,7 @@ describe('renderMixdown: muted source buses', () => {
 });
 
 describe('renderMixdown: per-track sends', () => {
-  test("each pass installs its own loop's sends at its start: settle at 0, transition after", async () => {
+  test("each pass installs its own loop's sends at its start: the first settles, later ones transition", async () => {
     const calls: Parameters<AudioEngine['setSourceSends']>[] = [];
     const spy = spyOn(AudioEngine.prototype, 'setSourceSends').mockImplementation(
       (...args: Parameters<AudioEngine['setSourceSends']>) => {
@@ -181,11 +181,11 @@ describe('renderMixdown: per-track sends', () => {
       }));
       expect(result.ok).toBe(true);
       const songLevel = base.buses.find((bus) => bus.source === 'chord')!.sends;
-      // One-bar loops at 120 BPM: loop-b's pass starts at 2 s.
+      // One-bar loops at 120 BPM: loop-b's pass starts 2 s after the warm-up.
       expect(calls.filter(([source]) => source === 'chord')).toEqual([
         ['chord', songLevel, 0, 'settle'],
-        ['chord', { ...songLevel, reverb: 0.25 }, 0, 'settle'],
-        ['chord', { ...songLevel, reverb: 0.75 }, 2, 'transition'],
+        ['chord', { ...songLevel, reverb: 0.25 }, RENDER_WARMUP_SEC, 'settle'],
+        ['chord', { ...songLevel, reverb: 0.75 }, RENDER_WARMUP_SEC + 2, 'transition'],
       ]);
     } finally {
       spy.mockRestore();
@@ -204,10 +204,10 @@ describe('renderMixdown: per-track sends', () => {
         loops: [mixdownLoop({ id: 'loop-a' }), mixdownLoop({ id: 'loop-b' })],
       }));
       expect(result.ok).toBe(true);
-      // The time-0 settle must exist for every bus, or `every` below is vacuous.
+      // The settle must exist for every bus, or `every` below is vacuous.
       const settled = new Set(calls.map(([source]) => source));
       for (const bus of mixdownSnapshot().buses) expect(settled.has(bus.source)).toBe(true);
-      expect(calls.every(([, , time, mode]) => time === 0 && mode === 'settle')).toBe(true);
+      expect(calls.every(([, , time, mode]) => (time === 0 || time === RENDER_WARMUP_SEC) && mode === 'settle')).toBe(true);
     } finally {
       spy.mockRestore();
     }
@@ -236,8 +236,8 @@ describe('renderMixdown: per-track sends', () => {
         const songLevel = base.buses.find((bus) => bus.source === 'chord')!.sends;
         expect(calls.filter(([source]) => source === 'chord')).toEqual([
           ['chord', songLevel, 0, 'settle'],
-          ['chord', { ...songLevel, [effect]: 0.25 }, 0, 'settle'],
-          ['chord', { ...songLevel, [effect]: 0.75 }, 2, 'transition'],
+          ['chord', { ...songLevel, [effect]: 0.25 }, RENDER_WARMUP_SEC, 'settle'],
+          ['chord', { ...songLevel, [effect]: 0.75 }, RENDER_WARMUP_SEC + 2, 'transition'],
         ]);
       } finally {
         spy.mockRestore();

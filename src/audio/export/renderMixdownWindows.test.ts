@@ -2,7 +2,7 @@ import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { OfflineAudioContext } from 'node-web-audio-api';
 import { AudioEngine } from '../engine';
 import { renderCheckpoints, renderMixdown } from './renderMixdown';
-import { mixdownLoop, mixdownMelodyBar, mixdownSnapshot } from './mixdownFixture';
+import { FACTORY_EFFECTS, mixdownLoop, mixdownMelodyBar, mixdownSnapshot } from './mixdownFixture';
 
 /**
  * ADR-0061: the walk is performed in windows just ahead of the render
@@ -83,5 +83,35 @@ describe('renderMixdown: the graph is built just ahead of the render', () => {
       expect(at).toBeGreaterThanOrEqual(renderedTo);
       expect(at - renderedTo).toBeLessThanOrEqual(3);
     }
+  });
+});
+
+/** RMS of the first `seconds` of channel 0. */
+function openingRms(buffer: AudioBuffer, seconds: number): number {
+  const data = buffer.getChannelData(0);
+  const frames = Math.round(seconds * buffer.sampleRate);
+  let sum = 0;
+  for (let i = 0; i < frames; i += 1) sum += data[i] * data[i];
+  return Math.sqrt(sum / frames);
+}
+
+describe('renderMixdown: the master chain has settled before the song starts', () => {
+  test('master volume applies from the first sample', async () => {
+    const loops = [mixdownLoop({ leadMelodySteps: mixdownMelodyBar('E4') })];
+    // No dynamics, so the louder render is not limited and the ratio is the volume alone.
+    const effects = { ...FACTORY_EFFECTS, limiterEnabled: false, compressorEnabled: false };
+    const quiet = { ...mixdownSnapshot({ loops, effects }), masterVolume: 0.5 };
+    const full = { ...mixdownSnapshot({ loops, effects }), masterVolume: 1 };
+    const [half, unity] = await Promise.all([renderMixdown(quiet), renderMixdown(full)]);
+    if (!half.ok || !unity.ok) throw new Error('render failed');
+
+    expect(openingRms(half.buffer, 0.05) / openingRms(unity.buffer, 0.05)).toBeCloseTo(0.5, 2);
+  });
+
+  test('the warm-up is trimmed: the file is the song plus its tail, no longer', async () => {
+    const result = await renderMixdown(mixdownSnapshot({ loops: [mixdownLoop()] }));
+    if (!result.ok) throw new Error('render failed');
+    // One bar at 120 BPM (2 s) plus the factory tail, max(2, reverbDecay 1.5 + 1).
+    expect(result.buffer.length).toBe(2 * SR + Math.ceil(2.5 * SR));
   });
 });

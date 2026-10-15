@@ -3,6 +3,7 @@ import { OfflineAudioContext } from 'node-web-audio-api';
 import {
   MIXDOWN_SAMPLE_RATE,
   planLoopAudioAutomation,
+  RENDER_WARMUP_SEC,
   renderMixdown,
 } from './renderMixdown';
 import type { MixdownRenderProgress } from './renderResult';
@@ -47,7 +48,7 @@ import type { AppStore } from '@/store/types';
 (globalThis as { OfflineAudioContext?: unknown }).OfflineAudioContext = OfflineAudioContext;
 
 describe('planLoopAudioAutomation', () => {
-  test('positions every loop\'s Beat patch on its arrangement boundary', () => {
+  test('positions every loop\'s Beat patch on its arrangement boundary, after the song start', () => {
     const filtered = (cutoff: number, resonance: number) => {
       const base = beatParamsFixture();
       return { ...base, filter: { ...base.filter, cutoff, resonance } };
@@ -60,14 +61,14 @@ describe('planLoopAudioAutomation', () => {
     });
 
     expect(
-      planLoopAudioAutomation(snapshot, planArrangement(snapshot)).map((entry) => ({
+      planLoopAudioAutomation(snapshot, planArrangement(snapshot), 1).map((entry) => ({
         loopIndex: entry.loopIndex,
         time: entry.time,
         filter: entry.beatParams.filter,
       })),
     ).toEqual([
-      { loopIndex: 0, time: 0, filter: { cutoff: 500, resonance: 2, type: 'lowpass' } },
-      { loopIndex: 1, time: 2, filter: { cutoff: 12000, resonance: 1, type: 'lowpass' } },
+      { loopIndex: 0, time: 1, filter: { cutoff: 500, resonance: 2, type: 'lowpass' } },
+      { loopIndex: 1, time: 3, filter: { cutoff: 12000, resonance: 1, type: 'lowpass' } },
     ]);
   });
 });
@@ -653,8 +654,8 @@ describe('renderMixdown: every loop plays its OWN Beat patch', () => {
       const hits = log.filter((e): e is Extract<Entry, { kind: 'hit' }> => e.kind === 'hit');
       expect(hits.length).toBeGreaterThan(2);
 
-      // One bar of 4/4 at 120 bpm: the second loop starts at 2 s.
-      const secondLoopStart = 16 * stepDurationSec(120);
+      // One bar of 4/4 at 120 bpm: the second loop starts 2 s after the warm-up.
+      const secondLoopStart = RENDER_WARMUP_SEC + 16 * stepDurationSec(120);
       const firstIndex = log.findIndex((e) => e.kind === 'hit');
       const secondIndex = log.findIndex((e) => e.kind === 'hit' && e.time >= secondLoopStart - 1e-9);
       expect(firstIndex).toBeGreaterThanOrEqual(0);

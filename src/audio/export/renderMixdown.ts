@@ -53,6 +53,7 @@ import { encodeWav } from '@/utils/encodeWav';
 import { applyBeatParams } from '../beatAdapter';
 import { SEND_EFFECTS, type BeatParams, type TrackSendLevels } from '@/types';
 import { synthReleaseSeconds } from '@/utils/synthPatch';
+import { EFFECT_LIMITS } from '../effectLimits';
 import {
   RENDER_CANCELLED,
   WALK_YIELD_INTERVAL_STEPS,
@@ -67,6 +68,19 @@ export const MIXDOWN_SAMPLE_RATE = 44100;
 const MIXDOWN_CHANNELS = 2;
 /** The floor on the tail: release + reverb. Never shorter than this. */
 const MIXDOWN_TAIL_SEC = 2;
+/**
+ * Silent context time before the song's first sample, rendered and then
+ * trimmed off (ADR-0062). A browser's DynamicsCompressorNode starts in a state
+ * it releases from with context time, not with input: signal arriving at time
+ * zero faded in over about the release time, even 17 dB under the threshold,
+ * and was clean from one release time on. The longest release a project can
+ * set is therefore enough, and it also outlasts the master chain's own 50 ms
+ * glides from each node's default to the project's value.
+ */
+export const RENDER_WARMUP_SEC = Math.max(
+  EFFECT_LIMITS.compressorRelease.max,
+  EFFECT_LIMITS.limiterRelease.max,
+);
 
 /**
  * The buffer is returned BESIDE the blob, not instead of it: the spec's own
@@ -84,15 +98,20 @@ export interface LoopAudioAutomation {
   beatVoiceGains: MixdownBeatVoiceGain[];
 }
 
-/** Per-loop mixer/filter changes positioned on the offline audio timeline. */
+/**
+ * Per-loop mixer/filter changes positioned on the offline audio timeline,
+ * where the song starts at `songStartSec`.
+ */
 export function planLoopAudioAutomation(
   snapshot: MixdownSnapshot,
   plan: ArrangementPlan,
+  songStartSec: number,
 ): LoopAudioAutomation[] {
   const stepDur = stepDurationSec(snapshot.bpm);
   return plan.passes.map((pass) => {
     const { buses, beatParams, beatVoiceGains } = snapshot.loops[pass.loopIndex];
-    return { loopIndex: pass.loopIndex, time: pass.startStep * stepDur, buses, beatParams, beatVoiceGains };
+    const time = songStartSec + pass.startStep * stepDur;
+    return { loopIndex: pass.loopIndex, time, buses, beatParams, beatVoiceGains };
   });
 }
 
@@ -136,22 +155,22 @@ function applyLoopAudioState(
       bus.source,
       { gain: bus.gain, muted: bus.muted },
       state.time,
-      state.time === 0 ? 'settle' : 'transition',
+      previous === undefined ? 'settle' : 'transition',
     );
     // A per-loop send change lands on this pass's first sample, through its
     // own method, never setSourceState (C2). Unlike bus state it is pushed
-    // after time zero only when it differs from the previous pass: an
+    // after the first pass only when it differs from the previous pass: an
     // equal-value transition is silent but was observed not to be
     // byte-neutral: pushing it on every pass changed the golden WAV. The
     // cause is inferred, not confirmed — likely a held-at-0 ramp on the Beat
     // bus's delay send node.
     const before = previous?.buses.find((row) => row.source === bus.source)?.sends;
-    if (state.time === 0 || !sameSendLevels(bus.sends, before)) {
+    if (previous === undefined || !sameSendLevels(bus.sends, before)) {
       engine.setSourceSends(
         bus.source,
         bus.sends,
         state.time,
-        state.time === 0 ? 'settle' : 'transition',
+        previous === undefined ? 'settle' : 'transition',
       );
     }
   }
@@ -178,16 +197,21 @@ function applyLoopAudioState(
  * the release is computed at perform time from the patch. Returns the engine
  * source the event played on — bookkeeping only, no engine call, no RNG.
  */
-function performTimelineEvent(engine: AudioEngine, snapshot: MixdownSnapshot, e: TimelineEvent): string {
+function performTimelineEvent(
+  engine: AudioEngine,
+  snapshot: MixdownSnapshot,
+  e: TimelineEvent,
+  songStartSec: number,
+): string {
   if (e.kind === 'drum') {
-    engine.triggerDrum(e.voice, e.velocity, e.timeSec);
+    engine.triggerDrum(e.voice, e.velocity, songStartSec + e.timeSec);
     return 'sequencer';
   }
   const { params, source } = songTrackVoice(snapshot.loops[e.loopIndex], e.track);
   const voiceId = engine.triggerSynthNoteOn(
-    noteFrequency(e.noteName), params, e.velocity, e.startSec, source, 1, 'sequencer',
+    noteFrequency(e.noteName), params, e.velocity, songStartSec + e.startSec, source, 1, 'sequencer',
   );
-  if (voiceId) engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(params), e.endSec);
+  if (voiceId) engine.triggerSynthNoteOff(voiceId, synthReleaseSeconds(params), songStartSec + e.endSec);
   return source;
 }
 
@@ -216,7 +240,8 @@ const RENDER_QUANTUM_FRAMES = 128;
 interface ArrangementScheduler {
   /**
    * Performs walk items up to the first step that starts at or after
-   * `horizonSec`. Resolves true when the signal aborted mid-walk.
+   * `horizonSec` on the render timeline. Resolves true when the signal
+   * aborted mid-walk.
    */
   scheduleUntil(horizonSec: number): Promise<boolean>;
   /** Cuts the graph of every synth voice whose sources stopped at or before `renderedTo`. */
@@ -237,9 +262,10 @@ function createArrangementScheduler(
   snapshot: MixdownSnapshot,
   plan: ArrangementPlan,
   walk: Generator<SongWalkItem, void, undefined>,
+  songStartSec: number,
   signal?: AbortSignal,
 ): ArrangementScheduler {
-  const loopAutomation = planLoopAudioAutomation(snapshot, plan);
+  const loopAutomation = planLoopAudioAutomation(snapshot, plan, songStartSec);
   const stepDur = stepDurationSec(snapshot.bpm);
   const sourcesWithEvents = new Set<string>();
   let stepsSinceYield = 0;
@@ -256,9 +282,9 @@ function createArrangementScheduler(
           await yieldPreservingRandomStream();
           if (signal?.aborted) return true;
         }
-        if ((item.step + 1) * stepDur >= horizonSec) return false;
+        if (songStartSec + (item.step + 1) * stepDur >= horizonSec) return false;
       } else {
-        sourcesWithEvents.add(performTimelineEvent(engine, snapshot, item));
+        sourcesWithEvents.add(performTimelineEvent(engine, snapshot, item, songStartSec));
       }
     }
     return false;
@@ -363,26 +389,43 @@ async function renderInWindows(
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
 
+/** The rendered buffer without its first `warmupSamples` frames: the song from its first sample. */
+function trimWarmup(ctx: OfflineAudioContext, rendered: AudioBuffer, warmupSamples: number): AudioBuffer {
+  const trimmed = ctx.createBuffer(rendered.numberOfChannels, rendered.length - warmupSamples, rendered.sampleRate);
+  for (let channel = 0; channel < rendered.numberOfChannels; channel += 1) {
+    trimmed.copyToChannel(rendered.getChannelData(channel).subarray(warmupSamples), channel);
+  }
+  return trimmed;
+}
+
 /**
- * Keeps every source node the render creates reachable until the render ends.
- * The engine forgets a finished voice as soon as its release is booked, and
- * node-web-audio-api (the test and golden context) frees a node's native half
- * when its JS wrapper is collected. Once voices are built mid-render, the
- * collector runs between windows and the output depended on when it did
- * (ADR-0061). A browser keeps a scheduled node alive by itself, so this costs
- * it only the wrappers.
+ * Keeps every object the render's context creates reachable until the render
+ * ends, by wrapping each of its `create*` factories. The engine drops its
+ * references to a voice once the voice is released and again once it is cut,
+ * and node-web-audio-api (the test and golden context) frees a node's native
+ * half when its JS wrapper is collected. Once voices are built and cut
+ * mid-render, the collector runs between windows and the output depended on
+ * when it did (ADR-0061). Every factory rather than a list, so a node type the
+ * engine starts using later is held too. A browser keeps a scheduled node
+ * alive by itself, so this costs it only the wrappers.
  */
-function holdSourceNodes(ctx: OfflineAudioContext): AudioScheduledSourceNode[] {
-  const held: AudioScheduledSourceNode[] = [];
-  const createOscillator = ctx.createOscillator.bind(ctx);
-  const createBufferSource = ctx.createBufferSource.bind(ctx);
-  const createConstantSource = ctx.createConstantSource.bind(ctx);
-  ctx.createOscillator = () => keep(createOscillator());
-  ctx.createBufferSource = () => keep(createBufferSource());
-  ctx.createConstantSource = () => keep(createConstantSource());
-  function keep<T extends AudioScheduledSourceNode>(node: T): T {
-    held.push(node);
-    return node;
+function holdRenderNodes(ctx: OfflineAudioContext): unknown[] {
+  const held: unknown[] = [];
+  const factories = new Set<string>();
+  for (let proto: object | null = Object.getPrototypeOf(ctx); proto; proto = Object.getPrototypeOf(proto)) {
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name.startsWith('create')) factories.add(name);
+    }
+  }
+  const target = ctx as unknown as Record<string, unknown>;
+  for (const name of factories) {
+    const create = target[name];
+    if (typeof create !== 'function') continue;
+    target[name] = (...args: unknown[]) => {
+      const made: unknown = create.apply(ctx, args);
+      held.push(made);
+      return made;
+    };
   }
   return held;
 }
@@ -460,9 +503,10 @@ export async function renderSongBuffer(
     // The tail has to cover the longest release AND the reverb it feeds, or a
     // song ending on a held chord is cut off mid-decay.
     const tailSec = Math.max(MIXDOWN_TAIL_SEC, snapshot.effects.reverbDecay + 1);
+    const warmupSamples = Math.round(RENDER_WARMUP_SEC * MIXDOWN_SAMPLE_RATE);
     const ctx = new Offline(
       layout.channels,
-      bodySamples + Math.ceil(tailSec * MIXDOWN_SAMPLE_RATE),
+      warmupSamples + bodySamples + Math.ceil(tailSec * MIXDOWN_SAMPLE_RATE),
       MIXDOWN_SAMPLE_RATE,
     );
 
@@ -472,7 +516,7 @@ export async function renderSongBuffer(
     // default — so seeding only applyMasterState and the walk would leave an
     // unseeded impulse in the graph for the store's default project, and two
     // renders of it would differ.
-    const heldSources = holdSourceNodes(ctx);
+    const heldNodes = holdRenderNodes(ctx);
     const rng = mulberry32(MIXDOWN_SEED);
     const scheduler = await withRandomSource(rng, () => {
       // The mixdown passes no options: createRenderEngine(ctx), as the golden recorded (R309).
@@ -481,12 +525,13 @@ export async function renderSongBuffer(
         : createRenderEngine(ctx);
       applyMasterState(engine, snapshot);
       layout.wire?.(engine, ctx);
-      return createArrangementScheduler(engine, snapshot, plan, walkSongTimeline(snapshot, plan), signal);
+      const walk = walkSongTimeline(snapshot, plan);
+      return createArrangementScheduler(engine, snapshot, plan, walk, warmupSamples / MIXDOWN_SAMPLE_RATE, signal);
     });
     const rendered = await renderInWindows(ctx, scheduler, rng, report, signal);
-    heldSources.length = 0;
+    heldNodes.length = 0;
     if (rendered.cancelled) return RENDER_CANCELLED;
-    const { buffer } = rendered;
+    const buffer = trimWarmup(ctx, rendered.buffer, warmupSamples);
     // Yield between the terminal render state and encoding so both named
     // phases can be painted instead of collapsing into one React commit.
     report({ phase: 'rendering', percent: 100 });
