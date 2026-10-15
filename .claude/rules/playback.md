@@ -86,6 +86,12 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 
 ([ADR-0034](../../docs/decisions/0034-pure-song-event-timeline.md))
 
+- The offline render performs the song walk in windows at `renderCheckpoints`, each up to the next checkpoint plus `SCHEDULE_LOOKAHEAD_SEC`; only a host without `suspend`/`resume` performs it before `startRendering`. Progress is published from the same checkpoints. <!-- R374 -->
+- One seeded generator spans the whole render and is installed only around each window's synchronous performance (`withRandomSource`), never across the render's awaits. <!-- R375 -->
+- The offline render holds every source node it creates until the render ends (`holdSourceNodes`). <!-- R377 -->
+
+([ADR-0061](../../docs/decisions/0061-windowed-offline-render.md))
+
 - Sends reach the engine only through `engineSync`'s per-bus `trackSends` subscription (plus its settle pushes), the drag preview `store/trackSendsPreview.ts`, `renderMixdown`'s per-pass `setSourceSends` beside `setSourceState`, and `presetPreview`'s unity push for the audition bus `'preview'` on every audition. Sends never read solo or audibility. <!-- R306 -->
 
 ([ADR-0037](../../docs/decisions/0037-per-track-sends.md))
@@ -115,6 +121,9 @@ The engine singleton, controllers, the shared clock, the store → engine bridge
 - Collecting the song walk into an array before performing it, or reordering its per-step emit order <!-- R288 -->
 - A runtime import from `plan/` that reaches `audio/engine` or `playbackEngine` <!-- R289 -->
 - Deciding drum voices or velocity outside `planBeatStep` <!-- R290 -->
+- Performing the whole song walk before `startRendering` on a host that can suspend, or publishing progress from a second set of suspends <!-- R374 -->
+- The seeded generator installed across a render await <!-- R375 -->
+- Leaving a render-built source node to the garbage collector <!-- R377 -->
 - Sends routed through `setSourceState`; a component calling the send preview for anything but a drag <!-- R306 -->
 - A lane that sounds because its grid is mounted <!-- R040 -->
 - A view calling a transport controller, or a controller mounted anywhere but `PlaybackHost` <!-- R312 -->

@@ -335,6 +335,15 @@ export class AudioEngine {
   }
 
   /**
+   * Render engines only: cuts every synth voice whose sources stopped at or
+   * before `renderedTo`. The offline renderer calls it while its timeline is
+   * suspended there (ADR-0061).
+   */
+  disconnectEndedVoices(renderedTo: number): void {
+    this.session?.synthManager.disconnectEndedOffline(renderedTo);
+  }
+
+  /**
    * Releases what ONE player is holding on ONE bus, leaving every other
    * player's voices sounding — the arp's key-up. A hit that player has already
    * booked a release for is left alone, so a key-up never cancels notes the

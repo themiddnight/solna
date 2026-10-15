@@ -45,7 +45,7 @@ import {
   type SongWalkItem,
   type TimelineEvent,
 } from '../playback/plan/songTimeline';
-import { MIXDOWN_SEED, withSeededRandom, yieldPreservingRandomStream } from '../rng';
+import { MIXDOWN_SEED, mulberry32, withRandomSource, yieldPreservingRandomStream } from '../rng';
 import { noteFrequency } from '@/utils/musicTheory';
 import { stepDurationSec } from '@/utils/tempo';
 import { getMeter } from '@/utils/timeSignature';
@@ -191,67 +191,200 @@ function performTimelineEvent(engine: AudioEngine, snapshot: MixdownSnapshot, e:
   return source;
 }
 
+/** The longest render span between two checkpoints. */
+const MAX_CHECKPOINT_SPACING_SEC = 1;
+/**
+ * How far past the next checkpoint the walk is performed. Two spacings, so a
+ * checkpoint the host fails to land (node-web-audio-api occasionally rejects
+ * one) — even two in a row — still leaves every item built before its time:
+ * the next checkpoint that does land finds its window already started ahead
+ * of the render position. It also has to exceed how early an event can start
+ * before its own step (no event does today).
+ */
+const SCHEDULE_LOOKAHEAD_SEC = 2 * MAX_CHECKPOINT_SPACING_SEC;
+/**
+ * How long after its sources stop a synth voice stays attached. Its filter
+ * rings on past that instant; cutting it at the first checkpoint after would
+ * make the cut, and so the bytes, depend on which checkpoints the host landed.
+ */
+const ENDED_VOICE_MARGIN_SEC = 1;
+/** Progress lands at least this often, as a fraction of the render. */
+const MIN_PROGRESS_FRACTION = 0.02;
+/** Web Audio renders in 128-frame quanta. */
+const RENDER_QUANTUM_FRAMES = 128;
+
+interface ArrangementScheduler {
+  /**
+   * Performs walk items up to the first step that starts at or after
+   * `horizonSec`. Resolves true when the signal aborted mid-walk.
+   */
+  scheduleUntil(horizonSec: number): Promise<boolean>;
+  /** Cuts the graph of every synth voice whose sources stopped at or before `renderedTo`. */
+  disconnectEndedBefore(renderedTo: number): void;
+  readonly sourcesWithEvents: ReadonlySet<string>;
+}
+
 /**
  * Performs the song walk item by item. Never collect the walk first (R288):
  * the planners (arp 'random') and the engine (drum noise offsets, lazy noise
  * and sample-and-hold buffers) draw from one seeded stream, and only
  * performing each item before resuming the walk keeps today's interleaving —
- * and so the WAV — unchanged.
+ * and so the WAV — unchanged. The walk is performed in windows (ADR-0061),
+ * but one generator spans them all, so the item order does not change.
  */
-async function scheduleArrangement(
+function createArrangementScheduler(
   engine: AudioEngine,
   snapshot: MixdownSnapshot,
   plan: ArrangementPlan,
   walk: Generator<SongWalkItem, void, undefined>,
   signal?: AbortSignal,
-): Promise<{ cancelled: boolean; sourcesWithEvents: Set<string> }> {
+): ArrangementScheduler {
   const loopAutomation = planLoopAudioAutomation(snapshot, plan);
-  let stepsSinceYield = 0;
+  const stepDur = stepDurationSec(snapshot.bpm);
   const sourcesWithEvents = new Set<string>();
-  for (let next = walk.next(); !next.done; next = walk.next()) {
-    const item = next.value;
-    if (item.kind === 'pass') {
-      applyLoopAudioState(engine, loopAutomation[item.passIndex], loopAutomation[item.passIndex - 1]);
-    } else if (item.kind === 'stepEnd') {
-      stepsSinceYield += 1;
-      if (stepsSinceYield >= WALK_YIELD_INTERVAL_STEPS) {
-        stepsSinceYield = 0;
-        await yieldPreservingRandomStream();
-        if (signal?.aborted) return { cancelled: true, sourcesWithEvents };
+  let stepsSinceYield = 0;
+
+  async function scheduleUntil(horizonSec: number): Promise<boolean> {
+    for (let next = walk.next(); !next.done; next = walk.next()) {
+      const item = next.value;
+      if (item.kind === 'pass') {
+        applyLoopAudioState(engine, loopAutomation[item.passIndex], loopAutomation[item.passIndex - 1]);
+      } else if (item.kind === 'stepEnd') {
+        stepsSinceYield += 1;
+        if (stepsSinceYield >= WALK_YIELD_INTERVAL_STEPS) {
+          stepsSinceYield = 0;
+          await yieldPreservingRandomStream();
+          if (signal?.aborted) return true;
+        }
+        if ((item.step + 1) * stepDur >= horizonSec) return false;
+      } else {
+        sourcesWithEvents.add(performTimelineEvent(engine, snapshot, item));
       }
-    } else {
-      sourcesWithEvents.add(performTimelineEvent(engine, snapshot, item));
     }
+    return false;
   }
-  return { cancelled: false, sourcesWithEvents };
+
+  return {
+    scheduleUntil,
+    disconnectEndedBefore: (renderedTo) => engine.disconnectEndedVoices(renderedTo),
+    sourcesWithEvents,
+  };
+}
+
+/**
+ * The render positions, in seconds, where the timeline pauses to perform the
+ * next window of the walk and publish progress. A suspend lands on a quantum
+ * boundary and two in one quantum reject, so each checkpoint sits in the
+ * middle of its own quantum: a host that rounds the time down and one that
+ * rounds it up (node-web-audio-api) both map distinct checkpoints to distinct
+ * quanta.
+ */
+export function renderCheckpoints(lengthFrames: number, sampleRate: number): number[] {
+  const durationSec = lengthFrames / sampleRate;
+  const spacingSec = Math.min(MAX_CHECKPOINT_SPACING_SEC, durationSec * MIN_PROGRESS_FRACTION);
+  const times: number[] = [];
+  let lastFrame = 0;
+  for (let i = 1; i * spacingSec < durationSec; i += 1) {
+    const frame = Math.floor((i * spacingSec * sampleRate) / RENDER_QUANTUM_FRAMES) * RENDER_QUANTUM_FRAMES;
+    if (frame <= lastFrame || frame >= lengthFrames) continue;
+    lastFrame = frame;
+    times.push((frame + RENDER_QUANTUM_FRAMES / 2) / sampleRate);
+  }
+  return times;
+}
+
+type WindowedRender = { cancelled: true } | { cancelled: false; buffer: AudioBuffer };
+
+/**
+ * Builds the graph just ahead of the render position instead of all of it
+ * before sample zero (ADR-0061). A voice's chain is processed from the moment
+ * it is built until it ends, so building the whole song first made every
+ * quantum pay for every note still to come, and render time grew with the
+ * square of the song's length.
+ *
+ * Each checkpoint suspends the timeline, publishes its position, performs the
+ * walk up to the next checkpoint plus the lookahead, then resumes. The seeded
+ * generator is installed only around those bursts, never across the render's
+ * own awaits. A host without suspend/resume performs the whole walk first and
+ * keeps the indeterminate spinner.
+ */
+async function renderInWindows(
+  ctx: OfflineAudioContext,
+  scheduler: ArrangementScheduler,
+  rng: () => number,
+  report: MixdownProgressReporter,
+  signal?: AbortSignal,
+): Promise<WindowedRender> {
+  const perform = (horizonSec: number) => withRandomSource(rng, () => scheduler.scheduleUntil(horizonSec));
+  const windowed = typeof ctx.suspend === 'function' && typeof ctx.resume === 'function';
+  const durationSec = ctx.length / ctx.sampleRate;
+  const checkpoints = windowed ? renderCheckpoints(ctx.length, ctx.sampleRate) : [];
+  const horizonAt = (index: number) => windowed
+    ? (checkpoints[index] ?? durationSec) + SCHEDULE_LOOKAHEAD_SEC
+    : Infinity;
+
+  if (await perform(horizonAt(0))) return { cancelled: true };
+  if (signal?.aborted) return { cancelled: true };
+
+  let cancelled = false;
+  let failure: unknown = null;
+  let lastPercent = 1;
+  checkpoints.forEach((time, index) => {
+    const onCheckpoint = async () => {
+      try {
+        const percent = Math.floor((time / durationSec) * 100);
+        if (percent > lastPercent) {
+          lastPercent = percent;
+          report({ phase: 'rendering', percent });
+        }
+        cancelled ||= signal?.aborted === true;
+        if (!cancelled && failure === null) {
+          scheduler.disconnectEndedBefore(time - ENDED_VOICE_MARGIN_SEC);
+          cancelled = await perform(horizonAt(index + 1));
+        }
+      } catch (err) {
+        failure = err;
+      } finally {
+        await ctx.resume().catch((err: unknown) => {
+          failure ??= err;
+        });
+      }
+    };
+    void ctx.suspend(time).then(onCheckpoint, () => {
+      // A lost checkpoint costs one progress update; SCHEDULE_LOOKAHEAD_SEC covers its window.
+    });
+  });
+
+  report({ phase: 'rendering', percent: 1 });
+  const buffer = await ctx.startRendering();
+  if (failure !== null) throw failure;
+  return cancelled ? { cancelled: true } : { cancelled: false, buffer };
 }
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
 
 /**
- * Pause the offline timeline at two-percent checkpoints, publish its position,
- * then immediately resume. Older implementations without suspend/resume simply
- * keep the indeterminate spinner shown by the caller.
+ * Keeps every source node the render creates reachable until the render ends.
+ * The engine forgets a finished voice as soon as its release is booked, and
+ * node-web-audio-api (the test and golden context) frees a node's native half
+ * when its JS wrapper is collected. Once voices are built mid-render, the
+ * collector runs between windows and the output depended on when it did
+ * (ADR-0061). A browser keeps a scheduled node alive by itself, so this costs
+ * it only the wrappers.
  */
-function scheduleProgressCheckpoints(
-  ctx: OfflineAudioContext,
-  report: MixdownProgressReporter,
-): void {
-  if (typeof ctx.suspend !== 'function' || typeof ctx.resume !== 'function') return;
-
-  const duration = ctx.length / ctx.sampleRate;
-  for (let timelinePercent = 2; timelinePercent < 100; timelinePercent += 2) {
-    const ratio = timelinePercent / 100;
-    void ctx
-      .suspend(duration * ratio)
-      .then(() => {
-        report({ phase: 'rendering', percent: timelinePercent });
-        return ctx.resume();
-      })
-      .catch(() => {
-        // A rejected checkpoint is a progress degradation, not a render error.
-      });
+function holdSourceNodes(ctx: OfflineAudioContext): AudioScheduledSourceNode[] {
+  const held: AudioScheduledSourceNode[] = [];
+  const createOscillator = ctx.createOscillator.bind(ctx);
+  const createBufferSource = ctx.createBufferSource.bind(ctx);
+  const createConstantSource = ctx.createConstantSource.bind(ctx);
+  ctx.createOscillator = () => keep(createOscillator());
+  ctx.createBufferSource = () => keep(createBufferSource());
+  ctx.createConstantSource = () => keep(createConstantSource());
+  function keep<T extends AudioScheduledSourceNode>(node: T): T {
+    held.push(node);
+    return node;
   }
+  return held;
 }
 
 /**
@@ -293,13 +426,12 @@ type SongBufferResult = { ok: true; buffer: AudioBuffer; sourcesWithEvents: Read
  * failure anywhere becomes a failed result with a reason rather than an
  * unhandled rejection crossing into a click handler with no message for the user.
  *
- * The seeded generator is installed for the whole graph-building phase — the
- * engine construction (`setupMasterChain` builds the reverb impulse at the
- * DEFAULT decay 2.0), the master-state settle, `layout.wire` and the
- * scheduling walk — because the reverb impulse, the noise-voice buffers and the
- * arp's `'random'` note order all read from it as they are created, which
- * happens while the graph is being built and not while it renders. It is
- * restored in a `finally` on every exit path, including the throwing one, so a
+ * One seeded generator spans the whole graph build: the engine construction
+ * (`setupMasterChain` builds the reverb impulse at the DEFAULT decay 2.0), the
+ * master-state settle, `layout.wire` and every window of the scheduling walk,
+ * because the reverb impulse, the noise-voice buffers and the arp's `'random'`
+ * note order all read from it as they are created. It is installed only
+ * around those synchronous bursts and restored in a `finally` after each, so a
  * leaked source cannot make the rest of the session reproducible.
  *
  * `wire` runs AFTER `applyMasterState`, so the six buses already exist in the
@@ -337,29 +469,30 @@ export async function renderSongBuffer(
     // Seeded BEFORE createRenderEngine: setupMasterChain (run inside
     // bindContext) builds the reverb impulse at the DEFAULT decay 2.0, and
     // setReverbDecay early-returns when the snapshot's decay equals that
-    // default — so seeding only applyMasterState + scheduleArrangement would
-    // leave an unseeded impulse in the graph for the store's default project,
-    // and two renders of it would differ.
-    const scheduled = await withSeededRandom(MIXDOWN_SEED, async () => {
+    // default — so seeding only applyMasterState and the walk would leave an
+    // unseeded impulse in the graph for the store's default project, and two
+    // renders of it would differ.
+    const heldSources = holdSourceNodes(ctx);
+    const rng = mulberry32(MIXDOWN_SEED);
+    const scheduler = await withRandomSource(rng, () => {
       // The mixdown passes no options: createRenderEngine(ctx), as the golden recorded (R309).
       const engine = layout.detachMaster
         ? createRenderEngine(ctx, { masterOutput: ctx.createGain() })
         : createRenderEngine(ctx);
       applyMasterState(engine, snapshot);
       layout.wire?.(engine, ctx);
-      return scheduleArrangement(engine, snapshot, plan, walkSongTimeline(snapshot, plan), signal);
+      return createArrangementScheduler(engine, snapshot, plan, walkSongTimeline(snapshot, plan), signal);
     });
-    if (scheduled.cancelled) return RENDER_CANCELLED;
-
-    report({ phase: 'rendering', percent: 1 });
-    scheduleProgressCheckpoints(ctx, report);
-    const buffer = await ctx.startRendering();
+    const rendered = await renderInWindows(ctx, scheduler, rng, report, signal);
+    heldSources.length = 0;
+    if (rendered.cancelled) return RENDER_CANCELLED;
+    const { buffer } = rendered;
     // Yield between the terminal render state and encoding so both named
     // phases can be painted instead of collapsing into one React commit.
     report({ phase: 'rendering', percent: 100 });
     await nextTask();
     if (signal?.aborted) return RENDER_CANCELLED;
-    return { ok: true, buffer, sourcesWithEvents: scheduled.sourcesWithEvents };
+    return { ok: true, buffer, sourcesWithEvents: scheduler.sourcesWithEvents };
   } catch (err) {
     return renderFailed(err);
   }

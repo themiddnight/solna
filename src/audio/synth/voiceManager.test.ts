@@ -589,7 +589,7 @@ describe('SynthVoiceManager teardown lifecycle', () => {
     expect(created[0].disconnects).toBe(1);
   });
 
-  test('an offline render stops on the audio clock and never disconnects', () => {
+  test('an offline render stops on the audio clock and disconnects only when the renderer has passed the end', () => {
     const ctx = fakeVoiceContext() as ReturnType<typeof fakeVoiceContext> & { startRendering: () => void };
     ctx.startRendering = () => {};
     const output = ctx.createGain() as unknown as AudioNode;
@@ -612,6 +612,13 @@ describe('SynthVoiceManager teardown lifecycle', () => {
     expect(factory.created[0].disconnects).toBe(0);
     expect(timers).toEqual([]);
     expect(manager.liveVoiceCount()).toBe(0);
+
+    manager.disconnectEndedOffline(2.3);
+    expect(factory.created[0].disconnects).toBe(0);
+    manager.disconnectEndedOffline(2.4);
+    expect(factory.created[0].disconnects).toBe(1);
+    manager.disconnectEndedOffline(10);
+    expect(factory.created[0].disconnects).toBe(1);
   });
 
   test('a teardown already booked is cancelled and re-armed when the voice is stolen', () => {
