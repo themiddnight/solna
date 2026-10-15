@@ -31,10 +31,11 @@ import { createVoiceIdAllocator, type VoiceId } from './voiceId';
  * 3. **Teardown is two stages, because `disconnect()` cannot be scheduled.**
  *    A release schedules the amp envelope and the source stop on the AUDIO
  *    clock, and cuts the graph only once the tail has actually elapsed in
- *    WALL time. Under an `OfflineAudioContext` the graph is never cut at all:
- *    an offline render may run slower than wall time, so a timer would
- *    disconnect a voice before the offline timeline reached it — the whole
- *    throwaway context is discarded when the render ends instead.
+ *    WALL time. Under an `OfflineAudioContext` no timer cuts it: an offline
+ *    render may run slower than wall time, so a timer would disconnect a
+ *    voice before the offline timeline reached it. The renderer cuts it
+ *    instead, through `disconnectEndedOffline`, at a checkpoint where the
+ *    render is suspended past the voice's end (ADR-0061).
  * 4. **Every high-frequency thing here stays here.** Held notes, the mono
  *    stack and the per-source budget are audio-rate state; `src/audio/` may
  *    not import `src/store/`, and publishing any of this to a slice would
@@ -291,6 +292,8 @@ export class SynthVoiceManager {
   private readonly nextVoiceId = createVoiceIdAllocator();
   private readonly schedule: TeardownSchedule;
   private readonly offline: boolean;
+  /** Offline only: forgotten groups whose graph is still attached, with the instant their sources stop. */
+  private readonly endedOffline: { group: VoiceGroup; endsAt: number }[] = [];
 
   constructor(options: SynthVoiceManagerOptions) {
     const { ctx, ...rest } = options;
@@ -776,10 +779,30 @@ export class SynthVoiceManager {
       // SCHEDULED and a disconnect would cut the graph before sample zero.
       for (const voice of group.voices) this.options.lfoBank?.retireVoiceOffline(voice, endsAt);
       this.forgetGroup(group);
+      this.endedOffline.push({ group, endsAt });
       return;
     }
     const delayMs = Math.max(0, (endsAt - (this.ctx?.currentTime ?? endsAt)) * 1000);
     group.cancelTeardown = this.schedule(() => this.finishTeardown(group), delayMs);
+  }
+
+  /**
+   * Offline only: cuts the graph of every forgotten group whose sources
+   * stopped at or before `renderedTo`, the instant the caller's offline render
+   * is suspended at. A cut chain stops costing the renderer a pass every
+   * quantum; left attached, the dead chains of every earlier note made render
+   * time grow with the song (ADR-0061).
+   */
+  disconnectEndedOffline(renderedTo: number): void {
+    let kept = 0;
+    for (const entry of this.endedOffline) {
+      if (entry.endsAt <= renderedTo) {
+        for (const voice of entry.group.voices) voice.disconnect();
+      } else {
+        this.endedOffline[kept++] = entry;
+      }
+    }
+    this.endedOffline.length = kept;
   }
 
   private finishTeardown(group: VoiceGroup): void {

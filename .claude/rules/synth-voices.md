@@ -62,6 +62,11 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 
 ([ADR-0021](../../docs/decisions/0021-shared-live-and-offline-render.md))
 
+- Offline, an ended synth voice is cut only by the renderer (`disconnectEndedVoices`), at a checkpoint at least `ENDED_VOICE_MARGIN_SEC` past its end; no timer cuts an offline voice. <!-- R376 -->
+- A drum voice's reverb send is seeded from the track's last-set level, never from the track node's `gain.value`. <!-- R378 -->
+
+([ADR-0061](../../docs/decisions/0061-windowed-offline-render.md))
+
 ## Master sends
 
 - Each source bus reaches the three send gates only through its own three send nodes (`sourceSends.ts`), taken after the fader and mute. No bus connects straight to a gate, and there is no per-source exclusion set — the one exception is R304. `getSourceBus` requires the gates and throws without them. The audition bus `'preview'` is not a track and is told unity sends by `presetPreview.ts`. <!-- R303 -->
@@ -92,5 +97,7 @@ Voice identity and ownership, the engine's frequency boundary, polyphony gain, v
 - Treating `maxVoicesPerSource` as a leak guard <!-- R205 -->
 - `ctx.currentTime` read in the voice module <!-- R207 -->
 - A render-only copy of shared audio code <!-- R209 -->
+- A timer cutting an offline voice, or a cut sooner than `ENDED_VOICE_MARGIN_SEC` past its end <!-- R376 -->
+- Seeding a drum reverb send from `gain.value` <!-- R378 -->
 - A bus→gate edge, or a per-source send exclusion set <!-- R303 -->
 - Feeding Beat reverb from the bus, or folding the Beat feed into `reverbSendGate` <!-- R304 -->

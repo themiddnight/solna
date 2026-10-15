@@ -99,7 +99,17 @@ export const MIXDOWN_SEED = 0x6d69_7864; // 'mixd' ascii-ish, arbitrary
  * has to remember.
  */
 export async function withSeededRandom<T>(seed: number, run: () => T | Promise<T>): Promise<T> {
-  setRandomSource(mulberry32(seed));
+  return withRandomSource(mulberry32(seed), run);
+}
+
+/**
+ * `withSeededRandom` for a caller that owns its generator: installs `source`,
+ * runs `run`, restores the default on every exit path. A render that draws in
+ * several separate bursts passes the SAME generator to each, so the bursts
+ * continue one stream instead of each restarting it.
+ */
+export async function withRandomSource<T>(source: () => number, run: () => T | Promise<T>): Promise<T> {
+  setRandomSource(source);
   try {
     return await run();
   } finally {

@@ -370,12 +370,15 @@ export class DrumSynth {
    * The track fader sits BEFORE the wet/dry split: a track fader must move the
    * reverb with the dry signal, or pulling a track down leaves its tail up.
    * The dry path routes THROUGH the node; the wet send's gain is seeded from
-   * the same node's current value instead of being routed through it, because
+   * the track's last-set level instead of being routed through it, because
    * the track node is persistent and the send is per-voice — release()
    * disconnects the send's OUTGOING edges, never the incoming edge from a
    * persistent node, so routing the wet would leak one edge per hit forever.
    * Seeding is exact for a one-shot whose whole tail is shorter than the time
-   * it takes to move a fader.
+   * it takes to move a fader. The level, not `gain.value`: an offline render
+   * builds voices while the timeline is suspended mid-song (ADR-0061), where
+   * the param's current value belongs to the render position rather than the
+   * hit, and the level is what `setDrumTrackGain` last asked for.
    *
    * `voice` is threaded in as a parameter rather than read from a field the
    * caller set first, and every voice builder between here and `triggerDrum`
@@ -395,7 +398,7 @@ export class DrumSynth {
     env.connect(track ?? this.masterRack.drumBusFilter!);
     if (reverbSend <= 0 || !this.masterRack.drumSendFilter) return null;
     const send = this.ctx!.createGain();
-    send.gain.value = reverbSend * (track ? track.gain.value : 1);
+    send.gain.value = reverbSend * (track ? this.drumTrackLevels.get(voice) ?? 1 : 1);
     env.connect(send);
     send.connect(this.masterRack.drumSendFilter);
     return send;
